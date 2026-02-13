@@ -1,0 +1,28 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:    Instinct/Config/version.hpp.in
+ * Author:  NotBlackMagic
+ * Brief:   File contains dynamic firmware version information, filled by CMake.
+ */
+
+#pragma once
+
+// Firmware version information, is completed by CMake
+
+// Version Numbers
+#define FW_VERSION_MAJOR    @CMAKE_PROJECT_VERSION_MAJOR@
+#define FW_VERSION_MINOR    @CMAKE_PROJECT_VERSION_MINOR@
+#define FW_VERSION_PATCH    @CMAKE_PROJECT_VERSION_PATCH@
+#define FW_VERSION_STR      "@CMAKE_PROJECT_VERSION@"
+
+// Build Metadata
+#define FW_NAME             "@CMAKE_PROJECT_NAME@"
+#define FW_BUILD_DATE       "@BUILD_DATE@"
+#define FW_BUILD_TIME       "@BUILD_TIME@"
+#define FW_GIT_HASH         "@GIT_HASH@"
+#define FW_BUILD_TYPE       "@CMAKE_BUILD_TYPE@"
+
+// Compiler Info
+#define FW_COMPILER         "@CMAKE_CXX_COMPILER_ID@ @CMAKE_CXX_COMPILER_VERSION@"

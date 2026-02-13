@@ -1,0 +1,59 @@
+{
+	"version": 3,
+	"configurePresets": [
+		{
+			"name": "default",
+			"hidden": true,
+			"generator": "Ninja",
+			"binaryDir": "${sourceDir}/build/${presetName}",
+			"toolchainFile": "${sourceDir}/gcc-arm-none-eabi.cmake",
+			"cacheVariables": {
+				"CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+			}
+		},
+		{
+			"name": "Debug",
+			"inherits": "default",
+			"displayName": "Config: Debug",
+			"description": "Debug build with symbols",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Debug"
+			}
+		},
+		{
+			"name": "Release",
+			"inherits": "default",
+			"displayName": "Config: Release",
+			"description": "Optimized release build",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Release"
+			}
+		}
+	],
+	"buildPresets": [
+		{
+			"name": "Build-Loader-Debug",
+			"displayName": "Build: Flash Loader (Debug)",
+			"configurePreset": "Debug",
+			"targets": ["PlumaLoader"]
+		},
+		{
+			"name": "Build-Boot-Debug",
+			"displayName": "Build: FSBL (Debug)",
+			"configurePreset": "Debug",
+			"targets": ["PlumaBoot"]
+		},
+		{
+			"name": "Build-Firmware-Debug",
+			"displayName": "Build: Instinct (Debug)",
+			"configurePreset": "Debug",
+			"targets": ["Instinct"]
+		},
+		{
+			"name": "Build-Firmware-Release",
+			"displayName": "Build: Instinct (Release)",
+			"configurePreset": "Release",
+			"targets": ["Instinct"]
+		}
+	]
+}

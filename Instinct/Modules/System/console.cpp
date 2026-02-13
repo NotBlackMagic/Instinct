@@ -1,0 +1,42 @@
+#include "console.hpp"
+
+TX_THREAD Console::threadPtr;
+uint8_t Console::threadStack[6144];
+
+UART* Console::consolePort = nullptr;
+Shell Console::shell;
+
+void Console::Init(UART* uart) {
+	consolePort = uart;
+
+	Console::shell.Init();
+
+	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Console"),
+											Console::Run,
+											0,
+											threadStack,
+											sizeof(threadStack),
+											15,
+											15,
+											TX_NO_TIME_SLICE,
+											TX_AUTO_START);
+}
+
+void Console::Run(ULONG input) {
+	uint8_t rxBuffer[16];
+
+	while(1) {
+		bool active = false;
+
+		uint16_t len = consolePort->Read(rxBuffer, sizeof(rxBuffer));
+
+		if(len > 0) {
+			shell.Input(rxBuffer, len);
+			active = true;
+		}
+
+		if (!active) {
+            tx_thread_sleep(2);
+        }
+	}
+}
