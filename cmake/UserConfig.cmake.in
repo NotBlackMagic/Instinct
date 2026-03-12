@@ -1,0 +1,10 @@
+# cmake/UserConfig.cmake.in
+# Copy this file to UserConfig.cmake and update paths for your local machine.
+
+# Toolchain Path (ARM GNU Toolchain)
+# Point this to the 'bin' directory containing arm-none-eabi-gcc
+set(TOOLCHAIN_BIN_DIR "C:/Path/To/Your/Toolchain/bin")
+
+# STM32 Signing Tool Path
+# Point this to the STM32CubeProgrammer bin directory
+set(SIGNING_TOOL_EXE "C:/Path/To/STM32CubeProgrammer/bin/STM32_SigningTool_CLI.exe")

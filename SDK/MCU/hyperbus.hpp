@@ -16,6 +16,7 @@
 #include "stm32n6xx_ll_gpio.h"
 
 #include "status.hpp"
+#include "system.hpp"
 
 #include "tx_api.h"
 
@@ -56,6 +57,7 @@ class HyperBus {
 		/// @brief HyperBus peripheral configuration structure.
 		struct Config {
 			uint32_t sizeBytes;			///< Total size in bytes (e.g. 8*1024*1024)
+			uint32_t sourceClockHz;		///< Peripheral source clock frequency in Hz
 			uint32_t frequencyHz;		///< Target bus frequency in Hz
 			
 			// Protocol and Timing
@@ -67,7 +69,7 @@ class HyperBus {
 			uint32_t refreshRate;		///< Max CS low time (for refresh and only for PSRAM)
 		};
 
-		// Delete copy constructors
+		// Delete copy constructors.
 		HyperBus(const HyperBus&) = delete;
 		HyperBus& operator=(const HyperBus&) = delete;
 
@@ -76,9 +78,22 @@ class HyperBus {
 		HyperBus(XSPI_TypeDef *instance);
 
 		/// @brief Initializes the peripheral clock, the peripheral itself, and interrupts.
-		/// @param config HyperBus configuration
+		/// @param config HyperBus configuration.
 		/// @return Status::Ok if initialization succeeded, or Status::Error if the config was invalid.
 		Status Init(const Config &config);
+
+		/// @brief Completely resets the HyperBus peripheral and aborts any pending transactions.
+		/// @return Status::Ok if reset was successful.
+		Status DeInit(void);
+
+		/// @brief Locks the bus using RTOS mutex.
+		/// @param timeoutTicks Max wait time in OS ticks to wait for mutex.
+		/// @return Status::Ok if lock successful or Status::Timeout if lock timeout.
+		Status LockBus(uint32_t timeoutTicks);
+
+		/// @brief Unlocks the bus using RTOS mutex.
+		/// @return Status::Ok or Status::Error.
+		Status UnlockBus();
 
 		/// @brief Starts a non-blocking transaction (Write, Read, or Write-then-Read).
 		/// @param space	Target Space (Memory vs Register).
@@ -97,13 +112,16 @@ class HyperBus {
 		Status TransferWait(uint32_t timeoutTicks);
 
 		/// @brief Gets the memory mapped base address (e.g. 0x90000000).
+		/// @return Memory mapped base address.
 		uint32_t GetBaseAddr() const;
 
 		/// @brief Enter into memory mapped mode
-		void EnterMemoryMappedMode();
+		/// @return Status::Ok if memory mapped mode entered, Status::Timeout if it expired, or Status::Error on hardware faults.
+		Status EnterMemoryMappedMode();
 
 		/// @brief Exit memory mapped mode
-		void ExitMemoryMappedMode();
+		/// @return Status::Ok if memory mapped mode exit, Status::Timeout if it expired, or Status::Error on hardware faults.
+		Status ExitMemoryMappedMode();
 
 		/// @brief Interrupt Service Routine handler.
 		/// @warning This function is called by the NVIC. Do not call manually.
@@ -113,11 +131,14 @@ class HyperBus {
 		XSPI_TypeDef *instance;
 		IRQn_Type irqCall;
 		uint8_t irqPriority;
+		uint32_t irqStatus;
 
 		bool isInitialized;
+		bool isMemoryMapped;
+		bool useWriteZeroLatency;
 
 		// Transaction Context
-		uint8_t *buffer;
+		uint16_t *buffer;
 		uint32_t length;
 		bool dirRead;
 

@@ -5,8 +5,6 @@
 
 #include "logger.hpp"
 
-void RegisterSystemCommands();
-
 class Shell {
 	public:
 		Shell();

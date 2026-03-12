@@ -13,7 +13,7 @@ HyperBus::HyperBus(XSPI_TypeDef *instance) {
 }
 
 Status HyperBus::Init(const Config &config) {
-	if(config.frequencyHz == 0) {
+	if(config.frequencyHz == 0 || config.sourceClockHz == 0) {
 		return Status::Error;
 	}
 
@@ -22,6 +22,7 @@ Status HyperBus::Init(const Config &config) {
 		return Status::Error;
 	}
 	if(tx_event_flags_create(&this->event, const_cast<char*>("hyperbus event")) != TX_SUCCESS) {
+		tx_mutex_delete(&this->mutex);
 		return Status::Error;
 	}
 
@@ -44,6 +45,9 @@ Status HyperBus::Init(const Config &config) {
 	else {
 		return Status::Error;
 	}
+
+	// Save write latency mode (only for memory access)
+	useWriteZeroLatency = config.writeZeroLatency;
 
 	// Get device size in exponent form
 	// Check if valid device size i.e. > 0 and power of 2
@@ -95,21 +99,20 @@ Status HyperBus::Init(const Config &config) {
 	MODIFY_REG(this->instance->DCR2, XSPI_DCR2_WRAPSIZE, 0x00);								// Set wrap size: Wrapped reads are not supported by the memory
 
 	// Calculate best prescaler value, equal or lower then asked frequency
-	uint32_t periphClock = 400000000;	// Base Clock is IC3 = 400MHz
 	uint32_t prescaler = 0;				// 0: DIV1, 1: DIV2, 2: DIV3, etc...
 	if(config.frequencyHz > 0) {
-		while(prescaler < 255) {
-			uint32_t currentFreq = periphClock / (prescaler + 1);
-			if(currentFreq <= config.frequencyHz) {
-				break;
-			}
-			prescaler += 1;
+		prescaler = (config.sourceClockHz + (config.frequencyHz - 1)) / config.frequencyHz;
+		prescaler -= 1;
+		if(prescaler > 0xFFUL) {
+			prescaler = 0xFFUL;
 		}
 	}
 	else {
 		prescaler = 255;
 	}
 	MODIFY_REG(this->instance->DCR2, XSPI_DCR2_PRESCALER, ((prescaler) << XSPI_DCR2_PRESCALER_Pos));	// Set clock prescaler (Fclk = Fkernel/[value+1])
+	while((this->instance->SR & XSPI_SR_BUSY_Msk) == XSPI_SR_BUSY); 									// Wait for calibrations to complete
+
 
 	MODIFY_REG(this->instance->DCR3, XSPI_DCR3_CSBOUND, 0x00);		// Set NCS boundary (2^CSBOUND): Disabled
 	MODIFY_REG(this->instance->DCR3, XSPI_DCR3_MAXTRAN, 0x00);		// Set maximum transfer (MAXTRAN + 1): Disabled
@@ -126,6 +129,10 @@ Status HyperBus::Init(const Config &config) {
 									static_cast<uint32_t>(writeZeroLatencyVal) | 
 									static_cast<uint32_t>(config.latencyMode)));
 
+	// Configure SDMMC Interrupts
+	NVIC_SetPriority(this->irqCall, this->irqPriority);
+	NVIC_EnableIRQ(this->irqCall);
+
 	// Enable x-SPI
 	MODIFY_REG(this->instance->CR, XSPI_CR_EN, XSPI_CR_EN);
 
@@ -133,50 +140,137 @@ Status HyperBus::Init(const Config &config) {
 	return Status::Ok;
 }
 
+Status HyperBus::DeInit(void) {
+	if(this->isInitialized == false) {
+		return Status::Ok;
+	}
+
+	// Disable IRQ first
+	NVIC_DisableIRQ(this->irqCall);
+
+	// Power down HyperBus
+	MODIFY_REG(this->instance->CR, XSPI_CR_EN, 0x00);
+
+	// Force hardware reset through peripheral clock
+	if(this->instance == XSPI1) {
+		LL_AHB5_GRP1_ForceReset(LL_AHB5_GRP1_PERIPH_XSPI1);
+		Time::Delay(2);
+		LL_AHB5_GRP1_ReleaseReset(LL_AHB5_GRP1_PERIPH_XSPI1);
+
+		// Disable clocks
+		LL_AHB5_GRP1_DisableClock(LL_AHB5_GRP1_PERIPH_XSPI1);
+	}
+	else if(this->instance == XSPI2) {
+		LL_AHB5_GRP1_ForceReset(LL_AHB5_GRP1_PERIPH_XSPI2);
+		Time::Delay(2);
+		LL_AHB5_GRP1_ReleaseReset(LL_AHB5_GRP1_PERIPH_XSPI2);
+
+		// Disable clocks
+		LL_AHB5_GRP1_DisableClock(LL_AHB5_GRP1_PERIPH_XSPI2);
+	}
+	else if(this->instance == XSPI3) {
+		LL_AHB5_GRP1_ForceReset(LL_AHB5_GRP1_PERIPH_XSPI3);
+		Time::Delay(2);
+		LL_AHB5_GRP1_ReleaseReset(LL_AHB5_GRP1_PERIPH_XSPI3);
+
+		// Disable clocks
+		LL_AHB5_GRP1_DisableClock(LL_AHB5_GRP1_PERIPH_XSPI3);
+	}
+
+	// Abort RTOS waits/blocks and clean up RTOS Resources
+	if (tx_event_flags_delete(&this->event) != TX_SUCCESS) {
+		// Something went wrong...
+	}
+
+	if (tx_mutex_delete(&this->mutex) != TX_SUCCESS) {
+		// Something went wrong...
+	}
+
+	this->isInitialized = false;
+	return Status::Ok;
+}
+
+Status HyperBus::LockBus(uint32_t timeoutTicks) {
+	// Try lock HyperBus device
+	if(tx_mutex_get(&this->mutex, timeoutTicks) != TX_SUCCESS) {
+		return Status::Timeout;
+	}
+	return Status::Ok;
+}
+
+Status HyperBus::UnlockBus() {
+	// Release HyperBus device
+	if(tx_mutex_put(&this->mutex) != TX_SUCCESS) {
+		return Status::Error;
+	}
+	return Status::Ok;
+}
+
 Status HyperBus::TransferAsync(AddressSpace space, uint32_t addr, AddrSize addrSize, BusWidth width, uint8_t* buf, uint32_t len, bool isRead) {
+	if(this->isMemoryMapped == true) {
+		return Status::Error;
+	}
+	
 	// Enforce 16-bit Alignment and Size
 	if ((len % 2 != 0) || ((uintptr_t)buf % 2 != 0)) {
 		return Status::Error; // Alignment or Size Error
 	}
 	
-	// Try lock HyperBus device
-	if(tx_mutex_get(&this->mutex, TIMEOUT_MUTEX) != TX_SUCCESS) {
-		return Status::Timeout;
-	}
+	// Clear event flags
+	tx_event_flags_set(&this->event, 0, TX_AND);
 
-	this->buffer = buf;
+	// Prepare internal transfer variables
+	this->buffer = (uint16_t*)buf;
 	this->length = len;
 	this->dirRead = isRead;
 
-	this->Command(space, addr, addrSize, width, len);
-
-	Status status;
+	// Automatic write latency handling. Register writes are always Zero write latency!
 	if(isRead == false) {
-		status = this->Write((uint16_t*)buf);
+		if(space == HyperBus::AddressSpace::Register || this->useWriteZeroLatency == true) {
+			MODIFY_REG(this->instance->HLCR, XSPI_HLCR_WZL, XSPI_HLCR_WZL);
+		}
+		else {
+			MODIFY_REG(this->instance->HLCR, XSPI_HLCR_WZL, 0x00);
+		}
+	}
+
+	Status status = this->Command(space, addr, addrSize, width, len);
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	if(isRead == false) {
+		MODIFY_REG(this->instance->CR, XSPI_CR_FMODE, 0x00);		// Indirect write mode
 	}
 	else {
-		status = this->Read((uint16_t*)buf);
+		MODIFY_REG(this->instance->CR, XSPI_CR_FMODE, XSPI_CR_FMODE_0);		// Indirect read mode
 	}
 
-	tx_event_flags_set(&this->event, EVT_TRANS_CPLT, TX_OR);
+	// Enable Interrupts: FIFO Threshold (FTIE), Transfer Complete (TCIE), Transfer Error (TEIE)
+	SET_BIT(this->instance->CR, XSPI_CR_FTIE | XSPI_CR_TCIE | XSPI_CR_TEIE);
 
-	return status;
+	if(isRead == true) {
+		// Trigger the transfer by re-writing address or instruction register
+		WRITE_REG(this->instance->AR, addr);
+	}
+
+	return Status::Ok;
 }
 
 Status HyperBus::TransferWait(uint32_t timeoutTicks) {
 	// Wait for event
 	ULONG events;
 	UINT status = tx_event_flags_get(&this->event, EVT_TRANS_CPLT | EVT_ERR, TX_OR_CLEAR, &events, timeoutTicks);
-	status = TX_SUCCESS;
 
-	// Release HyperBus device
-	tx_mutex_put(&this->mutex);
+	if(status != TX_SUCCESS) {
+		return Status::Timeout;
+	}
 
-	if(status == TX_SUCCESS) {
-		return Status::Ok;
+	if((events & EVT_ERR) == EVT_ERR) {
+		return Status::Error;
 	}
 	else {
-		return Status::Timeout;
+		return Status::Ok;
 	}
 }
 
@@ -201,18 +295,26 @@ Status HyperBus::Command(AddressSpace space, uint32_t addr, AddrSize addrSize, B
 	uint32_t dqsMode = ((uint32_t)XSPI_CCR_DQSE);
 
 	// Wait for busy flag to clear
-	while((this->instance->SR & XSPI_SR_BUSY_Msk) == XSPI_SR_BUSY);
+	uint32_t timeoutMs = 5;
+	uint32_t timestamp = Time::GetMs();
+	while((this->instance->SR & XSPI_SR_BUSY_Msk) == XSPI_SR_BUSY) {
+		if((Time::GetMs() - timestamp) > timeoutMs) {
+			// Clock stop timeout
+			SET_BIT(this->instance->CR, XSPI_CR_ABORT); // Force hardware abort
+			return Status::Error;
+		}
+	}
 
 	// Re-initialize the value of the functional mode
 	MODIFY_REG(this->instance->CR, XSPI_CR_FMODE, 0x00);
 
 	// Configure the address space in the DCR1 register: Either Memory space or Register space
 	if(space == HyperBus::AddressSpace::Memory) {
-		//Memory space
+		// Memory space
 		MODIFY_REG(this->instance->DCR1, XSPI_DCR1_MTYP_0, 0);
 	}
 	else {
-		//Register space
+		// Register space
 		MODIFY_REG(this->instance->DCR1, XSPI_DCR1_MTYP_0, XSPI_DCR1_MTYP_0);
 	}
 
@@ -232,82 +334,6 @@ Status HyperBus::Command(AddressSpace space, uint32_t addr, AddrSize addrSize, B
 	return Status::Ok;
 }
 
-Status HyperBus::Write(const uint16_t *data) {
-	int32_t bytesRemaining = READ_REG(this->instance->DLR) + 1;
-	uint16_t *buffPtr = (uint16_t *)data;
-
-	// Configure CR register with functional mode as indirect write 
-	MODIFY_REG(this->instance->CR, XSPI_CR_FMODE, 0x00);		// Indirect write mode
-
-	// Writes to HyperBus FIFO uses burst mode of FIFO threshold value (32 bytes)
-	while(bytesRemaining > 0) {
-		// Wait till fifo threshold flag is set to send data
-		while((this->instance->SR & (XSPI_SR_FTF)) == 0x00);
-
-		int32_t chunkBytes = (bytesRemaining > 16) ? 16 : bytesRemaining;
-
-		// Burst write
-		for(uint8_t i = 0; i < chunkBytes; i += 2) {
-			*((__IO uint16_t *)&this->instance->DR) = *buffPtr++;
-		}
-
-		bytesRemaining = bytesRemaining - chunkBytes;
-	}
-
-	// Wait till transfer complete flag is set to go back in idle state
-	while((this->instance->SR & (XSPI_SR_TCF)) == 0x00);
-
-	// Clear transfer complete flag
-	WRITE_REG(this->instance->FCR, XSPI_SR_TCF);
-
-	//Thread Safety Unlock: TODO
-	return Status::Ok;
-}
-
-Status HyperBus::Read(uint16_t *data) {
-	uint32_t addrReg = this->instance->AR;
-
-	uint32_t bytesRemaining = READ_REG(this->instance->DLR) + 1;
-	uint16_t *buffPtr = (uint16_t*)data;
-
-	// Configure CR register with functional mode as indirect read
-	MODIFY_REG(this->instance->CR, XSPI_CR_FMODE, XSPI_CR_FMODE_0);		// Indirect read mode
-
-	// Trigger the transfer by re-writing address or instruction register
-	WRITE_REG(this->instance->AR, addrReg);
-
-	while(bytesRemaining > 0) {
-		// Wait till fifo threshold or transfer complete flags are set to read received data
-		while((this->instance->SR & (XSPI_SR_FTF | XSPI_SR_TCF)) == 0x00);
-
-		int32_t chunkBytes;
-		
-		if (this->instance->SR & XSPI_SR_TCF) {
-			// Transfer complete, read all remaining bytes
-			chunkBytes = bytesRemaining; 
-		}
-		else {
-			chunkBytes = (bytesRemaining > 16) ? 16 : bytesRemaining;
-		}
-
-		// Burst read
-		for (int32_t i = 0; i < chunkBytes; i += 2) {
-			*buffPtr++ = *((__IO uint16_t *)&this->instance->DR);
-		}
-
-		bytesRemaining = bytesRemaining - chunkBytes;
-	}
-
-	// Wait till transfer complete flag is set to go back in idle state
-	while((this->instance->SR & (XSPI_SR_TCF)) == 0x00);
-
-	// Clear transfer complete flag
-	WRITE_REG(this->instance->FCR, XSPI_SR_TCF);
-
-	//Thread Safety Unlock: TODO
-	return Status::Ok;
-}
-
 uint32_t HyperBus::GetBaseAddr() const {
 	if(this->instance == XSPI1) {
 		return 0x90000000UL;
@@ -323,28 +349,122 @@ uint32_t HyperBus::GetBaseAddr() const {
 	return 0x00;
 }
 
-void HyperBus::EnterMemoryMappedMode() {
-	// Configure CR register with functional mode as memory mapped mode
-
+Status HyperBus::EnterMemoryMappedMode() {
 	// Wait for busy flag to clear
-	while((this->instance->SR & XSPI_SR_BUSY_Msk) == XSPI_SR_BUSY);
+	uint32_t timeoutMs = 5;
+	uint32_t timestamp = Time::GetMs();
+	while((this->instance->SR & XSPI_SR_BUSY_Msk) == XSPI_SR_BUSY) {
+		if((Time::GetMs() - timestamp) > timeoutMs) {
+			// Clock stop timeout
+			SET_BIT(this->instance->CR, XSPI_CR_ABORT); // Force hardware abort
+			return Status::Timeout;
+		}
+	}
+
+	// Configure CR register with functional mode as memory mapped mode
+	// Set latency mode for Memory space
+	if(this->useWriteZeroLatency == true) {
+		MODIFY_REG(this->instance->HLCR, XSPI_HLCR_WZL, XSPI_HLCR_WZL);
+	}
+	else {
+		MODIFY_REG(this->instance->HLCR, XSPI_HLCR_WZL, 0x00);
+	}
 
 	// Force memory space
 	MODIFY_REG(this->instance->DCR1, XSPI_DCR1_MTYP_0, 0);
 
 	// Set configure CR register
 	MODIFY_REG(this->instance->CR, XSPI_CR_FMODE, (XSPI_CR_FMODE_0 | XSPI_CR_FMODE_1));		// Memory mapped mode
+
+	this->isMemoryMapped = true;
+
+	return Status::Ok;
 }
 
-void HyperBus::ExitMemoryMappedMode() {
-	//Thread Safety: TODO
+Status HyperBus::ExitMemoryMappedMode() {
+	Status status = Status::Ok;
 
 	// Wait for busy flag to clear
-	while((this->instance->SR & XSPI_SR_BUSY_Msk) == XSPI_SR_BUSY);
+	uint32_t timeoutMs = 5;
+	uint32_t timestamp = Time::GetMs();
+	while((this->instance->SR & XSPI_SR_BUSY_Msk) == XSPI_SR_BUSY) {
+		if((Time::GetMs() - timestamp) > timeoutMs) {
+			// Clock stop timeout
+			SET_BIT(this->instance->CR, XSPI_CR_ABORT); // Force hardware abort
+			status = Status::Timeout;
+		}
+	}
 
 	// Force memory space
 	MODIFY_REG(this->instance->DCR1, XSPI_DCR1_MTYP_0, 0);
 
 	// Clear configure CR register
 	MODIFY_REG(this->instance->CR, XSPI_CR_FMODE, 0x00);		// Indirect write mode
+
+	this->isMemoryMapped = false;
+
+	return status;
+}
+
+// ---------------------------------------------------------
+// IRQ Handler
+// ---------------------------------------------------------
+
+void HyperBus::InterruptHandler() {
+	this->irqStatus = this->instance->SR;
+	uint32_t mask = this->instance->CR;
+
+	// Handle Transfer Errors (TEF)
+	if(((this->irqStatus & XSPI_SR_TEF) == XSPI_SR_TEF) && ((mask & XSPI_CR_TEIE) == XSPI_CR_TEIE)) {
+		// Clear flags
+		WRITE_REG(this->instance->FCR, XSPI_FCR_CTEF);
+		// Disable interrupts
+		CLEAR_BIT(this->instance->CR, XSPI_CR_TCIE | XSPI_CR_TEIE | XSPI_CR_FTIE);
+		tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
+	}
+
+	// Handle FIFO (FTF)
+	if(((this->irqStatus & XSPI_SR_FTF) == XSPI_SR_FTF) && ((mask & XSPI_CR_FTIE) == XSPI_CR_FTIE)) {
+		// Calculte chuck bytes to read/write
+		uint32_t chunkBytes = (this->length > 32) ? 32 : this->length;
+
+		if(this->dirRead == true) {
+			// Burst read
+			for(uint32_t i = 0; i < chunkBytes; i += 2) {
+				*this->buffer++ = *((__IO uint16_t *)&this->instance->DR);
+			}
+		}
+		else {
+			// Burst write
+			for(uint32_t i = 0; i < chunkBytes; i += 2) {
+				*((__IO uint16_t *)&this->instance->DR) = *this->buffer++;
+			}
+		}
+
+		this->length -= chunkBytes;
+
+		// Check if all bytes transfered
+		if(this->length == 0) {
+			// Disable interrupt
+			CLEAR_BIT(this->instance->CR, XSPI_CR_FTIE);
+		}
+	}
+
+	// Handle Transfer Complete (TCF)
+	if(((this->irqStatus & XSPI_SR_TCF) == XSPI_SR_TCF) && ((mask & XSPI_CR_TCIE) == XSPI_CR_TCIE)) {
+		// For reads, read remaining bytes (less then 32 bytes)
+		if(this->dirRead == true && this->length > 0) {
+			for(uint32_t i = 0; i < this->length; i += 2) {
+				*this->buffer++ = *((__IO uint16_t *)&this->instance->DR);
+			}
+			this->length = 0;
+		}
+
+		// Clear flags
+		WRITE_REG(this->instance->FCR, XSPI_FCR_CTCF);
+		// Disable interrupts
+		CLEAR_BIT(this->instance->CR, XSPI_CR_TCIE | XSPI_CR_TEIE | XSPI_CR_FTIE);
+
+		tx_event_flags_set(&this->event, EVT_TRANS_CPLT, TX_OR);
+	}
 }

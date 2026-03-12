@@ -102,6 +102,28 @@ void fx_stm32_sd_driver(FX_MEDIA *media_ptr) {
 				}
 			}
 			if(status == Status::Ok) {
+				// MBR handling (why??)
+				if(targetBuf[0] != 0xEB && targetBuf[0] != 0xE9) {
+				// It's an MBR. Parse the Partition Table (starts at offset 446).
+				// We want Partition 1's starting LBA (offset 8 within the 16-byte entry, so 454).
+				uint32_t hiddenSectors = targetBuf[454] | 
+										(targetBuf[455] << 8) | 
+										(targetBuf[456] << 16) | 
+										(targetBuf[457] << 24);
+
+					// Tell FileX where the real partition starts
+					media_ptr->fx_media_hidden_sectors = hiddenSectors;
+
+					// Read the ACTUAL FAT Boot Sector
+					status = sdCard.ReadBlocks(hiddenSectors, bootSectorBuffer, 1);
+					if(status == Status::Ok) {
+						memcpy(targetBuf, bootSectorBuffer, 512);
+					}
+				}
+				else {
+					// It's already a raw FAT volume (No MBR)
+					media_ptr->fx_media_hidden_sectors = 0;
+				}
 				media_ptr->fx_media_driver_status = FX_SUCCESS;
 			}
 			else {

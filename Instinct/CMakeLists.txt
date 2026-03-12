@@ -19,7 +19,7 @@ set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${MCU_FLAGS}")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MCU_FLAGS} -Wl,--gc-sections -Wl,--print-memory-usage")
 
 # Include toolchain file
-include("../gcc-arm-none-eabi.cmake")
+include("../cmake/gcc-arm-none-eabi.cmake")
 
 # Force optimization options that the toolchain might miss
 # add_compile_options(${MCU_FLAGS} -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti)
@@ -74,6 +74,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging/Topics
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging/Topics/Messages
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/System
+	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Vision
 
 	# Board Includes
 	${PLUMA_BOARD_PATH}
@@ -83,6 +84,7 @@ include_directories(
 	${PLUMA_SDK_PATH}/Drivers
 	${PLUMA_SDK_PATH}/Drivers/Sensors
 	${PLUMA_SDK_PATH}/Drivers/Storage
+	${PLUMA_SDK_PATH}/Drivers/USB
 	${PLUMA_SDK_PATH}/Drivers/Video
 
 	# Middleware Includes (ThreadX & CMSIS)
@@ -112,6 +114,7 @@ file(GLOB SDK_SOURCES
 	"${PLUMA_SDK_PATH}/Drivers/*.cpp"
 	"${PLUMA_SDK_PATH}/Drivers/Sensors/*.cpp"
 	"${PLUMA_SDK_PATH}/Drivers/Storage/*.cpp"
+	"${PLUMA_SDK_PATH}/Drivers/USB/*.cpp"
 	"${PLUMA_SDK_PATH}/Drivers/Video/*.cpp"
 )
 
@@ -173,24 +176,25 @@ target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Signing & Header Generation
 # Following code from: https://community.st.com/t5/stm32-mcus/how-to-add-post-build-commands-in-vs-code/ta-p/827930
-# set(SIGNING_TOOL "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_SigningTool_CLI.exe")
-set(SIGNING_TOOL "C:/ST/STM32CubeProgrammer/bin/STM32_SigningTool_CLI.exe")
+if(EXISTS "${SIGNING_TOOL_EXE}")
+	set(TARGET_ELF      "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.elf")
+	set(TARGET_BIN      "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin")
+	set(TARGET_SIGNED   "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}_Signed.bin")
+	set(TARGET_FINAL    "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.stldr")
 
-set(TARGET_ELF      "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.elf")
-set(TARGET_BIN      "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin")
-set(TARGET_SIGNED   "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}_Signed.bin")
-set(TARGET_FINAL    "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.stldr")
+	add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_OBJCOPY} -O binary ${TARGET_ELF} ${TARGET_BIN}
+		COMMAND ${CMAKE_COMMAND} -E echo y > input.txt
+		COMMAND "${SIGNING_TOOL_EXE}" -bin "${TARGET_BIN}" -nk -of 0x80000000 -t fsbl -o "${TARGET_SIGNED}" -hv 2.3 -dump "${TARGET_SIGNED}" < input.txt
+		COMMAND ${CMAKE_COMMAND} -E copy "${TARGET_SIGNED}" "${TARGET_FINAL}"
+		COMMENT "Signing Loader binary and generating ${CMAKE_PROJECT_NAME}.stldr"
+	)
 
-add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-	COMMAND ${CMAKE_OBJCOPY} -O binary ${TARGET_ELF} ${TARGET_BIN}
-	COMMAND ${CMAKE_COMMAND} -E echo y > input.txt
-	COMMAND "${SIGNING_TOOL}" -bin "${TARGET_BIN}" -nk -of 0x80000000 -t fsbl -o "${TARGET_SIGNED}" -hv 2.3 -dump "${TARGET_SIGNED}" < input.txt
-	COMMAND ${CMAKE_COMMAND} -E copy "${TARGET_SIGNED}" "${TARGET_FINAL}"
-	COMMENT "Signing Loader binary and generating ${CMAKE_PROJECT_NAME}.stldr"
-)
-
-# Convert the signed ExtLoader .bin back to .elf
-# add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-#     COMMAND ${CMAKE_OBJCOPY} -I binary -O elf32-littlearm -B arm --change-addresses=0x80000000 "${TARGET_SIGNED}" "${TARGET_FINAL}"
-#     COMMENT "Wrapping signed binary into ELF format"
-# )
+	# Convert the signed ExtLoader .bin back to .elf
+	# add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+	#     COMMAND ${CMAKE_OBJCOPY} -I binary -O elf32-littlearm -B arm --change-addresses=0x80000000 "${TARGET_SIGNED}" "${TARGET_FINAL}"
+	#     COMMENT "Wrapping signed binary into ELF format"
+	# )
+else()
+    message(WARNING "Signing tool not found at ${SIGNING_TOOL_EXE}. Skipping signature generation.")
+endif()

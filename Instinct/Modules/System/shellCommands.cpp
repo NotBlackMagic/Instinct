@@ -1,11 +1,4 @@
-#include "BoardInfo.hpp"
-#include "hardware.hpp"
-#include "logger.hpp"
-#include "shell.hpp"
-#include "version.hpp"
-
-#include "system_stm32n6xx.h"
-#include "tx_thread.h"
+#include "shellModules.hpp"
 
 extern char _stext[], _etext[];
 extern char _sdata[], _edata[];
@@ -35,18 +28,6 @@ static bool CommandHelp(const char* args) {
 	}
 	Logger::Instance().Write("--------------------------\r\n");
 	return true;
-	/*
-	(void)args;
-	Logger::Instance().Write("Available Commands:\r\n");
-	//Iterate table to auto-generate help!
-	//(Note: We can't access private _commands easily unless we expose it or use a getter. 
-	//For simplicity here, we hardcode the knowns or make _commands public/friend).
-	Logger::Instance().Write("  help     - Show list\r\n");
-	Logger::Instance().Write("  reboot   - Soft Reset\r\n");
-	Logger::Instance().Write("  status   - System Stats\r\n");
-	Logger::Instance().Write("  clear    - Clear Screen\r\n");
-	return true;
-	*/
 }
 
 static bool CommandClear(const char* args) {
@@ -234,106 +215,6 @@ static bool CommandLog(const char* args) {
 	return true;
 }
 
-//Hardware debug commands
-static bool CommandGPIO(const char* args) {
-	if (args == nullptr || args[0] == '\0') {
-		Logger::Instance().Write("Usage: gpio <read|write|toggle> <port> <pin> [val]\r\n");
-		return true;
-	}
-	return true;
-}
-
-static I2C* GetI2CBus(uint8_t busID) {
-	switch(busID){
-		case 1:
-			return &i2c1;
-		case 2:
-			return &i2c2;
-		case 3:
-			return nullptr;
-		case 4:
-			return &i2c4;
-		default:
-			return nullptr;
-	}
-}
-
-static void ScanI2CBus(uint8_t busID, I2C* i2c) {
-	Logger::Instance().Printf("Scanning I2C%d...\r\n", busID);
-	Logger::Instance().Write("     0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F\r\n");
-
-	for (int i = 0; i < 128; i += 16) {
-		Logger::Instance().Printf("%02x: ", i);
-
-		for (int j = 0; j < 16; j++) {
-			uint16_t addr = i + j;
-
-			//Skip reserved addresses
-			if(addr < 0x03 || addr > 0x77) {
-					Logger::Instance().Write("   "); 
-					continue;
-			}
-
-			if(i2c->Probe(addr)) {
-				Logger::Instance().Printf("%02x ", addr); 
-			}
-			else {
-				Logger::Instance().Write("-- "); 
-			}
-		}
-		Logger::Instance().Write("\r\n");
-	}
-	// dataLen = sprintf((char*)data, "I2C4 | 0 1 2 3 4 5 6 7 8 9 A B C D E F \n\r");
-	// while(uart4.Write(data, dataLen) != 0x00);
-
-	// uint8_t addr;
-	// for(addr = 0; addr < 128; addr++) {
-	// 	if((addr % 16) == 0) {
-	// 		dataLen = sprintf((char*)data, "0x%02X | ", addr);
-	// 		while(uart4.Write(data, dataLen) != 0x00);
-	// 	}
-	// 	if(i2c4.Probe(addr) == 0x01) {
-	// 		dataLen = sprintf((char*)data, "Y ");
-	// 		while(uart4.Write(data, dataLen) != 0x00);
-	// 	}
-	// 	else {
-	// 		dataLen = sprintf((char*)data, "- ");
-	// 		while(uart4.Write(data, dataLen) != 0x00);
-	// 	}
-	// 	if((addr % 16) == 15) {
-	// 		dataLen = sprintf((char*)data, "\n\r");
-	// 		while(uart4.Write(data, dataLen) != 0x00);
-	// 	}
-	// }
-}
-
-static bool CommandI2C(const char* args) {
-	if (args == nullptr || args[0] == '\0') {
-		Logger::Instance().Write("Usage: i2c scan [bus_num]\r\n");
-		return true;
-	}
-
-	char mode[10];
-    int busNum = -1;
-	uint8_t count = sscanf(args, "%9s %d", mode, &busNum);
-	if (count < 1 || strcmp(mode, "scan") != 0) {
-		Logger::Instance().Write("Usage: i2c scan [bus_num]\r\n");
-		return true;
-	}
-
-	if (busNum != -1) {
-        // Case A: User asked for specific bus (e.g., "i2c scan 2")
-        I2C* bus = GetI2CBus(busNum);
-        if (bus) {
-            ScanI2CBus(busNum, bus);
-        } else {
-            Logger::Instance().Printf("Error: I2C%d not defined.\r\n", busNum);
-        }
-    }
-
-	return true;
-}
-
 //SYSTEM COMMANDS
 static const Shell::CommandEntry systemCommands[] {
 	//Basic commands
@@ -351,10 +232,6 @@ static const Shell::CommandEntry systemCommands[] {
 	//Control commands
 	{ "reboot",	CommandReboot,		"Reboots system" },
 	{ "log",		CommandLog,	"Set Log Level (0-6)" },
-
-	//Hardware debug commands
-	{ "gpio",	CommandGPIO,	"GPIO Read/Write" },
-	{ "i2c",	CommandI2C,	"I2C Bus Scan" },
 	
 	{ nullptr,	nullptr,		nullptr } // Terminator
 };

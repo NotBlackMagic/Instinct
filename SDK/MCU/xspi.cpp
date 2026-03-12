@@ -25,6 +25,10 @@ void XSPI::Init(const Config &config) {
 		LL_AHB5_GRP1_EnableClock(LL_AHB5_GRP1_PERIPH_XSPI3);
 		LL_AHB5_GRP1_EnableClock(LL_AHB5_GRP1_PERIPH_XSPIM);
 	}
+	else {
+		// return Status::Error;
+		return;
+	}
 
 	MODIFY_REG(this->instance->CR, XSPI_CR_EN, 0x00);	//Disable XSPI Interface
 

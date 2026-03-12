@@ -28,9 +28,9 @@ class SDMMC {
 		/// @brief Data lines used.
 		enum class BusWidth : uint32_t {
 			Lines_1 = (0x00000000U),						// 1-bit (Default at boot)
-            Lines_4 = (0x1UL << SDMMC_CLKCR_WIDBUS_Pos),	// 4-bit (Standard uSD)
-            Lines_8 = (0x2UL << SDMMC_CLKCR_WIDBUS_Pos)		// 8-bit (eMMC only)
-        };
+			Lines_4 = (0x1UL << SDMMC_CLKCR_WIDBUS_Pos),	// 4-bit (Standard uSD)
+			Lines_8 = (0x2UL << SDMMC_CLKCR_WIDBUS_Pos)		// 8-bit (eMMC only)
+		};
 		
 		/// @brief Response type for commands.
 		enum class ResponseType : uint32_t {
@@ -54,7 +54,7 @@ class SDMMC {
 			// eMMC Modes (1.8V - eMMC Chip)
 			eMMC_DDR52 = 7,	// eMMC High Speed DDR (52MHz, Dual Rate) - Maps to DDR50 logic
 			eMMC_HS200 = 8	// eMMC HS200 (200MHz, Single Rate) - Maps to SDR104 logic
-        };
+		};
 
 		/// @brief Data transfer trigger handling when command sent.
 		enum class TransferMode {
@@ -63,7 +63,7 @@ class SDMMC {
 			Manual		// Manual data transfer enable (CMD6, ACMD51, SDStatus). Manually enables DPSM.
 		};
 
-		/// @brief
+		/// @brief Error codes.
 		enum class Error: uint32_t {
 			None = 0x00,
 			CmdCrcFail = 0x01,		// Command response received but CRC check failed
@@ -84,6 +84,7 @@ class SDMMC {
 
 		/// @brief SDMMC peripheral configuration structure.
 		struct Config {
+			uint32_t sourceClockHz;		///< Peripheral source clock frequency in Hz
 			bool hwFlowControl;
 		};
 
@@ -92,6 +93,10 @@ class SDMMC {
 			uint32_t resp[4];
 			Error error;
 		};
+
+		// Delete copy constructors
+		SDMMC(const SDMMC&) = delete;
+		SDMMC& operator=(const SDMMC&) = delete;
 
 		/// @brief Constructor.
 		/// @param instance Pointer to the hardware instance (e.g., SDMMC1, SDMMC2).
@@ -167,6 +172,7 @@ class SDMMC {
 		uint32_t irqStatus;
 
 		bool isInitialized;
+		uint32_t sourceClockHz;
 
 		// Transaction Context
 		volatile Error lastError;

@@ -17,8 +17,10 @@
 
 			"runEntry": "main", // Set in BOOT_Application
 
-			"svdPath": "C:/ST/STM32CubeCLT_1.19.0/STMicroelectronics_CMSIS_SVD/STM32N657.svd", // Replace with your .svd path
-			//"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd", // Replace with your .svd path
+			// Replace with your .svd path
+			//"svdPath": "C:/ST/STM32CubeCLT_1.19.0/STMicroelectronics_CMSIS_SVD/STM32N657.svd",
+			//"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
+			"svdPath": "C:/ST/STM32CubeProgrammer/SVD/STM32N657.svd",
 
 			"serverArgs": [
 				"-m",

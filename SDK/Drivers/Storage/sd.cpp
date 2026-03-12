@@ -19,6 +19,7 @@ Status SD::Init(const Config &config) {
 
 	// Configure the Bus
 	SDMMC::Config busConfig;
+	busConfig.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC4);
 	busConfig.hwFlowControl = true;		//< Mandatory or will fail in write transfers as FIFO is empty at instance of command so underflow error occurs
 	if(this->bus.Init(busConfig) == Status::Error) {
 		return Status::Error;
@@ -242,7 +243,7 @@ Status SD::ReadBlocks(uint32_t lba, uint8_t *buf, uint32_t blockCount) {
 		return Status::Error;
 	}
 
-	//Alignment check, for SDMMC DMA cache stuff
+	// Alignment check, for SDMMC DMA cache stuff
 	if(((uint32_t)(buf) & 0x1F) != 0) {
 		return Status::Error;
 	}
@@ -326,7 +327,7 @@ Status SD::WriteBlocks(uint32_t lba, const uint8_t *buf, uint32_t blockCount) {
 	// 	}
 	// }
 
-	// Prepare data transfer´
+	// Prepare data transfer
 	Status status = this->bus.TransferAsync((uint8_t*)buf, blockCount * 512, 512, false);
 	if(status != Status::Ok) {
 		return status;

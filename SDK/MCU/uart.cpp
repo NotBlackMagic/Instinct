@@ -7,22 +7,64 @@
 
 #include "uart.hpp"
 
-UART::UART(USART_TypeDef *instance) : instance(instance), txBufHead(0), txBufTail(0), txBusy(false), isInitialized(false) {
-	irqPriority = 0x0E; //Lowest priority
+UART::UART(USART_TypeDef *instance) {
+	this->instance = instance;
+	this->irqPriority = 0x0E; // Lowest priority
 }
 
 Status UART::Init(const Config &config) {
+	if(config.baudrate == 0 || config.sourceClockHz == 0) {
+		return Status::Error;
+	}
+
 	// Create RTOS objects
 	if(tx_mutex_create(&mutex, const_cast<char*>("uart mutex"), TX_INHERIT) != TX_SUCCESS) {
 		return Status::Error;
 	}
 	
-	// Enable bus clocks
-	uint32_t uartClock = 0;
-	if(instance == UART4) {
+	// Enable bus clocks and identify IRQ lines
+	if(instance == USART1) {
+		LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1);
+		irqCall = USART1_IRQn;
+	}
+	else if(instance == USART2) {
+		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART2);
+		irqCall = USART2_IRQn;
+	}
+	else if(instance == USART3) {
+		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART3);
+		irqCall = USART3_IRQn;
+	}
+	else if(instance == UART4) {
 		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART4);
-		uartClock = LL_RCC_GetUARTClockFreq(LL_RCC_UART4_CLKSOURCE);
 		irqCall = UART4_IRQn;
+	}
+	else if(instance == UART5) {
+		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART5);
+		irqCall = UART5_IRQn;
+	}
+	else if(instance == USART6) {
+		LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART6);
+		irqCall = USART6_IRQn;
+	}
+	else if(instance == UART7) {
+		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART7);
+		irqCall = UART7_IRQn;
+	}
+	else if(instance == UART8) {
+		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART8);
+		irqCall = UART8_IRQn;
+	}
+	else if(instance == UART9) {
+		LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_UART9);
+		irqCall = UART9_IRQn;
+	}
+	else if(instance == USART10) {
+		LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART10);
+		irqCall = USART10_IRQn;
+	}
+	else {
+		return Status::Error;
 	}
 
 	// Configure UART Interface
@@ -37,7 +79,7 @@ Status UART::Init(const Config &config) {
 		LL_USART_SetHWFlowCtrl(instance, LL_USART_HWCONTROL_RTS_CTS);
 	}
 	LL_USART_SetOverSampling(instance, LL_USART_OVERSAMPLING_16);
-	LL_USART_SetBaudRate(instance, uartClock, LL_USART_PRESCALER_DIV1, LL_USART_OVERSAMPLING_16, config.baudrate);
+	LL_USART_SetBaudRate(instance, config.sourceClockHz, LL_USART_PRESCALER_DIV1, LL_USART_OVERSAMPLING_16, config.baudrate);
 	LL_USART_SetPrescaler(instance, LL_USART_PRESCALER_DIV1);
 	LL_USART_SetTXFIFOThreshold(instance, LL_USART_FIFOTHRESHOLD_1_8);
 	LL_USART_SetRXFIFOThreshold(instance, LL_USART_FIFOTHRESHOLD_1_8);
@@ -65,7 +107,7 @@ Status UART::Init(const Config &config) {
 	return Status::Ok;
 }
 
-Status UART::Write(uint8_t *data, uint16_t len) {
+Status UART::Write(uint8_t *buf, uint16_t len) {
 	// Lock UART device
 	bool useLock = this->isInitialized && (tx_thread_identify() != nullptr);
 	if(useLock == true) {
@@ -79,11 +121,11 @@ Status UART::Write(uint8_t *data, uint16_t len) {
 
 	uint16_t i;
 	for(i = 0; i < len; i++) {
-		uint16_t nextHead = (tmpHead + 1) % TxBufferSize;
+		uint16_t nextHead = (tmpHead + 1) % txBufferSize;
 
 		// Check space against tail
 		if(nextHead != txBufTail) {
-			txBuffer[tmpHead] = data[i];
+			txBuffer[tmpHead] = buf[i];
 			tmpHead = nextHead;
 		}
 		else {
@@ -111,30 +153,17 @@ Status UART::Write(uint8_t *data, uint16_t len) {
 	return Status::Ok;
 }
 
-void UART::StartTX() {
-	if(txBufHead == txBufTail) {
-		txBusy = false;
-		return;
-	}
-
-	if(LL_USART_IsEnabledIT_TXE_TXFNF(instance) == 0x00) {
-		// LL_USART_TransmitData8(instance, txBuffer[txBufTail]);
-		// txBufTail = (txBufTail + 1) % TxBufferSize;
-		LL_USART_EnableIT_TXE_TXFNF(instance);
-	}
-}
-
-uint16_t UART::Read(uint8_t *data, uint16_t maxLen) {
-	uint16_t tmpHead = rxBufHead;
-	uint16_t tmpTail = rxBufTail;
+uint32_t UART::Read(uint8_t *buf, uint32_t maxLen) {
+	uint32_t tmpHead = rxBufHead;
+	uint32_t tmpTail = rxBufTail;
 
 	// Calculate available bytes to read
-	uint16_t available;
+	uint32_t available;
 	if(tmpHead >= tmpTail) {
 		available = tmpHead - tmpTail;
 	}
 	else {
-		available = RxBufferSize + tmpHead - tmpTail;
+		available = rxBufferSize + tmpHead - tmpTail;
 	}
 
 	if(available == 0) {
@@ -145,20 +174,20 @@ uint16_t UART::Read(uint8_t *data, uint16_t maxLen) {
 
 	// Copy data
 	if(tmpHead >= tmpTail) {
-		memcpy(data, &rxBuffer[tmpTail], toRead);
+		memcpy(buf, &rxBuffer[tmpTail], toRead);
 		rxBufTail = rxBufTail + toRead;
 	}
 	else {
-		uint16_t firstPart = RxBufferSize - tmpTail;
+		uint16_t firstPart = rxBufferSize - tmpTail;
 
 		if(toRead <= firstPart) {
-			memcpy(data, &rxBuffer[tmpTail], toRead);
+			memcpy(buf, &rxBuffer[tmpTail], toRead);
 			rxBufTail = rxBufTail + toRead;
 		}
 		else {
 			uint16_t secondPart = toRead - firstPart;
-			memcpy(data, &rxBuffer[tmpTail], firstPart);
-			memcpy(data + firstPart, &rxBuffer[0], secondPart);
+			memcpy(buf, &rxBuffer[tmpTail], firstPart);
+			memcpy(buf + firstPart, &rxBuffer[0], secondPart);
 			rxBufTail = secondPart;
 		}
 	}
@@ -166,12 +195,25 @@ uint16_t UART::Read(uint8_t *data, uint16_t maxLen) {
 	return toRead;
 }
 
-uint16_t UART::Available() {
-	uint16_t tmpHead = rxBufHead;
+uint32_t UART::Available() {
+	uint32_t tmpHead = rxBufHead;
 	if(tmpHead >= rxBufTail) {
 		return (tmpHead - rxBufTail);
 	}
-	return (RxBufferSize + tmpHead - rxBufTail);
+	return (rxBufferSize + tmpHead - rxBufTail);
+}
+
+void UART::StartTX() {
+	if(txBufHead == txBufTail) {
+		txBusy = false;
+		return;
+	}
+
+	if(LL_USART_IsEnabledIT_TXE_TXFNF(instance) == 0x00) {
+		// LL_USART_TransmitData8(instance, txBuffer[txBufTail]);
+		// txBufTail = (txBufTail + 1) % txBufferSize;
+		LL_USART_EnableIT_TXE_TXFNF(instance);
+	}
 }
 
 // ---------------------------------------------------------
@@ -184,7 +226,7 @@ void UART::InterruptHandler() {
 		if(txBufHead != txBufTail) {
 			// Have bytes in buffer, write/send
 			LL_USART_TransmitData8(instance, txBuffer[txBufTail]);
-			txBufTail = (txBufTail + 1) % TxBufferSize;
+			txBufTail = (txBufTail + 1) % txBufferSize;
 		}
 		else {
 			// Buffer empty
@@ -197,7 +239,7 @@ void UART::InterruptHandler() {
 	if(LL_USART_IsActiveFlag_RXNE_RXFNE(instance) == 0x01) {
 		uint8_t byte = LL_USART_ReceiveData8(instance);
 
-		uint16_t nextHead = (rxBufHead + 1) % RxBufferSize;
+		uint16_t nextHead = (rxBufHead + 1) % rxBufferSize;
 		if(nextHead != rxBufTail) {
 			rxBuffer[rxBufHead] = byte;
 			rxBufHead = nextHead;
@@ -207,7 +249,7 @@ void UART::InterruptHandler() {
 		// 	// RX Buffer full, has a complete frame in it
 		// 	LL_USART_ReceiveData8(instance);
 		// }
-		// else if(rxIndex >= RxBufferSize) {
+		// else if(rxIndex >= rxBufferSize) {
 		// 	//RX Buffer overflow
 		// 	LL_USART_ReceiveData8(instance);
 

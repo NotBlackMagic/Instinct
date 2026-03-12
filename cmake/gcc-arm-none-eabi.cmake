@@ -4,10 +4,11 @@ set(CMAKE_SYSTEM_PROCESSOR          arm)
 set(CMAKE_C_COMPILER_ID GNU)
 set(CMAKE_CXX_COMPILER_ID GNU)
 
-# Some default GCC settings
-# arm-none-eabi- must be part of path environment
-set(TOOLCHAIN_BIN_DIR "C:/Users/fabia/AppData/Local/stm32cube/bundles/gnu-tools-for-stm32/13.3.1+st.9/bin")
-# set(TOOLCHAIN_BIN_DIR "C:/Users/Fabian/AppData/Local/stm32cube/bundles/gnu-tools-for-stm32/13.3.1+st.9/bin")
+include("${CMAKE_CURRENT_LIST_DIR}/UserConfig.cmake" OPTIONAL RESULT_VARIABLE USER_CONFIG_LOADED)
+
+if(NOT USER_CONFIG_LOADED)
+    message(WARNING "UserConfig.cmake not found!")
+endif()
 
 set(TOOLCHAIN_PREFIX  "${TOOLCHAIN_BIN_DIR}/arm-none-eabi-")
 

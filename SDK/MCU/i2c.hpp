@@ -35,8 +35,13 @@ class I2C {
 
 		/// @brief I2C peripheral configuration structure.
 		struct Config {
-			Mode mode;		///< The target bus speed configuration.
+			uint32_t sourceClockHz;	///< Peripheral source clock frequency in Hz
+			Mode mode;				///< The target bus speed configuration.
 		};
+
+		// Delete copy constructors
+		I2C(const I2C&) = delete;
+		I2C& operator=(const I2C&) = delete;
 
 		/// @brief Constructor.
 		/// @param instance Pointer to the hardware instance (e.g., I2C1, I2C2).

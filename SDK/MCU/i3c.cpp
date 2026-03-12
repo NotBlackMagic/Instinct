@@ -21,6 +21,7 @@ Status I3C::Init(const Config &config) {
 		return Status::Error;
 	}
 	if(tx_event_flags_create(&this->event, const_cast<char*>("i3c event")) != TX_SUCCESS) {
+		tx_mutex_delete(&this->mutex);
 		return Status::Error;
 	}
 
@@ -34,6 +35,9 @@ Status I3C::Init(const Config &config) {
 		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_I3C2);
 		this->irqCall = I3C2_EV_IRQn;
 		//this->irqErrCall = I3C2_ER_IRQn;
+	}
+	else {
+		return Status::Error;
 	}
 
 	// Configure I3C Interface
@@ -94,8 +98,6 @@ Status I3C::Init(const Config &config) {
 	// Configure Interrupts
 	NVIC_SetPriority(this->irqCall, this->irqPriority);
 	NVIC_EnableIRQ(this->irqCall);
-//	NVIC_SetPriority(I3C1_ER_IRQn, 1);
-//	NVIC_EnableIRQ(I3C1_ER_IRQn);
 	LL_I3C_EnableIT_FC(this->instance);
 	LL_I3C_EnableIT_CFNF(this->instance);
 	LL_I3C_EnableIT_RXFNE(this->instance);
@@ -202,32 +204,32 @@ Status I3C::SendCommandAsync(BroadcastCCC ccc, uint8_t *txBuf, uint16_t txLen) {
 	do {
 		// Transmit Common Command Code Associated data if any
 		if((this->txLength > 0) && (LL_I3C_IsActiveFlag_TXFNF(this->instance) == 0x01)) {
-			LL_I3C_TransmitData8(I3C1, *this->txBuffer);
+			LL_I3C_TransmitData8(this->instance, *this->txBuffer);
 			this->txBuffer++;
 			this->txLength -= 1;
 		}
-	} while((READ_REG(I3C1->EVR) & (I3C_EVR_FCF | I3C_EVR_ERRF)) == 0x00);
+	} while((READ_REG(this->instance->EVR) & (I3C_EVR_FCF | I3C_EVR_ERRF)) == 0x00);
 
 	// Start Transfer CCC
-	// LL_I3C_RequestTransfer(I3C1);
+	// LL_I3C_RequestTransfer(this->instance);
 
 	// do {
 	// 	// Write message into CR register
-	// 	if(LL_I3C_IsActiveFlag_CFNF(I3C1) == 0x01) {
-	// 		// WRITE_REG(I3C1->CR, uwCCCMessage[ubNbCCC++]);
+	// 	if(LL_I3C_IsActiveFlag_CFNF(this->instance) == 0x01) {
+	// 		// WRITE_REG(this->instance->CR, uwCCCMessage[ubNbCCC++]);
 	// 	}
 
 	// 	// Receive Common Command Code Associated data if any
-	// 	if(LL_I3C_IsActiveFlag_RXFNE(I3C1) == 0x01) {
-	// 		//aRxBuffer[ubNbRxData++] = LL_I3C_ReceiveData8(I3C1);
+	// 	if(LL_I3C_IsActiveFlag_RXFNE(this->instance) == 0x01) {
+	// 		//aRxBuffer[ubNbRxData++] = LL_I3C_ReceiveData8(this->instance);
 	// 	}
 
 	// 	// Transmit Common Command Code Associated data if any
-	// 	if((ubNbTxDataToTransfer > 0) && (LL_I3C_IsActiveFlag_TXFNF(I3C1))) {
-	// 		// LL_I3C_TransmitData8(I3C1, aTxBuffer[ubNbTxData++]);
+	// 	if((ubNbTxDataToTransfer > 0) && (LL_I3C_IsActiveFlag_TXFNF(this->instance))) {
+	// 		// LL_I3C_TransmitData8(this->instance, aTxBuffer[ubNbTxData++]);
 	// 		// ubNbTxDataToTransfer--;
 	// 	}
-	// } while((READ_REG(I3C1->EVR) & (I3C_EVR_FCF | I3C_EVR_ERRF)) == 0x00);
+	// } while((READ_REG(this->instance->EVR) & (I3C_EVR_FCF | I3C_EVR_ERRF)) == 0x00);
 
 	// Clear frame complete flag
 	if(LL_I3C_IsActiveFlag_FC(this->instance) == 0x01) {
@@ -299,7 +301,6 @@ Status I3C::TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_
 		else {
 			endMode = LL_I3C_GENERATE_STOP;
 		}
-		endMode = LL_I3C_GENERATE_STOP;
 
 		if(type == I3C::TargetType::I2C) {
 			LL_I3C_ControllerHandleMessage(this->instance, this->address, this->txLength, direction, LL_I3C_CONTROLLER_MTYPE_LEGACY_I2C, endMode);
@@ -320,6 +321,8 @@ Status I3C::TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_
 		// LL_I3C_EnableIT_TXFNF(this->instance);
 		do {
 			if(LL_I3C_IsActiveFlag_ERR(this->instance) == 0x01) {
+				LL_I3C_ClearFlag_ERR(this->instance);
+				tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
 				return Status::Error;
 			}
 
@@ -351,6 +354,8 @@ Status I3C::TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_
 
 		do {
 			if(LL_I3C_IsActiveFlag_ERR(this->instance) == 0x01) {
+				LL_I3C_ClearFlag_ERR(this->instance);
+				tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
 				return Status::Error;
 			}
 
@@ -401,7 +406,7 @@ void I3C::InterruptHandler() {
 	// Handle Control Transfer
 	if(LL_I3C_IsEnabledIT_CFNF(this->instance) == 0x01 && LL_I3C_IsActiveFlag_CFNF(this->instance) == 0x01) {
 		// Stuff stuff
-		// WRITE_REG(I3C1->CR, uwCCCMessage[ubNbCCC++]);
+		// WRITE_REG(this->instance->CR, uwCCCMessage[ubNbCCC++]);
 	}
 
 	// Handle Transmit
@@ -417,7 +422,7 @@ void I3C::InterruptHandler() {
 		//Store Payload in aTargetDesc
 		//aTargetDesc[uwTargetCount]->TARGET_BCR_DCR_PID = targetPayload;
 		//Send associated dynamic address: Write device address in the TDR register, Increment Target counter
-		//LL_I3C_TransmitData8(I3C1, aTargetDesc[uwTargetCount++]->DYNAMIC_ADDR);
+		//LL_I3C_TransmitData8(this->instance, aTargetDesc[uwTargetCount++]->DYNAMIC_ADDR);
 	}
 
 	// Handle Receive

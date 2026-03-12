@@ -9,9 +9,12 @@
 #include "status.hpp"
 #include "stm32n6xx_ll_dma.h"
 #include "tx_pluman6_sd_driver.h"
+#include "visionThread.hpp"
 
 #include "sdmmc.hpp"
 #include "sd.hpp"
+#include "usbClassCDC.hpp"
+#include "usbDevice.hpp"
 
 #include "tx_api.h"
 #include "fx_api.h"
@@ -34,8 +37,9 @@ static TX_THREAD testThread;
 static TX_THREAD uSDThread;
 static TX_THREAD i2cThread;
 static TX_THREAD fileXThread;
+static TX_THREAD usbThread;
 
-static FX_MEDIA sdMedia;
+FX_MEDIA sdMedia;
 alignas(32) uint8_t sdMediaPool[32 * 1024];
 
 const uint32_t buffLen = 32 * 1024;
@@ -56,6 +60,7 @@ void TestThread(ULONG thread_input) {
 	}
 	else {
 		LOG_ERR("HyperRAM Init Failed!");
+		while(1);
 	}
 
 	// Init External Flash
@@ -64,9 +69,10 @@ void TestThread(ULONG thread_input) {
 	}
 	else {
 		LOG_ERR("HyperFlash Init Failed!");
+		while(1);
 	}
 
-	//RAM Test
+	// RAM Test
 	for(i = 0; i < buffLen; i++) {
 		dataW[i] = (uint8_t)i;
 	}
@@ -80,12 +86,13 @@ void TestThread(ULONG thread_input) {
 
 	memset(dataR, 0x55, buffLen);
 	timestamp = Time::GetUs();
-	externalFlash.Read(0, dataR, buffLen);
+	externalPSRAM.Read(0, dataR, buffLen);
 	deltaTime = Time::GetUs() - timestamp;
 
 	errCnt = 0;
 	for(i = 0; i < buffLen; i++) {
 		if(dataR[i] != dataW[i]) {
+			volatile uint8_t readError = dataR[i];
 			errCnt += 1;
 		}
 	}
@@ -104,7 +111,7 @@ void TestThread(ULONG thread_input) {
 	deltaTime = Time::GetUs() - timestamp;
 
 	speed = (repeats * buffLen) * (1.0f/1024.f * 1.0f/1024.f) * (1.0f/(deltaTime * 0.001f * 0.001f));
-	LOG_INFO("PSRAM MM Write: %d Bytes in %d us (%.2f MByte/s), Err %d", (repeats * buffLen), deltaTime, speed, errCnt);
+	LOG_INFO("PSRAM MM Write: %d Bytes in %d us (%.2f MByte/s)", (repeats * buffLen), deltaTime, speed);
 	
 	memset(dataR, 0x55, buffLen);
 	timestamp = Time::GetUs();
@@ -116,6 +123,7 @@ void TestThread(ULONG thread_input) {
 	errCnt = 0;
 	for(i = 0; i < buffLen; i++) {
 		if(dataR[i] != dataW[i]) {
+			volatile uint8_t readError = dataR[i];
 			errCnt += 1;
 		}
 	}
@@ -125,6 +133,9 @@ void TestThread(ULONG thread_input) {
 
 	// HPDMA Test (PSRAM to SRAM)
 	memset(dataR, 0x55, buffLen);
+
+	System::CleanCache((uint32_t*)hyperBus1.GetBaseAddr(), buffLen);
+	System::CleanCache((uint32_t*)dataR, buffLen);
 
 	LL_AHB5_GRP1_EnableClock(LL_AHB5_GRP1_PERIPH_HPDMA1);
 	LL_AHB3_GRP1_EnableClock(LL_AHB3_GRP1_PERIPH_RIFSC);
@@ -156,34 +167,30 @@ void TestThread(ULONG thread_input) {
 	LL_DMA_EnableChannelDestSecure(HPDMA1, LL_DMA_CHANNEL_12);
 	LL_DMA_SetStaticIsolation(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_CHANNEL_STATIC_CID_2);
 
-	LL_DMA_InitTypeDef hpdmaCnfg;
-	LL_DMA_StructInit(&hpdmaCnfg);
-	hpdmaCnfg.SrcAddress = (uint32_t)hyperBus1.GetBaseAddr();
-	hpdmaCnfg.DestAddress = (uint32_t)dataR;
+	LL_DMA_SetSrcAddress(HPDMA1, LL_DMA_CHANNEL_12, (uint32_t)hyperBus1.GetBaseAddr());
+	LL_DMA_SetDestAddress(HPDMA1, LL_DMA_CHANNEL_12, (uint32_t)dataR);
 
-	hpdmaCnfg.Direction = LL_DMA_DIRECTION_MEMORY_TO_MEMORY;
-	hpdmaCnfg.BlkHWRequest = LL_DMA_HWREQUEST_SINGLEBURST;
+	LL_DMA_SetDataTransferDirection(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_DIRECTION_MEMORY_TO_MEMORY);
+	LL_DMA_SetBlkHWRequest(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_HWREQUEST_SINGLEBURST);
 
-	hpdmaCnfg.SrcDataWidth = LL_DMA_SRC_DATAWIDTH_WORD;
-	hpdmaCnfg.DestDataWidth = LL_DMA_DEST_DATAWIDTH_WORD;
-	hpdmaCnfg.DataAlignment = LL_DMA_DATA_ALIGN_ZEROPADD;
+	LL_DMA_SetSrcDataWidth(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_SRC_DATAWIDTH_WORD);
+	LL_DMA_SetDestDataWidth(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_DEST_DATAWIDTH_WORD);
+	LL_DMA_SetDataAlignment(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_DATA_ALIGN_ZEROPADD);
 
-	hpdmaCnfg.SrcIncMode = LL_DMA_SRC_INCREMENT;
-	hpdmaCnfg.DestIncMode = LL_DMA_DEST_INCREMENT;
+	LL_DMA_SetSrcIncMode(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_SRC_INCREMENT);
+	LL_DMA_SetDestIncMode(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_DEST_INCREMENT);
 
-	hpdmaCnfg.SrcBurstLength = 2;
-	hpdmaCnfg.DestBurstLength = 2;
-	hpdmaCnfg.Priority = LL_DMA_HIGH_PRIORITY;
+	LL_DMA_SetSrcBurstLength(HPDMA1, LL_DMA_CHANNEL_12, 2);
+	LL_DMA_SetDestBurstLength(HPDMA1, LL_DMA_CHANNEL_12, 2);
+	LL_DMA_SetChannelPriorityLevel(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_HIGH_PRIORITY);
 
-	hpdmaCnfg.BlkDataLength = buffLen;
+	LL_DMA_SetBlkDataLength(HPDMA1, LL_DMA_CHANNEL_12, buffLen);
 
-	hpdmaCnfg.SrcAllocatedPort = LL_DMA_SRC_ALLOCATED_PORT0;
-	hpdmaCnfg.DestAllocatedPort = LL_DMA_DEST_ALLOCATED_PORT0;
-
-	hpdmaCnfg.TransferEventMode = LL_DMA_TCEM_BLK_TRANSFER;
-	hpdmaCnfg.Mode = LL_DMA_NORMAL;
-
-	LL_DMA_Init(HPDMA1, LL_DMA_CHANNEL_12, &hpdmaCnfg);
+	LL_DMA_SetSrcAllocatedPort(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_SRC_ALLOCATED_PORT0);
+	LL_DMA_SetDestAllocatedPort(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_DEST_ALLOCATED_PORT0);
+	
+	LL_DMA_SetTransferEventMode(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_TCEM_BLK_TRANSFER);
+	LL_DMA_SetTransferMode(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_NORMAL);
 
 	LL_DMA_ClearFlag_TC(HPDMA1, LL_DMA_CHANNEL_12);
 	LL_DMA_ClearFlag_HT(HPDMA1, LL_DMA_CHANNEL_12);
@@ -204,6 +211,7 @@ void TestThread(ULONG thread_input) {
 	errCnt = 0;
 	for(i = 0; i < buffLen; i++) {
 		if(dataR[i] != dataW[i]) {
+			volatile uint8_t readError = dataR[i];
 			errCnt += 1;
 		}
 	}
@@ -211,7 +219,7 @@ void TestThread(ULONG thread_input) {
 	speed = (buffLen) * (1.0f/1024.f * 1.0f/1024.f) * (1.0f/(deltaTime * 0.001f * 0.001f));
 	LOG_INFO("PSRAM DMA Read: %d Bytes in %d us (%.2f MByte/s), Err %d", (buffLen), deltaTime, speed, errCnt);
 	
-	//Flash Test
+	// Flash Test
 	uint32_t flashAddr = 0;
 	for(i = 0; i < buffLen; i++) {
 		dataW[i] = (uint8_t)i;
@@ -228,8 +236,6 @@ void TestThread(ULONG thread_input) {
 	timestamp = Time::GetUs();
 	externalFlash.Read(flashAddr, dataR, buffLen);
 	deltaTime = Time::GetUs() - timestamp;
-	speed = (buffLen) * (1.0f/1024.f * 1.0f/1024.f) * (1.0f/(deltaTime * 0.001f * 0.001f));
-	LOG_INFO("Flash Read: %d Bytes in %d us (%.2f MByte/s), Err %d", buffLen, deltaTime, speed, errCnt);
 
 	errCnt = 0;
 	for(i = 0; i < buffLen; i++) {
@@ -237,6 +243,9 @@ void TestThread(ULONG thread_input) {
 			errCnt += 1;
 		}
 	}
+
+	speed = (buffLen) * (1.0f/1024.f * 1.0f/1024.f) * (1.0f/(deltaTime * 0.001f * 0.001f));
+	LOG_INFO("Flash Read: %d Bytes in %d us (%.2f MByte/s), Err %d", buffLen, deltaTime, speed, errCnt);
 
 	//Flash Memory Mapped Test
 	externalFlash.EnterMemoryMappedMode();
@@ -261,6 +270,8 @@ void TestThread(ULONG thread_input) {
 
 	// HPDMA Test (HyperFlash to SRAM)
 	memset(dataR, 0x55, buffLen);
+	System::CleanCache((uint32_t*)hyperBus2.GetBaseAddr(), buffLen);
+	System::CleanCache((uint32_t*)dataR, buffLen);
 
 	// RIF configuration (XSPI2)
 	RISAF12->REG[0].STARTR = 0x0;
@@ -439,7 +450,7 @@ void SDMMCThread(ULONG thread_input) {
 				// uSD read speed test
 				timestamp = Time::GetUs();
 				for(i = 0; i < repeats; i++) {
-					sdCard.ReadBlocks(testSector, dataW, numBlocks);
+					sdCard.ReadBlocks(testSector, dataR, numBlocks);
 				}
 				deltaTime = Time::GetUs() - timestamp;
 				speed = (repeats * buffLen) * (1.0f/1024.f * 1.0f/1024.f) * (1.0f/(deltaTime * 0.001f * 0.001f));
@@ -578,7 +589,7 @@ void FileXThread(ULONG thread_input) {
 
 				//Mount SD Card
 				status = fx_media_open(	&sdMedia,				// Media Ptr
-										const_cast<char*>("SD CARD"),		// Name
+										const_cast<char*>("PLUMAN6"),		// Name
 										fx_stm32_sd_driver,	// Driver Entry
 										0,					// Driver Info Ptr (Unused)
 										sdMediaPool,			// Memory Pool
@@ -588,18 +599,19 @@ void FileXThread(ULONG thread_input) {
 					ledGreen.Write(0);
 					sdCardStatus = 2;
 
-					ULONG available_bytes;
-					fx_media_space_available(&sdMedia, &available_bytes);
-					LOG_INFO("FileX uSD Free Space: %lu MB\n", available_bytes / (1024 * 1024));
+					ULONG64 available_bytes;
+					fx_media_extended_space_available(&sdMedia, &available_bytes);
+					LOG_INFO("FileX uSD Free Space: %lu MB\n", (uint32_t)(available_bytes / (1024 * 1024)));
 				}
 				else {
 					LOG_INFO("FileX Mount Failed!");
 					
 					if(status == FX_BOOT_ERROR || status == FX_MEDIA_INVALID) {
 						LOG_INFO("FileX Card needs formatting.");
+						sdCardStatus = 3;
 
 						// Formatting logic
-						uint32_t total_sectors = 7829504;	//sdCard.GetCardInfo().blockCount;
+						uint32_t total_sectors = 31116288;	//sdCard.GetCardInfo().blockCount;
 
 						status = fx_media_format(	&sdMedia,		// Media Ptr
 													fx_stm32_sd_driver,	// Driver Entry
@@ -652,6 +664,67 @@ void FileXThread(ULONG thread_input) {
 	}
 }
 
+USB usbHardware(USB1_OTG_HS);
+extern "C" void USB1_OTG_HS_IRQHandler(void) { usbHardware.InterruptHandler(); }
+
+USBDevice usbCore(usbHardware);
+USBClassCDC usbCDC;
+
+void USBThread(ULONG thread_input) {
+	// Define your test configuration
+	USBDevice::Config usbCfg;
+	usbCfg.vid = 0x1234;					// Dummy VID for testing
+	usbCfg.pid = 0x5678;					// Dummy PID for testing
+	usbCfg.version = 0x0100;				// v1.00
+	usbCfg.manufacturer = "PlumaLabs";
+	usbCfg.product = "STM32N6 Baremetal";
+	usbCfg.serialNumber = "00000001";
+	usbCfg.maxPower = 50;					// 100mA (value * 2mA)
+	usbCfg.selfPowered = false;
+
+	// Initialize and Connect
+	if(usbCore.Init(usbCfg) == Status::Ok) {
+		LOG_INFO("USB Init OK");
+
+		// Register the CDC Class before starting the bus
+		if(usbCore.RegisterClass(&usbCDC) == Status::Ok) {
+			LOG_INFO("USB CDC Registered OK");
+		}
+		else {
+			LOG_INFO("USB CDC Registration Failed!");
+		}
+
+		if(usbCore.Start() == Status::Ok) {
+			LOG_INFO("USB Start OK");
+		}
+		else {
+			LOG_INFO("USB Start Failed!");
+		}
+	}
+	else {
+		LOG_INFO("USB Init Failed!");
+	}	
+
+	uint8_t rxBuffer[64];
+	while(1) {
+		// Check for incoming data
+		uint32_t bytesAvailable = usbCDC.Available();
+		if(bytesAvailable > 0) {
+			// Read data out of the ring buffer
+			uint32_t bytesToRead = (bytesAvailable > sizeof(rxBuffer)) ? sizeof(rxBuffer) : bytesAvailable;
+			uint32_t bytesRead = usbCDC.Read(rxBuffer, bytesToRead);
+
+			// Echo the received data back to the host
+			if(bytesRead > 0) {
+				usbCDC.Write(rxBuffer, bytesRead);
+			}
+		}
+
+		// Sleep for 10 ticks (~10ms) to keep the echo responsive without pegging the CPU
+		tx_thread_sleep(10);
+	}
+}
+
 void tx_application_define(void *first_unused_memory) {
 	uint32_t status = TX_SUCCESS;
 	char *pointer;
@@ -671,8 +744,9 @@ void tx_application_define(void *first_unused_memory) {
 	Console::Init(&uart4);
 
 	//Start application threads
-	InertialThread::Init();
-	AuxiliaryThread::Init();
+	// VisionThread::Init();
+	// InertialThread::Init();
+	// AuxiliaryThread::Init();
 
 	//Create a byte memory pool from which to allocate the thread stacks
 	status = tx_byte_pool_create(&threadBytePool, const_cast<char*>("Static Thread Byte Pool"), tx_byte_pool_buffer, THREADX_BUFFER_POOL_SIZE);
@@ -711,20 +785,20 @@ void tx_application_define(void *first_unused_memory) {
 		LOG_ERR("ThreadX uSD Thread Create Failed.");
 	}
 	
-	//Allocate the stack
-	status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
-	if(status != TX_SUCCESS) {
-		LOG_ERR("ThreadX Stack 2 Allocate Failed.");
-	}
-	//Create thread
-	status = tx_thread_create(&i2cThread, const_cast<char*>("I2C Thread"),
-											I2CThread, 0,
-											pointer, 2048,
-											3, 0,
-											TX_NO_TIME_SLICE, TX_AUTO_START);
-	if(status != TX_SUCCESS) {
-		LOG_ERR("ThreadX I2C Thread Create Failed.");
-	}
+	// //Allocate the stack
+	// status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
+	// if(status != TX_SUCCESS) {
+	// 	LOG_ERR("ThreadX Stack 2 Allocate Failed.");
+	// }
+	// //Create thread
+	// status = tx_thread_create(&i2cThread, const_cast<char*>("I2C Thread"),
+	// 										I2CThread, 0,
+	// 										pointer, 2048,
+	// 										3, 0,
+	// 										TX_NO_TIME_SLICE, TX_AUTO_START);
+	// if(status != TX_SUCCESS) {
+	// 	LOG_ERR("ThreadX I2C Thread Create Failed.");
+	// }
 
 	// //Allocate the stack
 	// status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
@@ -741,6 +815,21 @@ void tx_application_define(void *first_unused_memory) {
 	// if(status != TX_SUCCESS) {
 	// 	LOG_ERR("ThreadX FileX Thread Create Failed.");
 	// }
+
+	//Allocate the stack
+	status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
+	if(status != TX_SUCCESS) {
+		LOG_ERR("ThreadX Stack 3 Allocate Failed.");
+	}
+	//Create USB thread
+	status = tx_thread_create(&usbThread, const_cast<char*>("USB Thread"),
+											USBThread, 0,
+											pointer, 2048,
+											0, 0,
+											TX_NO_TIME_SLICE, TX_AUTO_START);
+	if(status != TX_SUCCESS) {
+		LOG_ERR("ThreadX USB Thread Create Failed.");
+	}
 }
 
 int main(void) {

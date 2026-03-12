@@ -39,6 +39,10 @@ class XSPI {
 		struct Config {
 		};
 
+		// Delete copy constructors
+		XSPI(const XSPI&) = delete;
+		XSPI& operator=(const XSPI&) = delete;
+
 		XSPI(XSPI_TypeDef *instance);
 
 		void Init(const Config &config);

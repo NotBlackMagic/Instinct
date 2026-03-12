@@ -88,8 +88,13 @@ class I3C {
 
 		/// @brief I3C peripheral configuration structure.
 		struct Config {
-			Mode mode;	///< The target mixed-bus speed configuration.
+			uint32_t sourceClockHz;	///< Peripheral source clock frequency in Hz
+			Mode mode;				///< The target mixed-bus speed configuration.
 		};
+
+		// Delete copy constructors
+		I3C(const I3C&) = delete;
+		I3C& operator=(const I3C&) = delete;
 
 		/// @brief Constructor.
 		/// @param instance Pointer to the hardware instance (e.g., I3C1, I3C2).

@@ -45,6 +45,7 @@ class SPI {
 
 		/// @brief SPI peripheral configuration structure.
 		struct Config {
+			uint32_t sourceClockHz;		///< Peripheral source clock frequency in Hz
 			uint32_t baudrate;
 			ClockPolarity polarity;
 			ClockPhase phase;
@@ -96,6 +97,7 @@ class SPI {
 		uint8_t irqPriority;
 
 		bool isInitialized;
+		uint32_t sourceClockHz;
 
 		// Transaction Context
 		const uint8_t * volatile txBuffer;

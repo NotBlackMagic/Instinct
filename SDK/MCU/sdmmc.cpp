@@ -7,14 +7,16 @@
 
 #include "sdmmc.hpp"
 
-#define SDMMC_USE_IRQ
-
 SDMMC::SDMMC(SDMMC_TypeDef *instance) {
 	this->instance = instance;
 	this->irqPriority = 0x0E; 	//Lowest priority
 }
 
 Status SDMMC::Init(const Config &config) {
+	if(config.sourceClockHz == 0) {
+		return Status::Error;
+	}
+
 	if(this->isInitialized == true) {
 		return Status::Ok;
 	}
@@ -24,6 +26,7 @@ Status SDMMC::Init(const Config &config) {
 		return Status::Error;
 	}
 	if(tx_event_flags_create(&this->event, const_cast<char*>("sdmmc event")) != TX_SUCCESS) {
+		tx_mutex_delete(&this->mutex);
 		return Status::Error;
 	}
 
@@ -39,6 +42,7 @@ Status SDMMC::Init(const Config &config) {
 	else {
 		return Status::Error;
 	}
+	this->sourceClockHz = config.sourceClockHz;
 
 	// Configure RIF (enable IDMA secure region access, etc...)
 	this->ConfigureRIF();
@@ -61,11 +65,9 @@ Status SDMMC::Init(const Config &config) {
 														0x00 |									// Set power saving: 0 clock is always running
 														125);									// Set clock divide factor (Fclk = Fkernel/[2*value]): Fkernel = 100 MHz, Fclk = 100/(2*125) = 400 kHz
 														
-#ifdef SDMMC_USE_IRQ
 	// Configure SDMMC Interrupts
 	NVIC_SetPriority(this->irqCall, this->irqPriority);
 	NVIC_EnableIRQ(this->irqCall);
-#endif
 
 	// Power down SDMMC (wait for card detect??)
 	// MODIFY_REG(this->instance->POWER, SDMMC_POWER_PWRCTRL, 0x00);	// Power off
@@ -77,10 +79,12 @@ Status SDMMC::Init(const Config &config) {
 }
 
 Status SDMMC::DeInit(void) {
+	if(this->isInitialized == false) {
+		return Status::Ok;
+	}
+
 	// Disable IRQ first
-#ifdef SDMMC_USE_IRQ
 	NVIC_DisableIRQ(this->irqCall);
-#endif
 
 	// Power down SDMMC
 	MODIFY_REG(this->instance->POWER, SDMMC_POWER_PWRCTRL, 0x00);	// Power off
@@ -122,14 +126,12 @@ Status SDMMC::DeInit(void) {
 Status SDMMC::SetClock(uint32_t freqHz) {
 	// This bit can only be written when the CPSM and DPSM are not active (CPSMACT = 0 and DPSMACT = 0).
 	
-	uint32_t periphClock = 100000000;
 	uint16_t clockDiv = 1;
-	if(freqHz < periphClock) {
-		clockDiv = (periphClock / (2 * freqHz));
-		
+	if(freqHz < this->sourceClockHz) {
+		clockDiv = (this->sourceClockHz + (2 * freqHz - 1)) / (2 * freqHz);		
 		// Limits check
-		if(clockDiv > SDMMC_CLKCR_CLKDIV_Msk) {
-			clockDiv = SDMMC_CLKCR_CLKDIV_Msk;
+		if(clockDiv > 0x3FFUL) {
+			clockDiv = 0x3FFUL;
 		}
 		if(clockDiv == 0) {
 			// Clock divider of 0 is allowed but DDR is not suported in that case!
@@ -330,12 +332,13 @@ Status SDMMC::TransferAsync(uint8_t *buf, uint32_t len, uint32_t blkSize, bool i
 		blkSizeLog2 = 14;
 	}
 
+	// 
 	this->buffer = buf;
 	this->length = len;
 	this->dirRead = isRead;
 	this->blkSize = (1UL << blkSizeLog2);
 
-	// Handle cache coherency
+	// Handle cache coherence
 	if(isRead == false) {
 		System::CleanCache((uint32_t*)buf, len);
 	}
@@ -357,7 +360,7 @@ Status SDMMC::TransferAsync(uint8_t *buf, uint32_t len, uint32_t blkSize, bool i
 	uint32_t dpsm = SDMMC_DPSM_DISABLE;						//Data path is enabled by the subsequent Command call
 
 	if(isRead == true) {
-		transferDir = SDMMC_TRANSFER_DIR_TO_SDMMC;	//From MCU to Card
+		transferDir = SDMMC_TRANSFER_DIR_TO_SDMMC;	//From Card to MCU
 	}
 
 	// Clear all the static flags
@@ -544,7 +547,7 @@ Status SDMMC::WaitBusyD0(uint32_t timeoutMs) {
 			return Status::Timeout;
 		}
 	}
-	return Status::Error;
+	return Status::Ok;
 }
 
 void SDMMC::ConfigureRIF(void) {
@@ -554,7 +557,7 @@ void SDMMC::ConfigureRIF(void) {
 
 	LL_AHB3_GRP1_EnableClock(LL_AHB3_GRP1_PERIPH_RIFSC);
 
-	// Some RIF contants (from HAL)
+	// Some RIF constants (from HAL)
 	const uint32_t RIF_PERIPH_REG1 = 0x10000000U;
 	const uint32_t RIF_CID_1 = 0x00000002U;
 	const uint32_t RIF_PERIPH_REG_SHIFT = 28U;

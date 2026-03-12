@@ -27,7 +27,7 @@ void AuxiliaryThread::Run(ULONG input) {
 	volatile uint8_t probeI2C1 = i2c1.Probe(0x1E);
 	volatile uint8_t probeI2C4 = i2c4.Probe(0x47);
 
-	//Initialize
+	// Initialize
 	if(i2c1.Probe(0x1E) == 0x01) {
 		LOG_INFO("LIS2MDL I2C1 Probe Pass");
 		uint8_t lis2mdlID;

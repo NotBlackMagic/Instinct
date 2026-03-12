@@ -32,25 +32,32 @@ class UART {
 
 		/// @brief Defines the UART stop bits.
 		enum class StopBits : uint32_t {
+			StopBits_05 = LL_USART_STOPBITS_0_5,
 			StopBits_1 = LL_USART_STOPBITS_1,
+			StopBits_15 = LL_USART_STOPBITS_1_5,
 			StopBits_2 = LL_USART_STOPBITS_2
 		};
 
 		/// @brief Defines the UART parity.
 		enum class Parity : uint32_t {
 			None = LL_USART_PARITY_NONE,
-			Even = LL_USART_STOPBITS_2,
-			Odd = LL_USART_PARITY_ODD
+			Odd = LL_USART_PARITY_ODD,
+			Even = LL_USART_PARITY_EVEN
 		};
 
 		/// @brief UART peripheral configuration structure.
 		struct Config {
+			uint32_t sourceClockHz;	///< Peripheral source clock frequency in Hz
 			uint32_t baudrate;		///< Baudrate.
 			DataBits dataBits;		///< Data width mode.
 			StopBits stopBits;		///< Stop bits mode.
 			Parity parity;			///< Parity mode.
 			uint8_t hwFlowControl;	///< Enable hardware flow control (0: Disable, 1: Enable).
 		};
+
+		// Delete copy constructors
+		UART(const UART&) = delete;
+		UART& operator=(const UART&) = delete;
 
 		/// @brief Constructor.
 		/// @param instance Pointer to the hardware instance (e.g., USART1, USART2).
@@ -62,20 +69,20 @@ class UART {
 		Status Init(const Config &config);
 
 		/// @brief Writes data to the internal ring buffer.
-		/// @param data Pointer to data to write (will be copied to ring buffer so does not need to be kept after function call).
-		/// @param len  Number of bytes to write.
+		/// @param buf Pointer to data to write (will be copied to ring buffer so does not need to be kept after function call).
+		/// @param len Number of bytes to write.
 		/// @return Status::Ok if the transfer started, or Status::Busy if the UART is locked by another thread.
-		Status Write(uint8_t *data, uint16_t len);
+		Status Write(uint8_t *buf, uint16_t len);
 
 		/// @brief Read data from the internal ring buffer.
-		/// @param data Pointer to buffer for read data.
-		/// @param len  Maximum number of bytes to read.
+		/// @param buf Pointer to buffer for read data.
+		/// @param len Maximum number of bytes to read.
 		/// @return Number of bytes read.
-		uint16_t Read(uint8_t *data, uint16_t maxLen);
+		uint32_t Read(uint8_t *buf, uint32_t maxLen);
 
 		/// @brief Get number of bytes available to read from internal ring buffer.
 		/// @return Number of bytes read.
-		uint16_t Available();
+		uint32_t Available();
 
 		/// @brief Interrupt Service Routine handler.
 		/// @warning This function is called by the NVIC. Do not call manually.
@@ -89,20 +96,24 @@ class UART {
 		bool isInitialized;
 
 		// Transaction Context
-		static constexpr uint16_t RxBufferSize = 256;
-		static constexpr uint16_t TxBufferSize = 2048;
+		static constexpr uint16_t rxBufferSize = 256;
+		static constexpr uint16_t txBufferSize = 2048;
 
-		uint8_t rxBuffer[RxBufferSize];
+		__attribute__((aligned(32))) uint8_t rxBuffer[rxBufferSize];
 		volatile uint16_t rxBufHead;
 		volatile uint16_t rxBufTail;
 
-		uint8_t txBuffer[TxBufferSize];
+		__attribute__((aligned(32))) uint8_t txBuffer[txBufferSize];
 		volatile uint16_t txBufHead;
 		volatile uint16_t txBufTail;
 		volatile bool txBusy;
 
 		// Synchronization
 		TX_MUTEX mutex;
+
+		// Event Flags Definitions
+		static constexpr uint32_t EVT_TRANS_CPLT = 0x01;
+		static constexpr uint32_t EVT_ERR = 0x02;
 
 		// Timeout defines
 		static constexpr uint32_t TIMEOUT_MUTEX = TX_WAIT_FOREVER;

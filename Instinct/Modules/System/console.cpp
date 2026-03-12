@@ -11,6 +11,15 @@ void Console::Init(UART* uart) {
 
 	Console::shell.Init();
 
+	// Register all active command modules
+	RegisterSystemCommands();
+	RegisterI2CCommands();
+	RegisterGPIOCommands();
+	// RegisterSerialCommands();
+	RegisterCameraCommands();
+	// RegisterPWMCommands();
+	// RegisterFlashCommands();
+
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Console"),
 											Console::Run,
 											0,

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 # Point to your toolchain file
-set(CMAKE_TOOLCHAIN_FILE "${CMAKE_SOURCE_DIR}/gcc-arm-none-eabi.cmake")
+set(CMAKE_TOOLCHAIN_FILE "${CMAKE_SOURCE_DIR}/cmake/gcc-arm-none-eabi.cmake")
 
 # Project Name
 set(CMAKE_PROJECT_NAME Instinct)

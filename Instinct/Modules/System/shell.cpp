@@ -1,6 +1,5 @@
 #include "shell.hpp"
-#include "logger.hpp"
-#include "stm32n657xx.h"
+
 
 Shell::CommandList* Shell::head = nullptr;
 
@@ -9,8 +8,7 @@ Shell::Shell() : lineIndex(0) {
 }
 
 void Shell::Init() {
-	//Register basic system commands
-	RegisterSystemCommands();
+	
 }
 
 void Shell::Input(uint8_t* data, uint16_t len) {

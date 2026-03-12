@@ -19,7 +19,7 @@ set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${MCU_FLAGS}")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MCU_FLAGS} -Wl,--gc-sections -Wl,--print-memory-usage")
 
 # Include toolchain file
-include("../gcc-arm-none-eabi.cmake")
+include("../cmake/gcc-arm-none-eabi.cmake")
 
 # Force optimization options that the toolchain might miss
 # add_compile_options(${MCU_FLAGS} -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti)

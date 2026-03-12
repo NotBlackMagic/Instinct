@@ -98,8 +98,8 @@ class SD {
 			bool use4BitMode;       ///< True: Switch to 4-bit bus (ACMD6) after init.
 			bool use1V8Level;		///< True: Switch to 1.8 V if supported by card.
 			bool useHighSpeed;      ///< True: Switch to High Speed (50MHz) if supported by card.
-			bool useUHS;
-			GPIO* vioSelectPin;
+			bool useUHS;			///< True: Switch to Ultra-High Speed if supported by card.
+			GPIO* vioSelectPin;		///< GPIO that controls the Voltage selection switch, if exist.
 		};
 
 		/// @brief SD card information structure.
@@ -195,7 +195,7 @@ class SD {
 		bool isInitialized;
 		__attribute__((aligned(32))) uint32_t statusBuf[16];
 
-		// @brief Sends an Application Command (ACMD).
+		/// @brief Sends an Application Command (ACMD).
 		/// @details Handles the requirement of sending CMD55 before the specific command.
 		SDMMC::CommandResponse SendAppCommand(AppCommand acmd, uint32_t arg, SDMMC::ResponseType respType);
 

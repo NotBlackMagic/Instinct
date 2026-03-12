@@ -15,12 +15,12 @@ SPI::SPI(SPI_TypeDef *instance) {
 }
 
 Status SPI::Init(const Config &config) {
-	if(this->isInitialized == true) {
-		return Status::Ok;
+	if(config.baudrate == 0 || config.sourceClockHz == 0) {
+		return Status::Error;
 	}
 
-	if(config.baudrate == 0) {
-		return Status::Error;
+	if(this->isInitialized == true) {
+		return Status::Ok;
 	}
 
 	// Create RTOS objects
@@ -28,6 +28,10 @@ Status SPI::Init(const Config &config) {
 		return Status::Error;
 	}
 	if(tx_event_flags_create(&this->event, const_cast<char*>("spi event")) != TX_SUCCESS) {
+		tx_mutex_delete(&this->mutex);
+		return Status::Error;
+	}
+	else {
 		return Status::Error;
 	}
 
@@ -56,6 +60,7 @@ Status SPI::Init(const Config &config) {
 		LL_APB4_GRP1_EnableClock(LL_APB4_GRP1_PERIPH_SPI6);
 		this->irqCall = SPI6_IRQn;
 	}
+	this->sourceClockHz = config.sourceClockHz;
 
 	// Configure SPI Interface
 	this->SetBaudrate(config.baudrate);
@@ -112,11 +117,10 @@ Status SPI::SetBaudrate(uint32_t baudrate) {
 	}
 
 	// Calculate best prescaler value, equal or lower then asked frequency
-	uint32_t periphClock = 100000000;	// Base Clock is PLL2P = 100MHz
 	uint32_t prescaler = 0;				// As power of 2: 0: DIV2, 1: DIV4, ...
 	if(baudrate > 0) {
 		while(prescaler < 7) {
-			uint32_t currentFreq = periphClock / (0x01 << (prescaler + 1));
+			uint32_t currentFreq = this->sourceClockHz / (0x01 << (prescaler + 1));
 			if(currentFreq <= baudrate) {
 				break;
 			}

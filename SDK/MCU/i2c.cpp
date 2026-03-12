@@ -17,9 +17,6 @@
 
 #include "i2c.hpp"
 
-// Enable Interrupt-based Logic
-#define I2C_USE_IRQ
-
 I2C::I2C(I2C_TypeDef *instance) {
 	this->instance = instance;
 	this->irqPriority = 0x0E; // Lowest priority (safe default)
@@ -35,6 +32,7 @@ Status I2C::Init(const Config &config) {
 		return Status::Error;
 	}
 	if(tx_event_flags_create(&this->event, const_cast<char*>("i2c event")) != TX_SUCCESS) {
+		tx_mutex_delete(&this->mutex);
 		return Status::Error;
 	}
 
@@ -55,10 +53,12 @@ Status I2C::Init(const Config &config) {
 		LL_APB4_GRP1_EnableClock(LL_APB4_GRP1_PERIPH_I2C4);
 		this->irqCall = I2C4_EV_IRQn;
 	}
+	else {
+		return Status::Error;
+	}
 
 	// Configure I2C Interface
 	// Configure the SDA setup, hold time and the SCL high, low period
-	// Timing Values for PCLK1 = 135.168MHz: 100kHz = 0x20B0BCFF; 400kHz = 0x4020142A; 1MHz = 0x00601B59
 	switch (config.mode) {
 		case I2C::Mode::Standard:
 			//I2C Standard Mode (100kHz)
@@ -87,7 +87,6 @@ Status I2C::Init(const Config &config) {
 //	LL_I2C_SetMasterAddressingMode(this->instance, LL_I2C_ADDRESSING_MODE_7BIT);	//Reset Value is LL_I2C_ADDRESSING_MODE_7BIT
 //	LL_I2C_SetMode(this->instance, LL_I2C_MODE_I2C);						//Reset Value is I2C mode
 
-#ifdef I2C_USE_IRQ
 	// Configure Interrupts
 	NVIC_SetPriority(this->irqCall, this->irqPriority);
 	NVIC_EnableIRQ(this->irqCall);
@@ -97,7 +96,6 @@ Status I2C::Init(const Config &config) {
 	LL_I2C_EnableIT_NACK(this->instance);
 	LL_I2C_EnableIT_STOP(this->instance);
 //	LL_I2C_EnableIT_ERR(this->instance);
-#endif
 
 	// Enable I2C
 	LL_I2C_Enable(this->instance);
@@ -244,13 +242,11 @@ Status I2C::TransferWait(uint32_t timeoutTicks) {
 
 Status I2C::TransferAbort() {
 	// Disable interrupts
-#ifdef I2C_USE_IRQ
 	LL_I2C_DisableIT_TX(this->instance);
 	LL_I2C_DisableIT_RX(this->instance);
 	LL_I2C_DisableIT_STOP(this->instance);
 	LL_I2C_DisableIT_NACK(this->instance);
 	// LL_I2C_DisableIT_ERR(this->instance);
-#endif
 
 	// Stop current transfer if any
 	if (LL_I2C_IsActiveFlag_BUSY(this->instance) == 0x01) {

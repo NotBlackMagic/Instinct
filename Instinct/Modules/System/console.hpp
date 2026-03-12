@@ -5,6 +5,7 @@
 #include "hardware.hpp"
 
 #include "shell.hpp"
+#include "shellModules.hpp"
 
 class Console {
 	public:

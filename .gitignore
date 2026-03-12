@@ -1,2 +1,9 @@
+# Build folders
 build/
+bin/
+
+# Local configurations
+.vscode/
+cmake/UserConfig.cmake
+
 README_tmp.md
