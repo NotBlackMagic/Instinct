@@ -72,13 +72,13 @@ class UART {
 		/// @param buf Pointer to data to write (will be copied to ring buffer so does not need to be kept after function call).
 		/// @param len Number of bytes to write.
 		/// @return Status::Ok if the transfer started, or Status::Busy if the UART is locked by another thread.
-		Status Write(uint8_t *buf, uint16_t len);
+		Status Transmit(uint8_t *buf, uint16_t len);
 
 		/// @brief Read data from the internal ring buffer.
 		/// @param buf Pointer to buffer for read data.
 		/// @param len Maximum number of bytes to read.
 		/// @return Number of bytes read.
-		uint32_t Read(uint8_t *buf, uint32_t maxLen);
+		uint32_t Receive(uint8_t *buf, uint32_t maxLen);
 
 		/// @brief Get number of bytes available to read from internal ring buffer.
 		/// @return Number of bytes read.
@@ -118,5 +118,6 @@ class UART {
 		// Timeout defines
 		static constexpr uint32_t TIMEOUT_MUTEX = TX_WAIT_FOREVER;
 
+		// Internal helpers
 		void StartTX();
 };

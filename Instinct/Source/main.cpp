@@ -14,6 +14,7 @@
 #include "sdmmc.hpp"
 #include "sd.hpp"
 #include "usbClassCDC.hpp"
+#include "usbClassUVC.hpp"
 #include "usbDevice.hpp"
 
 #include "tx_api.h"
@@ -100,7 +101,7 @@ void TestThread(ULONG thread_input) {
 	speed = (buffLen) * (1.0f/1024.f * 1.0f/1024.f) * (1.0f/(deltaTime * 0.001f * 0.001f));
 	LOG_INFO("PSRAM Read: %d Bytes in %d us (%.2f MByte/s), Err %d", buffLen, deltaTime, speed, errCnt);
 
-	//RAM Memory Mapped Test
+	// RAM Memory Mapped Test
 	externalPSRAM.EnterMemoryMappedMode();
 	void *extRAMPtr = (void*)hyperBus1.GetBaseAddr();
 
@@ -247,7 +248,7 @@ void TestThread(ULONG thread_input) {
 	speed = (buffLen) * (1.0f/1024.f * 1.0f/1024.f) * (1.0f/(deltaTime * 0.001f * 0.001f));
 	LOG_INFO("Flash Read: %d Bytes in %d us (%.2f MByte/s), Err %d", buffLen, deltaTime, speed, errCnt);
 
-	//Flash Memory Mapped Test
+	// Flash Memory Mapped Test
 	externalFlash.EnterMemoryMappedMode();
 	void *extFlashPtr = (void*)hyperBus2.GetBaseAddr();
 
@@ -322,7 +323,7 @@ const SD::Config sdConfig = {.use4BitMode = true, .use1V8Level = false, .useHigh
 SD sdCard = SD(sdmmc1);
 
 void SDMMCThread(ULONG thread_input) {
-	sdVioSel.Write(0);		//SD VIO Selection: 0 -> 3V3, 1 -> 1V8
+	sdVioSel.Write(0);		// SD VIO Selection: 0 -> 3V3, 1 -> 1V8
 	
 	bool hasCard = false;
 	while(1) {
@@ -525,16 +526,16 @@ void I2CThread(ULONG thread_input) {
 	MagMsg magLocal;
 	topicMag.Subscribe(&subMag);
 
-	//Initialize
+	// Initialize
 	if(i2c2.Probe(0x44) == 0x01) {
 		ina700.Init();
 	}
 
-	uint8_t i3cTxBuf[8];
-	uint8_t i3cRxBuf[8];
-	i3cTxBuf[0] = 0x0F;
-	i3c2.TransferAsync(0x0C, I3C::TargetType::I2C, i3cTxBuf, 1, i3cRxBuf, 1);
-	i3c2.TransferWait(1000);
+	// uint8_t i3cTxBuf[8];
+	// uint8_t i3cRxBuf[8];
+	// i3cTxBuf[0] = 0x0F;
+	// i3c1.TransferAsync(0x0C, I3C::TargetType::I2C, i3cTxBuf, 1, i3cRxBuf, 1);
+	// i3c1.TransferWait(1000);
 
 	uint16_t ina700ID;
 	ina700.ReadID(ina700ID);
@@ -567,7 +568,7 @@ void I2CThread(ULONG thread_input) {
 void FileXThread(ULONG thread_input) {
 	uint32_t status;
 
-	sdVioSel.Write(0);		//SD VIO Selection: 0 -> 3V3, 1 -> 1V8
+	sdVioSel.Write(0);		// SD VIO Selection: 0 -> 3V3, 1 -> 1V8
 
 	LOG_INFO("FileX Started");
 
@@ -575,7 +576,7 @@ void FileXThread(ULONG thread_input) {
 	while(1) {
 		switch(sdCardStatus) {
 			case 0: {
-				//Wait for card
+				// Wait for card
 				if(sdDet.Read() == 0) {
 					LOG_INFO("FileX Card Detected.");
 					_tx_thread_sleep(20);
@@ -584,10 +585,10 @@ void FileXThread(ULONG thread_input) {
 				break;
 			}
 			case 1: {
-				//Card just inserted
+				// Card just inserted
 				LOG_INFO("FileX Mount volume.");
 
-				//Mount SD Card
+				// Mount SD Card
 				status = fx_media_open(	&sdMedia,				// Media Ptr
 										const_cast<char*>("PLUMAN6"),		// Name
 										fx_stm32_sd_driver,	// Driver Entry
@@ -657,7 +658,15 @@ void FileXThread(ULONG thread_input) {
 				break;
 			}
 			case 3: {
-				tx_thread_sleep(500);
+				if(sdDet.Read() == 1) {
+					LOG_INFO("FileX Card Removed.");
+
+					ledGreen.Write(1);
+					sdCardStatus = 0;
+				}
+				else {
+					tx_thread_sleep(50);
+				}
 			}
 		}
 		tx_thread_sleep(10);
@@ -682,6 +691,17 @@ void USBThread(ULONG thread_input) {
 	usbCfg.maxPower = 50;					// 100mA (value * 2mA)
 	usbCfg.selfPowered = false;
 
+	// Define UVC Capabilties/formats
+	static const FrameFormat formats[] = {
+		{
+			.width = 640,
+			.height = 480,
+			.frameInterval = 2000000, // 5 FPS in 100ns units
+			.format = PixelFormat::YVYU,
+			.codec = VisionCodec::None
+		}
+	};
+
 	// Initialize and Connect
 	if(usbCore.Init(usbCfg) == Status::Ok) {
 		LOG_INFO("USB Init OK");
@@ -692,6 +712,15 @@ void USBThread(ULONG thread_input) {
 		}
 		else {
 			LOG_INFO("USB CDC Registration Failed!");
+		}
+
+		// Register the UVC Class
+		usbUVC.RegisterFormats(formats, 1);
+		if(usbCore.RegisterClass(&usbUVC) == Status::Ok) {
+			LOG_INFO("USB UVC Registered OK");
+		}
+		else {
+			LOG_INFO("USB UVC Registration Failed!");
 		}
 
 		if(usbCore.Start() == Status::Ok) {
@@ -736,31 +765,31 @@ void tx_application_define(void *first_unused_memory) {
 	LOG_INFO("System Booting...");
 	LOG_INFO("Logger Initialized.");
 
-	//Start Hardware stuff here, uses RTOS objects
+	// Start Hardware stuff here, uses RTOS objects
 	HardwareInit();
 	LOG_INFO("Peripherals Initialized.");
 
-	//Start system threads
+	// Start system threads
 	Console::Init(&uart4);
 
-	//Start application threads
-	// VisionThread::Init();
+	// Start application threads
+	VisionThread::Init();
 	// InertialThread::Init();
 	// AuxiliaryThread::Init();
 
-	//Create a byte memory pool from which to allocate the thread stacks
+	// Create a byte memory pool from which to allocate the thread stacks
 	status = tx_byte_pool_create(&threadBytePool, const_cast<char*>("Static Thread Byte Pool"), tx_byte_pool_buffer, THREADX_BUFFER_POOL_SIZE);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Create Byte Pool Failed.");
 	}
 
-	//Create the TestThread
-	//Allocate the stack
+	// Create the TestThread
+	// Allocate the stack
 	status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Stack 0 Allocate Failed.");
 	}
-	//Create thread
+	// Create thread
 	status = tx_thread_create(&testThread, const_cast<char*>("Test Thread"),
 											TestThread, 0,
 											pointer, 2048,
@@ -770,27 +799,27 @@ void tx_application_define(void *first_unused_memory) {
 		LOG_ERR("ThreadX Test Thread Create Failed.");
 	}
 	
-	//Allocate the stack
-	status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
-	if(status != TX_SUCCESS) {
-		LOG_ERR("ThreadX Stack 1 Allocate Failed.");
-	}
-	//Create thread
-	status = tx_thread_create(&uSDThread, const_cast<char*>("uSD Thread"),
-											SDMMCThread, 0,
-											pointer, 2048,
-											2, 0,
-											TX_NO_TIME_SLICE, TX_AUTO_START);
-	if(status != TX_SUCCESS) {
-		LOG_ERR("ThreadX uSD Thread Create Failed.");
-	}
+	// // Allocate the stack
+	// status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
+	// if(status != TX_SUCCESS) {
+	// 	LOG_ERR("ThreadX Stack 1 Allocate Failed.");
+	// }
+	// // Create thread
+	// status = tx_thread_create(&uSDThread, const_cast<char*>("uSD Thread"),
+	// 										SDMMCThread, 0,
+	// 										pointer, 2048,
+	// 										2, 0,
+	// 										TX_NO_TIME_SLICE, TX_AUTO_START);
+	// if(status != TX_SUCCESS) {
+	// 	LOG_ERR("ThreadX uSD Thread Create Failed.");
+	// }
 	
-	// //Allocate the stack
+	// // Allocate the stack
 	// status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
 	// if(status != TX_SUCCESS) {
 	// 	LOG_ERR("ThreadX Stack 2 Allocate Failed.");
 	// }
-	// //Create thread
+	// // Create thread
 	// status = tx_thread_create(&i2cThread, const_cast<char*>("I2C Thread"),
 	// 										I2CThread, 0,
 	// 										pointer, 2048,
@@ -800,28 +829,28 @@ void tx_application_define(void *first_unused_memory) {
 	// 	LOG_ERR("ThreadX I2C Thread Create Failed.");
 	// }
 
-	// //Allocate the stack
-	// status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
-	// if(status != TX_SUCCESS) {
-	// 	LOG_ERR("ThreadX Stack 3 Allocate Failed.");
-	// }
-	// //FileX stuff
-	// fx_system_initialize();
-	// status = tx_thread_create(&fileXThread, const_cast<char*>("FileX Thread"),
-	// 										FileXThread, 0,
-	// 										pointer, 2048,
-	// 										0, 0,
-	// 										TX_NO_TIME_SLICE, TX_AUTO_START);
-	// if(status != TX_SUCCESS) {
-	// 	LOG_ERR("ThreadX FileX Thread Create Failed.");
-	// }
-
-	//Allocate the stack
+	// Allocate the stack
 	status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Stack 3 Allocate Failed.");
 	}
-	//Create USB thread
+	// FileX stuff
+	fx_system_initialize();
+	status = tx_thread_create(&fileXThread, const_cast<char*>("FileX Thread"),
+											FileXThread, 0,
+											pointer, 2048,
+											0, 0,
+											TX_NO_TIME_SLICE, TX_AUTO_START);
+	if(status != TX_SUCCESS) {
+		LOG_ERR("ThreadX FileX Thread Create Failed.");
+	}
+
+	// Allocate the stack
+	status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
+	if(status != TX_SUCCESS) {
+		LOG_ERR("ThreadX Stack 3 Allocate Failed.");
+	}
+	// Create USB thread
 	status = tx_thread_create(&usbThread, const_cast<char*>("USB Thread"),
 											USBThread, 0,
 											pointer, 2048,
@@ -833,7 +862,7 @@ void tx_application_define(void *first_unused_memory) {
 }
 
 int main(void) {
-	//MCU Configuration
+	// MCU Configuration
 	HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
 	// HAL_Init();
 	LL_AHB3_GRP1_EnableClock(LL_AHB3_GRP1_PERIPH_RIFSC);
@@ -846,19 +875,12 @@ int main(void) {
 	System::InitSysTick();
 	Time::Init();
 
-	//Enable debugger in flash run mode
+	// Enable debugger in flash run mode
 	System::EnableDebug();
-
-	//Launch the application
-	/*
-	if (BOOT_OK != BOOT_Application()) {
-		Error_Handler();
-	}
-	*/
 
 	tx_kernel_enter();
 
-	//We should never get here as control is now taken by the scheduler
+	// We should never get here as control is now taken by the scheduler
 	while (1) {
 		ledRed.Toggle();
 		Time::Delay(200);

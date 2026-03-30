@@ -7,13 +7,13 @@ class Subscriber {
 	public:
 		Subscriber() : next(nullptr), isValid(false) {};
 
-		//The link to the next subscriber in the chain
+		// The link to the next subscriber in the chain
 		Subscriber<T>* next;
 
-		//The signal used to wake up the thread
+		// The signal used to wake up the thread
 		TX_SEMAPHORE semaphore;
 
-		//Flag to check if semaphore is created
+		// Flag to check if semaphore is created
 		bool isValid;
 
 		void init() {

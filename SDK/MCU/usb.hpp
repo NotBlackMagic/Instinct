@@ -185,12 +185,20 @@ class USB {
 		EndpointState inEpState[6];
 		EndpointState outEpState[9];
 
-		/// @brief Helper to configure Resource Isolation Framework (RIF)
+		/// @brief Helper to configure Resource Isolation Framework (RIF).
 		void ConfigureRIF(void);
 
+		// Internal helpers
+		/// @brief Helper to handle IN endpoint interrupt (IEPINT).
 		void HandleEpInInterrupt();
+
+		/// @brief Helper to handle OUT endpoint interrupt (OEPINT).
 		void HandleEpOutInterrupt();
+
+		/// @brief Helper to handle RX FIFO not empty interrupt (RXFLVL).
 		void HandleRxFifoInterrupt();
+
+		/// @brief Helper to handle TX FIFO empty interrupt (TXFE), inside HandleEpInInterrupt().
 		void HandleTxFifoInterrupt(uint8_t epNum);
 		
 		Status FlushTxFifo(uint8_t epNum);

@@ -1,10 +1,16 @@
-#include "shell.hpp"
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:    Instinct/Modules/System/shell.cpp
+ */
 
+#include "shell.hpp"
 
 Shell::CommandList* Shell::head = nullptr;
 
 Shell::Shell() : lineIndex(0) {
-	memset(lineBuffer, 0, BufferSize);
+	memset(lineBuffer, 0, bufferSize);
 }
 
 void Shell::Init() {
@@ -16,23 +22,23 @@ void Shell::Input(uint8_t* data, uint16_t len) {
 	for(i = 0; i < len; i++) {
 		uint8_t c = data[i];
 
-		//Check for BACKSPACE
+		// Check for BACKSPACE
 		if(c == 127 || c == 8) {
 			if(lineIndex > 0) {
 				lineIndex -= 1;
 
-				//Echo backspace (optional)
+				// Echo backspace
 				Logger::Instance().Write("\b \b");
 			}
 			continue;
 		}
 
-		//Check for ENTER
+		// Check for ENTER
 		if(c == '\r' || c == '\n') {
 			if(lineIndex > 0) {
 				lineBuffer[lineIndex] = 0;
 
-				//Newline
+				// Newline
 				Logger::Instance().Write("\r\n");
 
 				Execute();
@@ -44,27 +50,27 @@ void Shell::Input(uint8_t* data, uint16_t len) {
 			continue;
 		}
 
-		//Else fill to buffer
-		if(lineIndex < (BufferSize - 1) && c >= 32 && c <= 126) {
+		// Else fill to buffer
+		if(lineIndex < (bufferSize - 1) && c >= 32 && c <= 126) {
 			lineBuffer[lineIndex++] = c;
 
-			//Echo read byte/char
-            Logger::Instance().Write((char*)&c, 1);
+			// Echo read byte/char
+			Logger::Instance().Write((char*)&c, 1);
 		}
 	}
 }
 
 void Shell::Execute() {
-	//Split command and arguments
+	// Split command and arguments
 
 	char* cmd = lineBuffer;
 	char* args = nullptr;
 
-	//Find first space (after command name)
+	// Find first space (after command name)
 	char* space = strchr(lineBuffer, ' ');
 	if(space) {
-		*space = '\0'; 		//Null terminate the command
-		args = space + 1; 	//Args start after space
+		*space = '\0'; 		// Null terminate the command
+		args = space + 1; 	// Args start after space
 		
 		//Skip extra spaces in args
 		while (*args == ' ') {
@@ -76,11 +82,11 @@ void Shell::Execute() {
 		return;
 	}
 
-	//Iterate through command list (modules) where each item is itself a list of commands
+	// Iterate through command list (modules) where each item is itself a list of commands
 	const Shell::CommandList* currentList = head;
 
 	while(currentList != nullptr) {
-		//Iterate through commands in each list (module)
+		// Iterate through commands in each list (module)
 		const CommandEntry* entry = currentList->commandGroup;
 
 		while(entry->name != nullptr) {
@@ -91,24 +97,11 @@ void Shell::Execute() {
 				}
 				return;
 			}
-			entry++;	//Go to next command in this list/array
+			entry++;	// Go to next command in this list/array
 		}
 
 		currentList = currentList->next;
 	}
-
-	/*
-    //Find command in command table
-    for (int i = 0; commandTable[i].name != nullptr; i++) {
-        if (strcmp(cmd, commandTable[i].name) == 0) {
-            // Found! Run it.
-            if (!commandTable[i].handler(args)) {
-                Logger::Instance().Write("Command Error\r\n");
-            }
-            return;
-        }
-    }
-	*/
 
 	Logger::Instance().Printf("Unknown command: '%s'. Type 'help'.\r\n", cmd);
 }

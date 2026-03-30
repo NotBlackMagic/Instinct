@@ -28,7 +28,7 @@ Status Dcmi::Init(const Config &config) {
 //	MODIFY_REG(this->instance->CR, DCMI_CR_OELS, 0x00);						// Interface captures first line after the frame start, second one being dropped
 	MODIFY_REG(this->instance->CR, DCMI_CR_BSM, 0x00);						// Interface captures all received data
 //	MODIFY_REG(this->instance->CR, DCMI_CR_OEBS, 0x00);						// Interface captures first data (byte or double byte) from the frame/line start, second one being dropped
-	MODIFY_REG(this->instance->CR, DCMI_CR_EDM_0 | DCMI_CR_EDM_1, 0x00);		// Interface captures 8-bit data on every pixel clock
+	MODIFY_REG(this->instance->CR, DCMI_CR_EDM_0 | DCMI_CR_EDM_1, 0x00);	// Interface captures 8-bit data on every pixel clock
 	MODIFY_REG(this->instance->CR, DCMI_CR_FCRC_0 | DCMI_CR_FCRC_1, 0x00);	// All frames are captured, ignored in snapshot mode
 	MODIFY_REG(this->instance->CR, DCMI_CR_VSPOL, (static_cast<uint32_t>(config.vSyncPolarity) << DCMI_CR_VSPOL_Pos));	// DCMI_VSYNC active high
 	MODIFY_REG(this->instance->CR, DCMI_CR_HSPOL, (static_cast<uint32_t>(config.hSyncPolarity) << DCMI_CR_HSPOL_Pos));	// DCMI_HSYNC active low

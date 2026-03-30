@@ -123,7 +123,9 @@ class DMAChannel {
 		// Timeout defines
 		static constexpr uint32_t TIMEOUT_MUTEX = TX_WAIT_FOREVER;
 
+		/// @brief Helper to configure Resource Isolation Framework (RIF)
 		void ConfigureRIF(bool isSecure, bool isPrivileged);
+		
 		// Internal helper to find/get the correct bus port from an address
 		Port GetPortFromAddress(uint32_t address);
 };

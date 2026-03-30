@@ -153,7 +153,6 @@ class HyperBus {
 		// Timeout defines
 		static constexpr uint32_t TIMEOUT_MUTEX = TX_WAIT_FOREVER;
 
+		// Internal helpers
 		Status Command(AddressSpace space, uint32_t addr, AddrSize addrSize, BusWidth width, uint32_t dataLen);
-		Status Write(const uint16_t *data);
-		Status Read(uint16_t *data);
 };

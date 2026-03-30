@@ -89,8 +89,8 @@ extern "C" void I2C2_EV_IRQHandler(void) { i2c2.InterruptHandler(); }
 I2C i2c4(I2C4);
 extern "C" void I2C4_EV_IRQHandler(void) { i2c4.InterruptHandler(); }
 
-// I3C i3c1(I3C1);
-// extern "C" void I3C1_EV_IRQHandler(void) { i3c1.InterruptHandler(); }
+I3C i3c1(I3C1);
+extern "C" void I3C1_EV_IRQHandler(void) { i3c1.InterruptHandler(); }
 I3C i3c2(I3C2);
 extern "C" void I3C2_EV_IRQHandler(void) { i3c2.InterruptHandler(); }
 
@@ -120,9 +120,11 @@ ICM45686 icm45686(spi2);
 BMM350 bmm350(i2c4, 0x14);
 BMP581 bmp581(i2c4, 0x47);
 
-OV7670 ov7670(i3c2);
+OV7670 ov7670(i3c1);
 
 CameraDCMI cameraSD(dcmi, ov7670, dcmiDMAChannel);
+
+USBClassUVC usbUVC;
 
 void HardwareInit() {
 	//Initialize Physical Layer
@@ -138,7 +140,7 @@ void HardwareInit() {
 	// BoardI2C3Init();
 	BoardI2C4Init();
 	//I3C peripherals
-	// BoardI3C1Init();
+	BoardI3C1Init();
 	BoardI3C2Init();
 	//PWM peripherals
 	// BoardPWM2Init();
@@ -198,7 +200,7 @@ void HardwareInit() {
 	LOG_INFO("I2Cs Init OK.");
 
 	//Initialize I3Cs
-	// i3c1.Init({.mode = I3C::Mode::Mixed_Fast});
+	i3c1.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC10), .mode = I3C::Mode::Mixed_Fast});
 	i3c2.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC10), .mode = I3C::Mode::Mixed_Fast});
 	LOG_INFO("I3Cs Init OK.");
 

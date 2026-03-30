@@ -28,6 +28,8 @@
 
 #include "fx_api.h"
 
+#include "usbClassUVC.hpp"
+
 extern GPIO ledRed;
 extern GPIO ledBlue;
 extern GPIO ledGreen;
@@ -107,5 +109,7 @@ class CameraDCMI;
 extern CameraDCMI cameraSD;
 
 extern FX_MEDIA sdMedia;
+
+extern USBClassUVC usbUVC;
 
 void HardwareInit();

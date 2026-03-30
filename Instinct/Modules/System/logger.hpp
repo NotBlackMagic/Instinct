@@ -10,12 +10,12 @@
 class Logger {
 	public:
 		enum class LogLevel : uint8_t {
-			Trace = 0, // Noise (Register dumps, etc.)
-			Debug = 1, // Dev info
-			Info  = 2, // Nominal events
-			Warn  = 3, // Watch out
-			Error = 4, // Functionality lost
-			Fatal = 5, // System dead/Unsafe
+			Trace = 0,		// Noise (Register dumps, etc.)
+			Debug = 1,		// Dev info
+			Info  = 2,		// Nominal events
+			Warn  = 3,		// Watch out
+			Error = 4,		// Functionality lost
+			Fatal = 5,		// System dead/Unsafe
 			Off   = 6  
 		};
 
@@ -52,6 +52,7 @@ class Logger {
 		TX_MUTEX mutex;
 };
 
+// Helpers/shortcodes for logging specific message types
 #define LOG_TRACE(...)		Logger::Instance().Log(Logger::LogLevel::Trace, __FILE__, __LINE__, __VA_ARGS__)
 #define LOG_DEBUG(...)		Logger::Instance().Log(Logger::LogLevel::Debug, __FILE__, __LINE__, __VA_ARGS__)
 #define LOG_INFO(...) 		Logger::Instance().Log(Logger::LogLevel::Info,  nullptr, 0, __VA_ARGS__)

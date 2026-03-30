@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "system.hpp"
+
 #include "tx_api.h"
 
 #include "subscriber.hpp"
@@ -14,7 +16,7 @@ class Topic {
 	public:
 		Topic(const char* name, uint8_t id) : name(name), id(id), version(0), head(nullptr), msgCount(0), msgTimestamp(0), subCount(0) {}
 
-		//Disable copying of the Topic instance itself
+		// Delete copy constructors
 		Topic(const Topic&) = delete;
 		Topic& operator=(const Topic&) = delete;
 
@@ -25,10 +27,10 @@ class Topic {
 
 			sub->init();
 
-			//Enter Critical Section
+			// Enter Critical Section
 			UINT state = tx_interrupt_control(TX_INT_DISABLE);
 
-			//Prevent duplicate subscriptions
+			// Prevent duplicate subscriptions
 			Subscriber<T>* curr = head;
 			while(curr) {
 				if(curr == sub) {
@@ -41,10 +43,10 @@ class Topic {
 			sub->next = head;
 			head = sub;
 
-			//Update Stats
-        	subCount += 1;
+			// Update Stats
+			subCount += 1;
 
-			//Exit Critical Section
+			// Exit Critical Section
 			tx_interrupt_control(state);
 		}
 
@@ -53,11 +55,11 @@ class Topic {
 				return;
 			}
 
-			//Enter Critical Section
+			// Enter Critical Section
 			UINT state = tx_interrupt_control(TX_INT_DISABLE);
 
 			if(head == nullptr) {
-				//No subscribers, list is empty
+				// No subscribers, list is empty
 				tx_interrupt_control(state);
 				return;
 			}
@@ -65,8 +67,8 @@ class Topic {
 			bool found = false;
 
 			if(head == sub) {
-				//Subscriber is head (last added)
-				head = sub->next;	//Move head to the next one
+				// Subscriber is head (last added)
+				head = sub->next;	// Move head to the next one
 				found = true;
 			}
 			else {
@@ -76,50 +78,50 @@ class Topic {
 				}
 
 				if (prev->next == sub) {
-					//Bypass the node
+					// Bypass the node
 					prev->next = sub->next;
 					found = true;
 				}
 			}
 
 			if(found == true) {
-				//Clear the subscriber's next pointer for safety
+				// Clear the subscriber's next pointer for safety
 				sub->next = nullptr;
 
-				//Update Stats
-				subCount--; 
+				// Update Stats
+				subCount = subCount - 1; 
 				
-				//Clean up the semaphore
-				//This will wake up any thread waiting on this semaphore with TX_DELETED
+				// Clean up the semaphore
+				// This will wake up any thread waiting on this semaphore with TX_DELETED
 				tx_semaphore_delete(&sub->semaphore);
 				sub->isValid = false;
 			}
 
-			//Exit Critical Section
+			// Exit Critical Section
 			tx_interrupt_control(state);
 		}
 
 		void Publish(const T& msg) {
-			//Capture time
-        	uint64_t now = 0;	//sys_time_us();
+			// Capture time
+			uint64_t now = Time::GetUs();
 
-			//Increment Version (Odd number = "I am writing")
-			version += 1;
+			// Increment Version (Odd number = "I am writing")
+			version = version + 1;
 
-			//Barrier: Ensure version increment lands before data write starts
+			// Barrier: Ensure version increment lands before data write starts
 			BARRIER();
-			//3. Copy Data
+			// Copy Data
 			data = msg;
-			//Update Stats
+			// Update Stats
 			msgCount += 1;
 			msgTimestamp = now;
-			//4. Barrier: Ensure data write finishes before version increments again
+			// Barrier: Ensure data write finishes before version increments again
 			BARRIER();
 
-			//5. Increment Version (Even number = "I am done")
+			// Increment Version (Even number = "I am done")
 			version += 1;
 
-			//6. Notify all subscribers
+			// Notify all subscribers
 			Subscriber<T>* curr = head;
 			while (curr != nullptr) {
 				tx_semaphore_put(&curr->semaphore);
@@ -183,8 +185,8 @@ class Topic {
 		T data;
 		Subscriber<T>* head;
 
-		//Stats variables
+		// Stats variables
 		volatile uint32_t msgCount;
 		volatile uint64_t msgTimestamp;
-		volatile uint8_t  subCount;
+		volatile uint8_t subCount;
 };

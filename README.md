@@ -22,12 +22,12 @@ Although the firmware is written for the **PlumaN6 HD** board, its modular desig
 - **`Board/`:** Board-specific pin mappings, and hardware initialization.
 - **`Boot/`:** Future location of Boot Loader (FSBL).
 - **`Instinct/`:** Core firmware applications, RTOS threads, vision pipelines, and control loops.
-	- **`Acquisition`:** Sensor acquisition threads.
-	- **`Control`:** TBD
-	- **`Estimator`:** TBD
-	- **`Messaging`:** Custom PubSub messaging system.
-	- **`System`:** Basic system modules such as the console, shell and logger.
-	- **`Vision`:** Vision stack modules such as DCMI camera acquisition, image file writer, etc...
+	- **`Acquisition/`:** Sensor acquisition threads.
+	- **`Control/`:** TBD
+	- **`Estimator/`:** TBD
+	- **`Messaging/`:** Custom PubSub messaging system.
+	- **`System/`:** Basic system modules such as the console, shell and logger.
+	- **`Vision/`:** Vision stack modules such as DCMI camera acquisition, image file writer, etc...
 - **`Loader/`:** Flash loader for flashing a new binary to the external flash.
 - **`SDK/`:** Core libraries, ThreadX/FileX sources, and custom bare-metal peripheral drivers.
 	- **`Drivers/:`** Drivers for specific ICs (sensors, memories, etc...) and for higher levels of complex peripheral drivers.

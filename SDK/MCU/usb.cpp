@@ -160,7 +160,7 @@ Status USB::Init(const Config &config) {
 	}
 	MODIFY_REG(this->instance->GINTMSK, 0x00,	USB_OTG_GINTMSK_USBSUSPM | USB_OTG_GINTMSK_USBRST |
 												USB_OTG_GINTMSK_ENUMDNEM | USB_OTG_GINTMSK_IEPINT |
-												USB_OTG_GINTMSK_OEPINT   | USB_OTG_GINTMSK_IISOIXFRM |
+												USB_OTG_GINTMSK_OEPINT | USB_OTG_GINTMSK_IISOIXFRM |
 												USB_OTG_GINTMSK_PXFRM_IISOOXFRM | USB_OTG_GINTMSK_WUIM);
 	if(this->config.softOutput == true) {
 		MODIFY_REG(this->instance->GINTMSK, USB_OTG_GINTMSK_SOFM, USB_OTG_GINTMSK_SOFM);
@@ -455,7 +455,8 @@ Status USB::Transmit(uint8_t epAddr, const uint8_t* buf, uint32_t len) {
 	uint8_t epType = (inEp->DIEPCTL & USB_OTG_DIEPCTL_EPTYP_Msk) >> USB_OTG_DIEPCTL_EPTYP_Pos;
 	if(epType == 0x01) {
 		//EP_TYPE_ISOC
-		tSiz |= ((pktCnt << USB_OTG_DIEPTSIZ_MULCNT_Pos) & USB_OTG_DIEPTSIZ_MULCNT_Msk);
+		uint32_t mulCnt = (pktCnt > 3) ? 3 : pktCnt; // Clamp to max 3
+		tSiz |= ((mulCnt << USB_OTG_DIEPTSIZ_MULCNT_Pos) & USB_OTG_DIEPTSIZ_MULCNT_Msk);
 		// MODIFY_REG(inEp->DIEPTSIZ, USB_OTG_DIEPTSIZ_MULCNT, (pktCnt << USB_OTG_DIEPTSIZ_MULCNT_Pos) & USB_OTG_DIEPTSIZ_MULCNT_Msk);
 	}
 
@@ -488,9 +489,6 @@ Status USB::Transmit(uint8_t epAddr, const uint8_t* buf, uint32_t len) {
 		MODIFY_REG(inEp->DIEPCTL, USB_OTG_DIEPCTL_CNAK | USB_OTG_DIEPCTL_EPENA, USB_OTG_DIEPCTL_EPENA | USB_OTG_DIEPCTL_CNAK);
 	}
 	else {
-		// Enable Endpoint and Clear NAK
-		MODIFY_REG(inEp->DIEPCTL, USB_OTG_DIEPCTL_CNAK | USB_OTG_DIEPCTL_EPENA, USB_OTG_DIEPCTL_EPENA | USB_OTG_DIEPCTL_CNAK);
-
 		if(epType == 0x01) {
 			//EP_TYPE_ISOC
 			if((this->device->DSTS & (1U << 8)) == 0x00) {
@@ -500,11 +498,13 @@ Status USB::Transmit(uint8_t epAddr, const uint8_t* buf, uint32_t len) {
 				MODIFY_REG(inEp->DIEPCTL, USB_OTG_DIEPCTL_SD0PID_SEVNFRM, USB_OTG_DIEPCTL_SD0PID_SEVNFRM);
 			}
 		}
-		else {
-			if(len > 0) {
-				SET_BIT(this->device->DIEPEMPMSK, 1UL << (epNum & EP_ADDR_MSK));
-			}
+		
+		if(len > 0) {
+			SET_BIT(this->device->DIEPEMPMSK, 1UL << (epNum & EP_ADDR_MSK));
 		}
+
+		// Enable Endpoint and Clear NAK
+		MODIFY_REG(inEp->DIEPCTL, USB_OTG_DIEPCTL_CNAK | USB_OTG_DIEPCTL_EPENA, USB_OTG_DIEPCTL_EPENA | USB_OTG_DIEPCTL_CNAK);
 	}
 
 	return Status::Ok;
@@ -630,6 +630,20 @@ void USB::HandleEpInInterrupt() {
 			if((epInt & USB_OTG_DIEPINT_EPDISD) == USB_OTG_DIEPINT_EPDISD) {
 				// Clear flag
 				WRITE_REG(inEp->DIEPINT, USB_OTG_DIEPINT_EPDISD);
+
+				// --- SELF-HEALING STATE MACHINE ---
+				// If this was an Isochronous endpoint, it was forcefully disabled due to a missed 
+				// microframe. We MUST tell the UVC class it "completed" so it resets txBusy 
+				// and pushes the next packet. Otherwise, the pipeline permanently dies.
+				uint8_t epType = (inEp->DIEPCTL & USB_OTG_DIEPCTL_EPTYP_Msk) >> USB_OTG_DIEPCTL_EPTYP_Pos;
+				if(epType == 0x01) {
+					// Flush current TX FIFO
+					this->FlushTxFifo(epNum);
+					
+					if(this->config.eventCallback != nullptr) {
+						this->config.eventCallback(this->config.callbackContext, Event::TransferComplete, 0x80 | epNum, 0);
+					}
+				}
 			}
 
 			// Transmit FIFO empty
@@ -965,13 +979,13 @@ void USB::ConfigureRIF(void) {
 		return;
 	}
 
-	// RIMC_ATTRx: Controls if IDMA can read/write Secure/Privileged memory: Set to this master is secure and privilaged
+	// RIMC_ATTRx: Controls if USB DMA can read/write Secure/Privileged memory: Set to this master is secure and privilaged
 	uint32_t masterCID = POSITION_VAL(RIF_CID_1);
 	uint32_t wMask = (RIFSC_RIMC_ATTRx_MCID | RIFSC_RIMC_ATTRx_MPRIV | RIFSC_RIMC_ATTRx_MSEC);
 	uint32_t wValue = ((masterCID << RIFSC_RIMC_ATTRx_MCID_Pos) | (0x03 << RIFSC_RIMC_ATTRx_MSEC_Pos));		//Bit 0: Master Secure; Bit 1: Master priviliged
 	MODIFY_REG(RIFSC->RIMC_ATTRx[masterID], wMask, wValue);
 
-	// Allows CPU to access SDMMC registers in Secure/Privileged mode.
+	// Allows CPU to access USB registers in Secure/Privileged mode.
 	// Slave security configuration register: 0: Secure and nonsecure data access are granted to the peripheral; 1: Secure data access only are granted to the peripheral
 	wMask = (1UL << (periphID & RIF_PERIPH_BIT_POSITION));
 	wValue = ((0x01) << (periphID & RIF_PERIPH_BIT_POSITION));		//0: Secure and nonsecure data access are granted; 1: Only secure access granted
@@ -1004,6 +1018,31 @@ void USB::InterruptHandler() {
 	// Handle IN Endpoint Interrupts (IEPINT)
 	if(((this->irqStatus & USB_OTG_GINTSTS_IEPINT) == USB_OTG_GINTSTS_IEPINT)) {
 		this->HandleEpInInterrupt();
+	}
+
+	// Handle Incomplete Isochronous IN Transfer (IISOIXFR)
+	if(((this->irqStatus & USB_OTG_GINTSTS_IISOIXFR) == USB_OTG_GINTSTS_IISOIXFR)) {
+		// Clear flags
+		WRITE_REG(this->instance->GINTSTS, USB_OTG_GINTSTS_IISOIXFR);
+
+		// Find any Isochronous IN endpoint that is stuck (EPENA is still high)
+		for(uint8_t i = 1; i < maxUserInEP; i++) {
+			USB_OTG_INEndpointTypeDef* inEp = ((USB_OTG_INEndpointTypeDef *)((uint32_t)this->instance + USB_OTG_IN_ENDPOINT_BASE + (i * USB_OTG_EP_REG_SIZE)));
+			
+			uint32_t epCtl = inEp->DIEPCTL;
+			uint8_t epType = (epCtl & USB_OTG_DIEPCTL_EPTYP_Msk) >> USB_OTG_DIEPCTL_EPTYP_Pos;
+			
+			if ((epCtl & USB_OTG_DIEPCTL_EPENA) && (epType == 0x01)) { // 0x01 is Isochronous
+				// Forcefully disable it and set SNAK to flush the failed packet
+				inEp->DIEPCTL |= (USB_OTG_DIEPCTL_EPDIS | USB_OTG_DIEPCTL_SNAK);
+			}
+		}
+	}
+
+	// Handle Incomplete Isochronous OUT Transfer (PXFR_INCOMPISOOUT)
+	if(((this->irqStatus & USB_OTG_GINTSTS_PXFR_INCOMPISOOUT) == USB_OTG_GINTSTS_PXFR_INCOMPISOOUT)) {
+		// Clear flags
+		WRITE_REG(this->instance->GINTSTS, USB_OTG_GINTSTS_PXFR_INCOMPISOOUT);
 	}
 
 	// Handle Bus Reset (USBRST)

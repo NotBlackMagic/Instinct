@@ -107,7 +107,7 @@ Status UART::Init(const Config &config) {
 	return Status::Ok;
 }
 
-Status UART::Write(uint8_t *buf, uint16_t len) {
+Status UART::Transmit(uint8_t *buf, uint16_t len) {
 	// Lock UART device
 	bool useLock = this->isInitialized && (tx_thread_identify() != nullptr);
 	if(useLock == true) {
@@ -153,7 +153,7 @@ Status UART::Write(uint8_t *buf, uint16_t len) {
 	return Status::Ok;
 }
 
-uint32_t UART::Read(uint8_t *buf, uint32_t maxLen) {
+uint32_t UART::Receive(uint8_t *buf, uint32_t maxLen) {
 	uint32_t tmpHead = rxBufHead;
 	uint32_t tmpTail = rxBufTail;
 

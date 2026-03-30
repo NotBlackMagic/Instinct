@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:    Instinct/Modules/System/console.cpp
+ */
+
 #include "console.hpp"
 
 TX_THREAD Console::threadPtr;
@@ -37,15 +44,15 @@ void Console::Run(ULONG input) {
 	while(1) {
 		bool active = false;
 
-		uint16_t len = consolePort->Read(rxBuffer, sizeof(rxBuffer));
+		uint16_t len = consolePort->Receive(rxBuffer, sizeof(rxBuffer));
 
 		if(len > 0) {
 			shell.Input(rxBuffer, len);
 			active = true;
 		}
 
-		if (!active) {
-            tx_thread_sleep(2);
-        }
+		if(!active) {
+			tx_thread_sleep(2);
+		}
 	}
 }
