@@ -1,8 +1,6 @@
 #include "hardware.hpp"
 #include "../../Board/PlumaN6.hpp"
 
-#include "cameraDCMI.hpp"
-
 GPIO ledRed(GPIOB, LL_GPIO_PIN_13);
 GPIO ledBlue(GPIOB, LL_GPIO_PIN_2);
 GPIO ledGreen(GPIOQ, LL_GPIO_PIN_1);
@@ -19,13 +17,13 @@ GPIO csiIO3(GPIOG, LL_GPIO_PIN_9);
 GPIO csiIO4(GPIOG, LL_GPIO_PIN_11);
 GPIO csiIO5(GPIOG, LL_GPIO_PIN_12);
 
-GPIO imuIPWEn(GPIOD, LL_GPIO_PIN_13);
-GPIO imuIInt(GPIOG, LL_GPIO_PIN_15);
-GPIO imuEPWEn0(GPIOD, LL_GPIO_PIN_10);
-GPIO imuEPWEn1(GPIOC, LL_GPIO_PIN_13);
-GPIO imuEHeatEn(GPIOE, LL_GPIO_PIN_3);
-GPIO imuEInt0(GPIOF, LL_GPIO_PIN_6);
-GPIO imuEInt1(GPIOQ, LL_GPIO_PIN_2);
+GPIO internalIMUPwEn(GPIOD, LL_GPIO_PIN_13);
+GPIO internalIMUInt(GPIOG, LL_GPIO_PIN_15);
+GPIO ext1IMUPwEn(GPIOD, LL_GPIO_PIN_10);
+GPIO ext2IMUPwEn(GPIOC, LL_GPIO_PIN_13);
+GPIO extIMUHeater(GPIOE, LL_GPIO_PIN_3);
+GPIO ext1IMUInt(GPIOF, LL_GPIO_PIN_6);
+GPIO ext2IMUInt(GPIOQ, LL_GPIO_PIN_2);
 
 GPIO ospiInt(GPION, LL_GPIO_PIN_7);
 GPIO ospiRst(GPION, LL_GPIO_PIN_12);
@@ -82,10 +80,13 @@ HyperBus hyperBus2 = HyperBus(XSPI2);
 extern "C" void XSPI2_IRQHandler(void) { hyperBus2.InterruptHandler(); }
 HyperFlash externalFlash = HyperFlash(hyperBus2);
 
+// To on-board IMU
 I2C i2c1(I2C1);
 extern "C" void I2C1_EV_IRQHandler(void) { i2c1.InterruptHandler(); }
+// To power header and on-board power monitor IC
 I2C i2c2(I2C2);
 extern "C" void I2C2_EV_IRQHandler(void) { i2c2.InterruptHandler(); }
+// To IMU header
 I2C i2c4(I2C4);
 extern "C" void I2C4_EV_IRQHandler(void) { i2c4.InterruptHandler(); }
 
@@ -99,10 +100,13 @@ extern "C" void SDMMC1_IRQHandler(void) { sdmmc1.InterruptHandler(); }
 SDMMC sdmmc2(SDMMC2);
 extern "C" void SDMMC2_IRQHandler(void) { sdmmc2.InterruptHandler(); }
 
+// To On-Board IMU
 SPI spi1(SPI1);
 extern "C" void SPI1_IRQHandler(void) { spi1.InterruptHandler(); }
+// To IMU header
 SPI spi2(SPI2);
 extern "C" void SPI2_IRQHandler(void) { spi2.InterruptHandler(); }
+// To IMU header
 SPI spi4(SPI4);
 extern "C" void SPI4_IRQHandler(void) { spi4.InterruptHandler(); }
 
@@ -112,104 +116,325 @@ extern "C" void UART4_IRQHandler(void) { uart4.InterruptHandler(); }
 DMAChannel dcmiDMAChannel(HPDMA1, LL_DMA_CHANNEL_15);
 extern "C" void HPDMA1_Channel15_IRQHandler(void) { dcmiDMAChannel.InterruptHandler(); }
 
+// EXTI Interrupt Routing
+extern "C" void EXTI0_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_0) == 0x01) {
+		EXTIManager::Dispatch(0, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_0);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_0) == 0x01) {
+		EXTIManager::Dispatch(0, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_0);
+	}
+}
+
+extern "C" void EXTI1_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_1) == 0x01) {
+		EXTIManager::Dispatch(1, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_1);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_1) == 0x01) {
+		EXTIManager::Dispatch(1, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_1);
+	}
+}
+
+extern "C" extern "C" void EXTI2_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_2) == 0x01) {
+		EXTIManager::Dispatch(2, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_2);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_2) == 0x01) {
+		EXTIManager::Dispatch(2, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_2);
+	}
+}
+
+extern "C" void EXTI3_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_3) == 0x01) {
+		EXTIManager::Dispatch(3, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_3);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_3) == 0x01) {
+		EXTIManager::Dispatch(3, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_3);
+	}
+}
+
+extern "C" void EXTI4_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_4) == 0x01) {
+		EXTIManager::Dispatch(4, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_4);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_4) == 0x01) {
+		EXTIManager::Dispatch(4, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_4);
+	}
+}
+
+extern "C" void EXTI5_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_5) == 0x01) {
+		EXTIManager::Dispatch(5, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_5);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_5) == 0x01) {
+		EXTIManager::Dispatch(5, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_5);
+	}
+}
+
+extern "C" void EXTI6_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_6) == 0x01) {
+		EXTIManager::Dispatch(6, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_6);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_6) == 0x01) {
+		EXTIManager::Dispatch(6, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_6);
+	}
+}
+
+extern "C" void EXTI7_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_7) == 0x01) {
+		EXTIManager::Dispatch(7, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_7);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_7) == 0x01) {
+		EXTIManager::Dispatch(7, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_7);
+	}
+}
+
+extern "C" void EXTI8_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_8) == 0x01) {
+		EXTIManager::Dispatch(8, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_8);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_8) == 0x01) {
+		EXTIManager::Dispatch(8, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_8);
+	}
+}
+
+extern "C" void EXTI9_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_9) == 0x01) {
+		EXTIManager::Dispatch(9, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_9);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_9) == 0x01) {
+		EXTIManager::Dispatch(9, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_9);
+	}
+}
+
+extern "C" void EXTI10_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_10) == 0x01) {
+		EXTIManager::Dispatch(10, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_10);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_10) == 0x01) {
+		EXTIManager::Dispatch(10, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_10);
+	}
+}
+
+extern "C" void EXTI11_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_11) == 0x01) {
+		EXTIManager::Dispatch(11, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_11);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_11) == 0x01) {
+		EXTIManager::Dispatch(11, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_11);
+	}
+}
+
+extern "C" void EXTI12_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_12) == 0x01) {
+		EXTIManager::Dispatch(12, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_12);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_12) == 0x01) {
+		EXTIManager::Dispatch(12, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_12);
+	}
+}
+
+extern "C" void EXTI13_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_13) == 0x01) {
+		EXTIManager::Dispatch(13, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_13);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_13) == 0x01) {
+		EXTIManager::Dispatch(13, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_13);
+	}
+}
+
+extern "C" void EXTI14_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_14) == 0x01) {
+		EXTIManager::Dispatch(14, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_14);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_14) == 0x01) {
+		EXTIManager::Dispatch(14, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_14);
+	}
+}
+
+extern "C" void EXTI15_IRQHandler(void) {
+	// Check rising edge
+	if(LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_15) == 0x01) {
+		EXTIManager::Dispatch(15, EXTIManager::Edge::Rising);
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_15);
+	}
+	// Check falling edge
+	if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_15) == 0x01) {
+		EXTIManager::Dispatch(15, EXTIManager::Edge::Falling);
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_15);
+	}
+}
+
+// On-board sensors
 INA700 ina700(i2c2, 0x44);
-LIS2MDL lis2mdl(i2c1, 0x1E);
-LSM6DSO lsm6dso(spi1);
+LSM6DSO onboardIMU(spi1);
+LIS2MDL onboardMag(i2c1, 0x1E);
+ICP20100 onboardBaro(i2c1, 0x63);
 
-ICM45686 icm45686(spi2);
-BMM350 bmm350(i2c4, 0x14);
-BMP581 bmp581(i2c4, 0x47);
+// External IMU sensors
+ICM45686 ext2IMU(spi2);
+BMM350 extMag(i2c4, 0x14);
+BMP581 extBaro(i2c4, 0x47);
 
-OV7670 ov7670(i3c1);
+// OV7670 ov7670(i3c1);
 
-CameraDCMI cameraSD(dcmi, ov7670, dcmiDMAChannel);
+// CameraDCMI cameraSD(dcmi, ov7670, dcmiDMAChannel);
 
-USBClassUVC usbUVC;
+// USBClassUVC usbUVC;
 
 void HardwareInit() {
-	//Initialize Physical Layer
+	// Initialize Physical Layer
 
-	//Initialize general purpose GPIOs
+	// Initialize general purpose GPIOs
 	BoardGPIOInit();
-	//Initialize peripheral specific IO pins
-	//DCMI peripherals
+	// Initialize peripheral specific IO pins
+	// DCMI peripherals
 	BoardDCMIInit();
-	//I2C peripherals
+	// I2C peripherals
 	BoardI2C1Init();
 	BoardI2C2Init();
 	// BoardI2C3Init();
 	BoardI2C4Init();
-	//I3C peripherals
+	// I3C peripherals
 	BoardI3C1Init();
 	BoardI3C2Init();
-	//PWM peripherals
+	// PWM peripherals
 	// BoardPWM2Init();
 	// BoardPWM8Init();
-	//SDMMC peripherals
+	// SDMMC peripherals
 	BoardSDMMC1Init();
 	// BoardSDMMC2Init();
-	//SPI peripherals
+	// SPI peripherals
 	BoardSPI1Init();
 	BoardSPI2Init();
 	BoardSPI4Init();
 	// BoardSPI5Init();
-	//UART peripherals
+	// UART peripherals
 	// BoardUART3Init();
 	BoardUART4Init();
 	// BoardUART6Init();
 	// BoardUART7Init();
 	// BoardUART8Init();
-	//XPSI/HyperBus peripherals
+	// XPSI/HyperBus peripherals
 	BoardXSPI1Init();
 	BoardXSPI2Init();
 	LOG_INFO("Board IO Init OK.");
 
-	//Initialize GPIOs
-	//Outputs
+	// Initialize GPIOs
+	// Outputs
 	ledRed.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
 	ledBlue.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
 	ledGreen.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
-	imuEHeatEn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::NoPull});
 	sdVioSel.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
 	camPwdn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
 	csiPwdn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
 	csiRst.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
+	internalIMUPwEn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::NoPull});
+	ext1IMUPwEn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::NoPull});
+	ext2IMUPwEn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::NoPull});
+	extIMUHeater.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::NoPull});
 
-	//Inputs
+	// Inputs
 	userButton.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullUp});
 	sdDet.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullUp});
+	internalIMUInt.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
+	ext1IMUInt.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
+	ext2IMUInt.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
 
 	ledRed.Write(1);
 	ledGreen.Write(1);
 	ledBlue.Write(1);
-	imuEHeatEn.Write(1);
+	extIMUHeater.Write(1);
 	sdVioSel.Write(0);		//SD VIO Selection: 0 -> 3V3, 1 -> 1V8
 	camPwdn.Write(0);
 	csiPwdn.Write(1);
 	csiRst.Write(0);
+	internalIMUPwEn.Write(0);	// Power down/disable LDO
+	ext1IMUPwEn.Write(0);		// Power down/disable LDO
+	ext2IMUPwEn.Write(0);		// Power down/disable LDO
 	LOG_INFO("GPIO Init OK.");
 
-	//Initialize UARTs
+	// Initialize UARTs
 	uart4.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 115200, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
 	LOG_INFO("UARTs Init OK.");
 
-	//Initialize I2Cs
+	// Initialize I2Cs
 	i2c1.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC10), .mode = I2C::Mode::Fast});
 	i2c2.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC10), .mode = I2C::Mode::Fast});
 	i2c4.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC10), .mode = I2C::Mode::Fast});
 	LOG_INFO("I2Cs Init OK.");
 
-	//Initialize I3Cs
+	// Initialize I3Cs
 	i3c1.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC10), .mode = I3C::Mode::Mixed_Fast});
 	i3c2.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC10), .mode = I3C::Mode::Mixed_Fast});
 	LOG_INFO("I3Cs Init OK.");
 
-	//Initialize SPIs
+	// Initialize SPIs
 	spi1.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 1000000, .polarity = SPI::ClockPolarity::High, .phase = SPI::ClockPhase::SecondEdge, .bitOrder = SPI::BitOrder::MSBFirst});
 	spi2.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 1000000, .polarity = SPI::ClockPolarity::High, .phase = SPI::ClockPhase::SecondEdge, .bitOrder = SPI::BitOrder::MSBFirst});
 	LOG_INFO("SPIs Init OK.");
 
-	//Configure XSPI clock (needs the System stuff to be initialized!!)
+	// Configure XSPI clock (needs the System stuff to be initialized!!)
 	extRAMConfig.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC3);	// From IC3
 	extFlashConfig.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC3);	// From IC3
 }

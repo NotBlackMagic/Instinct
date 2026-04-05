@@ -2,8 +2,21 @@
 
 #include <stdio.h>
 
+// Allocate the static variables
 TX_THREAD InertialThread::threadPtr;
 uint8_t InertialThread::threadStack[4096];
+TX_EVENT_FLAGS_GROUP InertialThread::event;
+
+// Global/Shared timestamp for the EKF
+volatile uint32_t imuTimestampUs = 0;
+
+void InertialThread::Ext2IntCallback(void* context, EXTIManager::Edge edge) {
+	// Get current sample timestamp, lowest latency/jitter
+	imuTimestampUs = Time::GetUs();
+
+	// Wake up the Inertial Thread
+	tx_event_flags_set(&event, EVT_EXT2_IMU_DRDY, TX_OR);
+}
 
 void InertialThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("ACQ_Inert"),
@@ -25,24 +38,76 @@ void InertialThread::Run(ULONG input) {
 
 	LOG_INFO("Inertial Thread Initialized.");
 
-	//Initialize
-	lsm6dso.Init();
-	icm45686.Init();
+	// Create RTOS objects
+	if(tx_event_flags_create(&event, const_cast<char*>("IMU_event")) != TX_SUCCESS) {
+		return;
+	}
 
-	uint8_t lsm6dsoID;
-	lsm6dso.ReadID(lsm6dsoID);
-	LOG_INFO("LSM ID: 0x%02X [0x6C]", lsm6dsoID);
+	// Power up IMUs (enable LDOs)
+	internalIMUPwEn.Write(1);
+	ext1IMUPwEn.Write(1);
+	ext2IMUPwEn.Write(1);
+	tx_thread_sleep(50);
 
-	uint8_t icm45686ID;
-	icm45686.ReadID(icm45686ID);
-	LOG_INFO("ICM ID: 0x%02X [0xE9]", icm45686ID);
+	// Initialize
+	uint8_t onboardIMUID;
+	onboardIMU.ReadID(onboardIMUID);
+	if(onboardIMUID == 0x6C) {
+		onboardIMU.Init();
+		LOG_INFO("LSM6DSO Init OK");
+	}
+	else {
+		LOG_WARN("LSM6DSO Init Failed!");
+	}
 
+	// External/offboard IMU 2 config
+	ICM45686::Config icmCfg = {
+		.accelScale = ICM45686::AccelScale::G16,
+		.gyroScale = ICM45686::GyroScale::DPS2000,
+		.accelOdr = ICM45686::OutputDataRate::Hz25,
+		.gyroOdr = ICM45686::OutputDataRate::Hz25
+	};
+
+	if(ext2IMU.Init(icmCfg) == Status::Ok) {
+		if(EXTIManager::RegisterCallback(ext2IMUInt.GetPinIndex(), Ext2IntCallback, nullptr) == Status::Ok) {
+			// Enable the EXTI interrupt
+			ext2IMUInt.EnableIRQ(GPIO::Interrupt::Rising, 0x0E);
+			LOG_INFO("Ext2 IMU (ICM45686) Init & EXTI Routed OK");
+		}
+		else {
+			LOG_WARN("Ext2 IMU EXTI Routing Failed!");
+		}
+		
+	}
+	else {
+		LOG_WARN("Ext2 IMU (ICM45686) Init Failed!");
+	}
+
+	ULONG events;
+	UINT status;
+	uint8_t reqICM = 0x00;
 	while(1) {
-		lsm6dso.RequestData();
+		// Wait for event
+		status = tx_event_flags_get(&event, EVT_EXT2_IMU_DRDY, TX_OR_CLEAR, &events, 1000);
+		
+		reqICM = 0x00;
+		if(status == TX_SUCCESS && (events & EVT_EXT2_IMU_DRDY) == EVT_EXT2_IMU_DRDY) {
+			// Get new data from IMU
+			ext2IMU.RequestData();
+			reqICM = 0x01;
 
-		lsm6dso.GetData(imuInt.accel, imuInt.gyro, &imuInt.temperature);
-		topicImu.Publish(imuInt);
+			ledRed.Toggle();
+		}
+		else if(status != TX_SUCCESS) {
+			// Handle sensor timeout (e.g., attempt software reset or trigger failsafe)
+			LOG_WARN("IMU Interrupt Timeout!");
+		}
 
-		tx_thread_sleep(200);
+		// Wait for all called/triggered requests
+		if(reqICM == 0x01) {
+			imuInt.timestamp = imuTimestampUs;
+			ext2IMU.GetData(imuInt.accel, imuInt.gyro, &imuInt.temperature);
+			topicImu.Publish(imuInt);
+		}
 	}
 }

@@ -75,6 +75,9 @@ class GPIO {
 		/// @brief Toggle current output state.
 		void Toggle();
 
+		/// @brief Gets the GPIO pin index, used for registering EXTI callbacks.
+		uint8_t GetPinIndex() const;
+
 		/// @brief Enable EXTI interrupt for this GPIO pin.
 		/// @param trigger      Trigger condition (Rising/Falling/Both)
 		/// @param irqPriority  NVIC priority for the EXTI line

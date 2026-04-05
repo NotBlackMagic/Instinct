@@ -32,9 +32,13 @@ class LIS2MDL {
 			TEMP_OUT_H_REG = 0x6F
 		};
 
+		struct Config {
+
+		};
+
 		LIS2MDL(I2C& i2c, uint8_t addr) : bus(i2c), addr(addr) {};
 
-		void Init();
+		void Init(const Config& config);
 		void ReadID(uint8_t& id);
 
 		bool RequestData();
@@ -44,6 +48,7 @@ class LIS2MDL {
 	private:
 		I2C& bus;
 		const uint8_t addr;
+		Config config;
 
 		uint8_t buffer[10];
 

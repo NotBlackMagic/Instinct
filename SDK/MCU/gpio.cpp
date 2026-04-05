@@ -157,34 +157,44 @@ void GPIO::Toggle() {
 	LL_GPIO_TogglePin(this->port, this->pin);
 }
 
+uint8_t GPIO::GetPinIndex() const {
+	// e.g., LL_GPIO_PIN_2 (0x0004) has 2 trailing zeros -> returns 2
+	return static_cast<uint8_t>(__builtin_ctz(this->pin)); 
+}
+
 void GPIO::EnableIRQ(GPIO::Interrupt trigger, uint8_t irqPriority) {
 	// Configure NVIC EXTI Interrupts
 	this->irqPriority = irqPriority;
-	NVIC_SetPriority(this->irqCall, this->irqPriority);
-	NVIC_EnableIRQ(this->irqCall);
 
 	// Set Input Pins Interrupts
 	LL_EXTI_SetEXTISource(this->extiPort, this->extiExtiLine);
+	LL_EXTI_DisableEvent_0_31(this->extiLine);
+	LL_EXTI_EnableIT_0_31(this->extiLine);
 	switch (trigger) {
 		case GPIO::Interrupt::None:
 			// No trigger
 			break;
 		case GPIO::Interrupt::Rising:
+			LL_EXTI_DisableFallingTrig_0_31(this->extiLine);
 			LL_EXTI_EnableRisingTrig_0_31(this->extiLine);
 			break;
 		case GPIO::Interrupt::Falling:
+			LL_EXTI_DisableRisingTrig_0_31(this->extiLine);
 			LL_EXTI_EnableFallingTrig_0_31(this->extiLine);
 			break;
 		case GPIO::Interrupt::Both:
-			//LL_EXTI_EnableRisingTrig_0_31(this->extiLine);
-			//LL_EXTI_EnableFallingTrig_0_31(this->extiLine);
+			LL_EXTI_EnableRisingTrig_0_31(this->extiLine);
+			LL_EXTI_EnableFallingTrig_0_31(this->extiLine);
 			break;
 	}
-	LL_EXTI_EnableIT_0_31(this->extiLine);
+
+	NVIC_SetPriority(this->irqCall, this->irqPriority);
+	NVIC_EnableIRQ(this->irqCall);
 }
 
 void GPIO::DisableIRQ() {
 	LL_EXTI_DisableIT_0_31(this->extiLine);
 	LL_EXTI_DisableRisingTrig_0_31(this->extiLine);
 	LL_EXTI_DisableFallingTrig_0_31(this->extiLine);
+	NVIC_EnableIRQ(this->irqCall);
 }

@@ -101,8 +101,9 @@ class SPI {
 
 		// Transaction Context
 		const uint8_t * volatile txBuffer;
+		volatile uint16_t txLength;
 		uint8_t * volatile rxBuffer;
-		volatile uint32_t length;
+		volatile uint16_t rxLength;
 
 		// Synchronization
 		TX_MUTEX mutex;

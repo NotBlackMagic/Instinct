@@ -1,6 +1,4 @@
 #include "lsm6dso.hpp"
-#include "status.hpp"
-#include "tx_api.h"
 
 void LSM6DSO::Init() {
 	//Start with RESET command

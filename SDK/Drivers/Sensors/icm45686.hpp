@@ -1,8 +1,18 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:    SDK/Drivers/Sensors/icm45686.hpp
+ * Author:  NotBlackMagic
+ * Brief:   ICM-45686 6-Axis IMU driver class for STM32N6.
+ */
+
 #pragma once
 
 #include <stdint.h>
 
 #include "spi.hpp"
+#include "status.hpp"
 
 class ICM45686 {
 	public:
@@ -356,15 +366,99 @@ class ICM45686 {
 			IPREG_SYS2_REG_132 = 0x84,
 		};
 
+		enum class OutputDataRate : uint8_t {
+			Hz6400 = 0x03,
+			Hz3200 = 0x04,
+			Hz1600 = 0x05,
+			Hz800 = 0x06,
+			Hz400 = 0x07,
+			Hz200 = 0x08,
+			Hz100 = 0x09,
+			Hz50 = 0x0A,
+			Hz25 = 0x0B,
+			Hz12_5 = 0x0C,
+			Hz6_25 = 0x0D,
+			Hz3_125 = 0x0E,
+			Hz1_5625 = 0x0F
+		};
+
+		enum class AccelScale : uint8_t {
+			G32 = 0x00,
+			G16 = 0x01,
+			G8 = 0x02,
+			G4 = 0x03,
+			G2 = 0x04
+		};
+
+		enum class GyroScale : uint8_t {
+			DPS4000 = 0x00,
+			DPS2000 = 0x01,
+			DPS1000 = 0x02,
+			DPS500 = 0x03,
+			DPS250 = 0x04,
+			DPS125 = 0x05,
+			DPS62_5 = 0x06,
+			DPS31_25 = 0x07,
+			DPS15_625 = 0x08
+		};
+
+		struct Config {
+			AccelScale accelScale;
+			GyroScale gyroScale;
+			OutputDataRate accelOdr;
+			OutputDataRate gyroOdr;
+		};
+
+		static constexpr float accelSens[] = {
+			32.0f / 32768.0f,
+			16.0f / 32768.0f,
+			8.0f / 32768.0f,
+			4.0f / 32768.0f,
+			2.0f / 32768.0f
+		};
+
+		static constexpr float gyroSens[] = {
+			4000.0f / 32768.0f,
+			2000.0f / 32768.0f,
+			1000.0f / 32768.0f,
+			500.0f / 32768.0f,
+			250.0f / 32768.0f,
+			125.0f / 32768.0f,
+			62.5f / 32768.0f,
+			31.25f / 32768.0f,
+			15.625f / 32768.0f
+		};
+
+		static constexpr float tempSens = (1.0f/256);
+		static constexpr float tempOffset = 25.0f;
+
 		ICM45686(SPI& spi) : bus(spi) {};
 
-		void Init();
-		void ReadID(uint8_t& id);
+		Status Init(const Config& config);
+		Status Reset();
+		Status ReadID(uint8_t& id);
+
+		Status SetScales(AccelScale accelScale, GyroScale gyroScale);
+		Status SetAccelOffsets(float offsetX, float offsetY, float offsetZ);
+		Status SetGyroOffsets(float offsetX, float offsetY, float offsetZ);
+		Status RunHardwareSelfTest();
+
+		Status RequestData();
+		Status GetData(float* accel, float* gyro, float* temp);
 
 	private:
 		SPI& bus;
+		Config config;
 
-		void WriteRegister(Register reg, uint8_t value);
-		void ReadRegister(Register reg, uint8_t& value);
-		void ModifyRegister(Register reg, uint8_t mask, uint8_t value);
+		static constexpr uint16_t transferSize = 32;
+		__attribute__((aligned(32))) uint8_t txBuffer[transferSize];
+		__attribute__((aligned(32))) uint8_t rxBuffer[transferSize];
+		
+		float accelOffset[3];
+		float gyroOffset[3];
+
+		Status WriteRegister(Register reg, uint8_t value);
+		Status ReadRegister(Register reg, uint8_t& value);
+		Status ModifyRegister(Register reg, uint8_t mask, uint8_t value);
+		float ParseAxis(uint8_t msb, uint8_t lsb, float scaleFactor, float offset);
 };

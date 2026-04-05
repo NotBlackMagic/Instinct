@@ -2,6 +2,7 @@
 
 #include "dcmi.hpp"
 #include "dmaChannel.hpp"
+#include "exti.hpp"
 #include "gpio.hpp"
 #include "hyperbus.hpp"
 #include "i2c.hpp"
@@ -19,16 +20,18 @@
 #include "bmp581.hpp"
 #include "ina700.hpp"
 #include "icm45686.hpp"
+#include "icp20100.hpp"
 #include "lis2mdl.hpp"
 #include "lsm6dso.hpp"
 
-#include "ov7670.hpp"
+//#include "ov7670.hpp"
+// #include "cameraDCMI.hpp"
 
 #include "logger.hpp"
 
 #include "fx_api.h"
 
-#include "usbClassUVC.hpp"
+//#include "usbClassUVC.hpp"
 
 extern GPIO ledRed;
 extern GPIO ledBlue;
@@ -46,13 +49,13 @@ extern GPIO csiIO3;
 extern GPIO csiIO4;
 extern GPIO csiIO5;
 
-extern GPIO imuIPWEn;
-extern GPIO imuIInt;
-extern GPIO imuEPWEn0;
-extern GPIO imuEPWEn1;
-extern GPIO imuEHeatEn;
-extern GPIO imuEInt0;
-extern GPIO imuEInt1;
+extern GPIO internalIMUPwEn;
+extern GPIO internalIMUInt;
+extern GPIO ext1IMUPwEn;
+extern GPIO ext2IMUPwEn;
+extern GPIO extIMUHeater;
+extern GPIO ext1IMUInt;
+extern GPIO ext2IMUInt;
 
 extern GPIO ospiInt;
 extern GPIO ospiRst;
@@ -96,20 +99,21 @@ extern DMAChannel dcmiDMAChannel;
 
 extern INA700 ina700;
 
-extern LIS2MDL lis2mdl;
-extern LSM6DSO lsm6dso;
+extern LSM6DSO onboardIMU;
+extern LIS2MDL onboardMag;
+extern ICP20100 onboardBaro;
 
-extern ICM45686 icm45686;
-extern BMM350 bmm350;
-extern BMP581 bmp581;
+extern ICM45686 ext2IMU;
+extern BMM350 extMag;
+extern BMP581 extBaro;
 
-extern OV7670 ov7670;
+//extern OV7670 ov7670;
 
 class CameraDCMI;
 extern CameraDCMI cameraSD;
 
 extern FX_MEDIA sdMedia;
 
-extern USBClassUVC usbUVC;
+//extern USBClassUVC usbUVC;
 
 void HardwareInit();

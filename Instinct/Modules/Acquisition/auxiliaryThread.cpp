@@ -29,36 +29,67 @@ void AuxiliaryThread::Run(ULONG input) {
 
 	// Initialize
 	if(i2c1.Probe(0x1E) == 0x01) {
-		LOG_INFO("LIS2MDL I2C1 Probe Pass");
 		uint8_t lis2mdlID;
-		lis2mdl.ReadID(lis2mdlID);
+		onboardMag.ReadID(lis2mdlID);
 		if(lis2mdlID == 0x40) {
-			lis2mdl.Init();
-			LOG_INFO("LIS2MDL Initialized");
+			onboardMag.Init({});
+			LOG_INFO("LIS2MDL Init OK");
+		}
+		else {
+			LOG_WARN("LIS2MDL Init Failed!");
 		}
 	}
+	else {
+		LOG_WARN("LIS2MDL not found on I2C1!");
+	}
 
+	// External/offboard Barometer config
 	if(i2c4.Probe(0x47) == 0x01) {
-		LOG_INFO("BMP581 I2C4 Probe Pass");
-		uint8_t bmp581ID;
-		bmp581.ReadID(bmp581ID);
-		if(bmp581ID == 0x50) {
-			bmp581.Init();
-			LOG_INFO("BMP581 Initialized");
+		// Recommended settings based on datasheet for "High resolution"
+		BMP581::Config config = {
+			.odr = BMP581::OutputDataRate::Hz25,
+			.osrPressure = BMP581::Oversampling::X64,
+			.osrTemp = BMP581::Oversampling::X4,
+			.iirFilter = BMP581::IIRFilter::Bypass
+		};
+		if(extBaro.Init(config) != Status::Ok) {
+			LOG_INFO("Ext Baro (BMP581) Init OK");
 		}
+		else {
+			LOG_INFO("Ext Baro (BMP581) Init Failed!");
+		}
+	}
+	else {
+		LOG_WARN("Ext Baro (BMP581) not found on I2C4!");
+	}
+
+	if(i2c4.Probe(0x14) == 0x01) {
+		uint8_t bmm350ID;
+		// bmm350.ReadID(bmm350ID);
+		if(bmm350ID == 0x50) {
+			// bmm350.Init();
+			LOG_INFO("BMM350 Initialized");
+		}
+		else {
+			LOG_WARN("BMM350 Init Failed!");
+		}
+	}
+	else {
+		LOG_WARN("BMM350 not found on I2C4!");
 	}
 
 	while(1) {
-		lis2mdl.RequestData();
-		bmp581.RequestData();
+		onboardMag.RequestData();
+		extBaro.RequestData();
 
-		bmp581.GetData(baroExt.pressure, baroExt.temperature);
+		extBaro.GetData(&baroExt.pressure, &baroExt.temperature);
 		topicBaro.Publish(baroExt);
 
-		lis2mdl.GetData(magInt.values, &magInt.temperature);
-		lis2mdl.ReadTemperature(magInt.temperature);
+		onboardMag.GetData(magInt.values, &magInt.temperature);
+		onboardMag.ReadTemperature(magInt.temperature);
 		topicMag.Publish(magInt);
 
-		tx_thread_sleep(200);
+		// Match set ODR rates of 25Hz
+		tx_thread_sleep(40);
 	}
 }

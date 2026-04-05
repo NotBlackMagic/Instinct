@@ -2,7 +2,9 @@
 #include "status.hpp"
 #include "stm32n657xx.h"
 
-void LIS2MDL::Init() {
+void LIS2MDL::Init(const Config& config) {
+	this->config = config;
+	
 	this->WriteRegister(LIS2MDL::Register::CFG_REG_A, 0x8C);	//Enable temperature compensation, ODR = 100 Hz
 	this->WriteRegister(LIS2MDL::Register::CFG_REG_C, 0x11);	//Enable BDU consistency, enable DRDY
 

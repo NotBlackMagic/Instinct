@@ -3,6 +3,9 @@
 #include <stdint.h>
 
 #include "spi.hpp"
+#include "status.hpp"
+
+#include "tx_api.h"
 
 class LSM6DSO {
 	public:
