@@ -10,6 +10,16 @@ TX_EVENT_FLAGS_GROUP InertialThread::event;
 // Global/Shared timestamp for the EKF
 volatile uint32_t imuTimestampUs = 0;
 
+static Topic<ImuMsg> topicImu("imu", static_cast<uint8_t>(TopicID::Imu));
+
+void InertialThread::OnboardIntCallback(void* context, EXTIManager::Edge edge) {
+	// Get current sample timestamp, lowest latency/jitter
+	// imuTimestampUs = Time::GetUs();
+
+	// Wake up the Inertial Thread
+	// tx_event_flags_set(&event, EVT_EXT2_IMU_DRDY, TX_OR);
+}
+
 void InertialThread::Ext2IntCallback(void* context, EXTIManager::Edge edge) {
 	// Get current sample timestamp, lowest latency/jitter
 	imuTimestampUs = Time::GetUs();
@@ -31,6 +41,8 @@ void InertialThread::Init() {
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX ACQ Inert Thread Create Failed.");
 	}
+
+	Broker::RegisterTopic(&topicImu);
 }
 
 void InertialThread::Run(ULONG input) {
@@ -44,20 +56,31 @@ void InertialThread::Run(ULONG input) {
 	}
 
 	// Power up IMUs (enable LDOs)
-	internalIMUPwEn.Write(1);
+	onboardIMUPwEn.Write(1);
 	ext1IMUPwEn.Write(1);
 	ext2IMUPwEn.Write(1);
 	tx_thread_sleep(50);
 
-	// Initialize
-	uint8_t onboardIMUID;
-	onboardIMU.ReadID(onboardIMUID);
-	if(onboardIMUID == 0x6C) {
-		onboardIMU.Init();
-		LOG_INFO("LSM6DSO Init OK");
+	// Onboard IMU config
+	LSM6DSO::Config lsmCfg = {
+		.accelScale = LSM6DSO::AccelScale::G16,
+		.gyroScale = LSM6DSO::GyroScale::DPS2000,
+		.accelOdr = LSM6DSO::SampleRate::Hz26,
+		.gyroOdr = LSM6DSO::SampleRate::Hz26
+	};
+
+	if(onboardIMU.Init(lsmCfg) == Status::Ok) {
+		if(EXTIManager::RegisterCallback(onboardIMUInt.GetPinIndex(), OnboardIntCallback, nullptr) == Status::Ok) {
+			// Enable the EXTI interrupt
+			onboardIMUInt.EnableIRQ(GPIO::Interrupt::Rising, 0x0E);
+			LOG_INFO("Onboard IMU (LSM6DSO) Init & EXTI Routed OK");
+		}
+		else {
+			LOG_WARN("Onboard IMU EXTI Routing Failed!");
+		}
 	}
 	else {
-		LOG_WARN("LSM6DSO Init Failed!");
+		LOG_WARN("Onboard IMU (LSM6DSO) Init Failed!");
 	}
 
 	// External/offboard IMU 2 config
@@ -77,7 +100,6 @@ void InertialThread::Run(ULONG input) {
 		else {
 			LOG_WARN("Ext2 IMU EXTI Routing Failed!");
 		}
-		
 	}
 	else {
 		LOG_WARN("Ext2 IMU (ICM45686) Init Failed!");

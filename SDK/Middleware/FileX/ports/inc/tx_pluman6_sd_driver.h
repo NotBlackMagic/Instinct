@@ -16,7 +16,15 @@
 
 #include "fx_api.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // The entry point for FileX to talk to your SD Driver
-VOID fx_stm32_sd_driver(FX_MEDIA *media_ptr);
+void PlumaSDDriver(FX_MEDIA *media_ptr);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // FX_STM32_SD_DRIVER_H

@@ -37,7 +37,7 @@ class HyperRAM {
 
 			// Timing Presets
 			uint32_t sourceClockHz;		///< Peripheral source clock frequency in Hz
-			uint32_t frequencyHz;       ///< Target Bus Frequency
+			uint32_t frequencyHz;		///< Target Bus Frequency
 			uint8_t initialLatency;		///< Clock cycles (latency count)
 			bool fixedLatency;			///< True = Force Fixed, False = Variable (Default)
 			uint8_t rwRecoveryTime;		///< Additional latency after read/write

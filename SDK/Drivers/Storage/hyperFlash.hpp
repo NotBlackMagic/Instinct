@@ -78,8 +78,8 @@ class HyperFlash {
 		Status ReadJEDEC();
 
 		/// @brief Resets the Flash state machine to Read Array mode.
-        /// @note  Must be called if Program/Erase returns an Error status.
-        Status Reset();
+		/// @note  Must be called if Program/Erase returns an Error status.
+		Status Reset();
 
 		/// @brief Reads data from Flash (Memory Mapped or Indirect).
 		/// @param addr	Target address.
@@ -99,7 +99,7 @@ class HyperFlash {
 		Status ChipErase();
 
 		/// @brief Erases a specific sector.
-        /// @param sectorAddr Byte address within the sector to erase.
+		/// @param sectorAddr Byte address within the sector to erase.
 		Status SectorErase(uint32_t sectorAddr);
 
 		/// @brief Reads a device register.
@@ -132,18 +132,18 @@ class HyperFlash {
 
 		// Command Address Patterns (Byte-Addressing shifted: Word Addr << 1)
 		static constexpr uint32_t CMD_ADDR_UNLOCK_1 = (0x555UL << 1);
-        static constexpr uint32_t CMD_ADDR_UNLOCK_2 = (0x2AAUL << 1);
-        
-        static constexpr uint16_t CMD_DATA_UNLOCK_1 = 0xAA;
-        static constexpr uint16_t CMD_DATA_UNLOCK_2 = 0x55;
-        static constexpr uint16_t CMD_DATA_ERASE = 0x80;
-        static constexpr uint16_t CMD_DATA_RESET = 0xF0;
-        static constexpr uint16_t CMD_DATA_AUTOSELECT = 0x90;
-        static constexpr uint16_t CMD_DATA_PROGRAM = 0xA0;
-        static constexpr uint16_t CMD_DATA_CHIP_ERASE = 0x10;
-        static constexpr uint16_t CMD_DATA_SECTOR_ERASE = 0x30;
-        static constexpr uint16_t CMD_DATA_WRITE_BUFFER = 0x25;
-        static constexpr uint16_t CMD_DATA_PROG_BUFFER  = 0x29;
+		static constexpr uint32_t CMD_ADDR_UNLOCK_2 = (0x2AAUL << 1);
+
+		static constexpr uint16_t CMD_DATA_UNLOCK_1 = 0xAA;
+		static constexpr uint16_t CMD_DATA_UNLOCK_2 = 0x55;
+		static constexpr uint16_t CMD_DATA_ERASE = 0x80;
+		static constexpr uint16_t CMD_DATA_RESET = 0xF0;
+		static constexpr uint16_t CMD_DATA_AUTOSELECT = 0x90;
+		static constexpr uint16_t CMD_DATA_PROGRAM = 0xA0;
+		static constexpr uint16_t CMD_DATA_CHIP_ERASE = 0x10;
+		static constexpr uint16_t CMD_DATA_SECTOR_ERASE = 0x30;
+		static constexpr uint16_t CMD_DATA_WRITE_BUFFER = 0x25;
+		static constexpr uint16_t CMD_DATA_PROG_BUFFER  = 0x29;
 		static constexpr uint16_t CMD_DATA_STATUS_REG_READ = 0x70;
 
 		Status WritePage(uint32_t pageAddr, const uint8_t *buf, uint32_t len);

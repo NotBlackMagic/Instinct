@@ -12,13 +12,13 @@ Status BMM350::Init(const Config& config) {
 
 	// Verify ID
 	uint8_t id;
-	this->ReadID(id);
-	if(id != 0x33) {
+	Status status = this->ReadID(id);
+	if(status != Status::Ok || id != this->chipID) {
 		return Status::Error;
 	}
 
 	// Reset device
-	Status status = this->Reset();
+	status = this->Reset();
 	if(status != Status::Ok) {
 		return status;
 	}
@@ -121,13 +121,9 @@ Status BMM350::RunHardwareSelfTest() {
 }
 
 Status BMM350::RequestData() {
+	// The BMM350 outputs 2 dummy bytes before real data on read
 	this->buffer[0] = static_cast<uint8_t>(BMM350::Register::MAG_X_XLSB);
-	if(this->bus.TransferAsync(this->addr, this->buffer, 1, this->buffer, 12) == Status::Ok) {
-		return Status::Ok;
-	}
-	else {
-		return Status::Error;
-	}
+	return this->bus.TransferAsync(this->addr, this->buffer, 1, this->buffer, 14);
 }
 
 Status BMM350::GetData(float* mag, float* temp) {
@@ -135,12 +131,45 @@ Status BMM350::GetData(float* mag, float* temp) {
 		return Status::Error;
 	}
 
-	mag[0] = this->ParseMagAxis(this->buffer[2], this->buffer[1], this->buffer[0], this->magOffset[0]);
-	mag[1] = this->ParseMagAxis(this->buffer[5], this->buffer[4], this->buffer[3], this->magOffset[1]);
-	mag[2] = this->ParseMagAxis(this->buffer[8], this->buffer[7], this->buffer[6], this->magOffset[2]);
+	float scaleX = 0.0070699786995059607892723255f;		// (power / (bxy_sens * ina_xy_gain_trgt * adc_gain * lut_gain))
+	float scaleY = 0.0070699786995059607892723255f;		// (power / (bxy_sens * ina_xy_gain_trgt * adc_gain * lut_gain))
+	float scaleZ = 0.0071749640821298073683044232f;		// (power / (bz_sens * ina_z_gain_trgt * adc_gain * lut_gain))
+	float scaleT = 0.0009812818524089295371357520f;		// 1 / (temp_sens * adc_gain * lut_gain * 1048576)
 
-	*temp = this->ParseTemperature(this->buffer[10], this->buffer[10], this->buffer[9]);
+	float rawX = static_cast<int32_t>(((this->buffer[4] << 24) | (this->buffer[3] << 16) | (this->buffer[2] << 8)) >> 8) * scaleX;
+	float rawY = static_cast<int32_t>(((this->buffer[7] << 24) | (this->buffer[6] << 16) | (this->buffer[5] << 8)) >> 8) * scaleY;
+	float rawZ = static_cast<int32_t>(((this->buffer[10] << 24) | (this->buffer[9] << 16) | (this->buffer[8] << 8)) >> 8) * scaleZ;
+	float rawTemp = static_cast<int32_t>(((this->buffer[13] << 24) | (this->buffer[12] << 16) | (this->buffer[11] << 8)) >> 8) * scaleT;
+	rawTemp = rawTemp - 25.49f;
 
+	// Apply compensations to temperature reading
+	rawTemp = (1 + this->compData.tempSens) * rawTemp + this->compData.tempOffset;
+
+	// Apply compensation to magnetic readings
+	// X-Axis
+	rawX = (1 + this->compData.sensX) * rawX + this->compData.offsetX;
+	rawX = rawX + this->compData.tcoX * (rawTemp - this->compData.t0);
+	rawX = rawX / (1 + this->compData.tcsX * (rawTemp - this->compData.t0));
+	// Y-Axis
+	rawY = (1 + this->compData.sensY) * rawY + this->compData.offsetY;
+	rawY = rawY + this->compData.tcoY * (rawTemp - this->compData.t0);
+	rawY = rawY / (1 + this->compData.tcsY * (rawTemp - this->compData.t0));
+	// Z-Axis
+	rawZ = (1 + this->compData.sensZ) * rawZ + this->compData.offsetZ;
+	rawZ = rawZ + this->compData.tcoZ * (rawTemp - this->compData.t0);
+	rawZ = rawZ / (1 + this->compData.tcsZ * (rawTemp - this->compData.t0));
+
+	// Apply cross-axis compensations
+	rawX = (rawX - this->compData.crossXY * rawY) / (1 - this->compData.crossYX * this->compData.crossXY);
+	rawY = (rawY - this->compData.crossYX * rawX) / (1 - this->compData.crossYX * this->compData.crossXY);
+	rawZ = (rawZ + (rawX * (this->compData.crossYX * this->compData.crossZY - this->compData.crossZX) - rawY * (this->compData.crossZY - this->compData.crossXY * this->compData.crossZX)) / (1 - this->compData.crossYX * this->compData.crossXY));
+
+	// Write to passed pointers
+	mag[0] = rawX;
+	mag[1] = rawY;
+	mag[2] = rawZ;
+	*temp = rawTemp;
+	
 	return Status::Ok;
 }
 
@@ -200,7 +229,7 @@ Status BMM350::ReadOTPData() {
 	this->compData.offsetX = static_cast<float>(SignExtend(offX_lsbMsb, 12));
 	this->compData.offsetY = static_cast<float>(SignExtend(offY_lsbMsb, 12));
 	this->compData.offsetZ = static_cast<float>(SignExtend(offZ_lsbMsb, 12));
-	this->compData.tOffs   = static_cast<float>(SignExtend(tOff, 8)) / 5.0f;
+	this->compData.tempOffset = static_cast<float>(SignExtend(tOff, 8)) / 5.0f;
 
 	uint8_t sensX = (this->otpData[0x10] & 0xFF00) >> 8;
 	uint8_t sensY = (this->otpData[0x11] & 0x00FF);
@@ -210,7 +239,7 @@ Status BMM350::ReadOTPData() {
 	this->compData.sensX = static_cast<float>(SignExtend(sensX, 8)) / 256.0f;
 	this->compData.sensY = static_cast<float>(SignExtend(sensY, 8)) / 256.0f;
 	this->compData.sensZ = static_cast<float>(SignExtend(sensZ, 8)) / 256.0f;
-	this->compData.tSens = static_cast<float>(SignExtend(tSens, 8)) / 512.0f;
+	this->compData.tempSens = static_cast<float>(SignExtend(tSens, 8)) / 512.0f;
 
 	uint8_t tcoX = (this->otpData[0x12] & 0x00FF);
 	uint8_t tcoY = (this->otpData[0x13] & 0x00FF);
@@ -243,16 +272,6 @@ Status BMM350::ReadOTPData() {
 	return Status::Ok;
 }
 
-float BMM350::ParseMagAxis(uint8_t msb, uint8_t lsb, uint8_t xlsb, float offset) {
-	int32_t rawValue = static_cast<int32_t>((msb << 24) | (lsb << 16) | (xlsb << 8)) >> 8;
-	return (static_cast<float>(rawValue) * this->magSens) - offset;
-}
-
-float BMM350::ParseTemperature(uint8_t msb, uint8_t lsb, uint8_t xlsb) {
-	int32_t rawValue = static_cast<int32_t>((msb << 24) | (lsb << 16) | (xlsb << 8)) >> 8;
-	return (static_cast<float>(rawValue) * this->tempSens) - this->tempOffset;
-}
-
 Status BMM350::WriteRegister(Register reg, uint8_t value) {
 	this->buffer[0] = static_cast<uint8_t>(reg);
 	this->buffer[1] = (value) & 0xFF;
@@ -265,14 +284,15 @@ Status BMM350::WriteRegister(Register reg, uint8_t value) {
 }
 
 Status BMM350::ReadRegister(Register reg, uint8_t& value) {
+	// The BMM350 outputs 2 dummy bytes before real data on read
 	this->buffer[0] = static_cast<uint8_t>(reg);
-	Status status = this->bus.TransferAsync(this->addr, this->buffer, 1, this->buffer, 1);
+	Status status = this->bus.TransferAsync(this->addr, this->buffer, 1, this->buffer, 3);
 	if(status != Status::Ok) {
 		return status;
 	}
 
 	status = this->bus.TransferWait(TX_WAIT_FOREVER);
-	value = this->buffer[0];
+	value = this->buffer[2];
 
 	return status;
 }

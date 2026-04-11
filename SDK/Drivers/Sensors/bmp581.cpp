@@ -13,7 +13,7 @@ Status BMP581::Init(const Config& config) {
 	// Verify ID
 	uint8_t id;
 	this->ReadID(id);
-	if(id != 0x50) {
+	if(id != this->chipID) {
 		return Status::Error;
 	}
 
@@ -81,20 +81,13 @@ Status BMP581::GetData(float* pressure, float* temp) {
 		return Status::Error;
 	}
 
-	*pressure = this->ParsePressure(this->buffer[5], this->buffer[4], this->buffer[3]);
-	*temp = this->ParseTemperature(this->buffer[2], this->buffer[1], this->buffer[0]);
+	uint32_t rawPress = static_cast<uint32_t>((this->buffer[5] << 16) | (this->buffer[4] << 8) | this->buffer[3]);
+	*pressure = (static_cast<float>(rawPress) * this->pressureSens) + this->pressureOffset;
+
+	int32_t rawValue = static_cast<int32_t>((this->buffer[2] << 24) | (this->buffer[1] << 16) | (this->buffer[0] << 8)) >> 8;
+	*temp = (static_cast<float>(rawValue) * this->tempSens) + this->tempOffset;
 
 	return Status::Ok;
-}
-
-float BMP581::ParsePressure(uint8_t msb, uint8_t lsb, uint8_t xlsb) {
-	uint32_t rawValue = static_cast<uint32_t>((msb << 16) | (lsb << 8) | xlsb);
-	return (static_cast<float>(rawValue) * this->pressureSens) - this->pressureOffset;
-}
-
-float BMP581::ParseTemperature(uint8_t msb, uint8_t lsb, uint8_t xlsb) {
-	int32_t rawValue = static_cast<int32_t>((msb << 24) | (lsb << 16) | (xlsb << 8)) >> 8;
-	return (static_cast<float>(rawValue) * this->tempSens) - this->tempOffset;
 }
 
 Status BMP581::WriteRegister(Register reg, uint8_t value) {

@@ -1,11 +1,26 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:    SDK/Drivers/Sensors/lis2mdl.hpp
+ * Author:  NotBlackMagic
+ * Brief:   LIS2MDL Magnetometer driver class for STM32N6.
+ */
+
+
 #pragma once
 
 #include <stdint.h>
 
 #include "i2c.hpp"
+#include "status.hpp"
 
 class LIS2MDL {
 	public:
+		// Standard Chip identifications
+		static constexpr uint8_t i2cAddrPrimary = 0x1E;
+		static constexpr uint8_t chipID = 0x40;
+
 		enum class Register : uint8_t {
 			OFFSET_X_REG_L = 0x45,
 			OFFSET_X_REG_H = 0x46,
@@ -32,26 +47,47 @@ class LIS2MDL {
 			TEMP_OUT_H_REG = 0x6F
 		};
 
-		struct Config {
+		enum class OutputDataRate : uint8_t {
+			Hz10 = 0x00,
+			Hz20 = 0x01,
+			Hz50 = 0x02,
+			Hz100 = 0x03
+		};
 
+		struct Config {
+			OutputDataRate odr;
+			bool enableLPF;
 		};
 
 		LIS2MDL(I2C& i2c, uint8_t addr) : bus(i2c), addr(addr) {};
 
-		void Init(const Config& config);
-		void ReadID(uint8_t& id);
+		Status Init(const Config& config);
+		Status Reset();
+		Status ReadID(uint8_t& id);
 
-		bool RequestData();
-		bool GetData(float* field, float* temp);
-		void ReadTemperature(float& value);
+		Status SetOffsets(float offsetX, float offsetY, float offsetZ);
+		Status RunHardwareSelfTest();
+
+		Status RequestData();
+		Status GetData(float* field, float* temp);
+		Status ReadTemperature(float& value);
 
 	private:
 		I2C& bus;
 		const uint8_t addr;
 		Config config;
 
-		uint8_t buffer[10];
+		static constexpr uint16_t transferSize = 32;
+		__attribute__((aligned(32))) uint8_t buffer[transferSize];
 
-		void WriteRegister(Register reg, uint8_t value);
-		void ReadRegister(Register reg, uint8_t& value);
+		//8 LSB/C + 25C zero offset (https://github.com/STMicroelectronics/lis2mdl-pid/blob/master/lis2mdl_reg.c)
+		static constexpr float magSens = 1.5f;
+		static constexpr float tempSens = (1.0f/8);		
+
+		float magOffset[3] = {0.0f, 0.0f, 0.0f};
+		static constexpr float tempOffset = 25.0f;
+
+		Status WriteRegister(Register reg, uint8_t value);
+		Status ReadRegister(Register reg, uint8_t& value);
+		Status ModifyRegister(Register reg, uint8_t mask, uint8_t value);
 };

@@ -14,7 +14,7 @@ extern SD sdCard;
 // We need this fallback to prevent IDMA errors.
 static __attribute__((aligned(32))) uint8_t bootSectorBuffer[512];
 
-void fx_stm32_sd_driver(FX_MEDIA *media_ptr) {
+extern "C" void PlumaSDDriver(FX_MEDIA *media_ptr) {
 	// Process the driver request
 	switch(media_ptr->fx_media_driver_request) {
 		case FX_DRIVER_INIT: {

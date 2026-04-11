@@ -4,8 +4,9 @@
 
 #include "exti.hpp"
 #include "gpio.hpp"
+
 #include "logger.hpp"
-#include "topics.hpp"
+#include "pubSub.hpp"
 
 #include "tx_api.h"
 
@@ -27,5 +28,6 @@ class InertialThread {
 
 		static void Run(ULONG input);
 
+		static void OnboardIntCallback(void* context, EXTIManager::Edge edge);
 		static void Ext2IntCallback(void* context, EXTIManager::Edge edge);
 };

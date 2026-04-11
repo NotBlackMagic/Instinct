@@ -603,8 +603,8 @@ void USB::HandleEpInInterrupt() {
 					this->inEpState[epNum].count += 0;
 				}
 
-				if(this->config.eventCallback != nullptr) {
-					this->config.eventCallback(this->config.callbackContext, Event::TransferComplete, 0x80 | epNum, this->inEpState[epNum].count);
+				if(this->config.EventCallback != nullptr) {
+					this->config.EventCallback(this->config.callbackContext, Event::TransferComplete, 0x80 | epNum, this->inEpState[epNum].count);
 				}
 			}
 
@@ -640,8 +640,8 @@ void USB::HandleEpInInterrupt() {
 					// Flush current TX FIFO
 					this->FlushTxFifo(epNum);
 					
-					if(this->config.eventCallback != nullptr) {
-						this->config.eventCallback(this->config.callbackContext, Event::TransferComplete, 0x80 | epNum, 0);
+					if(this->config.EventCallback != nullptr) {
+						this->config.EventCallback(this->config.callbackContext, Event::TransferComplete, 0x80 | epNum, 0);
 					}
 				}
 			}
@@ -684,8 +684,8 @@ void USB::HandleEpOutInterrupt() {
 					this->StartEp0Setup();
 				}
 
-				if(this->config.eventCallback != nullptr) {
-					this->config.eventCallback(this->config.callbackContext, Event::TransferComplete, epNum, actualCount);
+				if(this->config.EventCallback != nullptr) {
+					this->config.EventCallback(this->config.callbackContext, Event::TransferComplete, epNum, actualCount);
 				}
 			}
 
@@ -712,8 +712,8 @@ void USB::HandleEpOutInterrupt() {
 					this->setupPacket.length = ((setupWords[1] >> 16) & 0xFFFF);
 				}
 
-				if(this->config.eventCallback != nullptr) {
-					this->config.eventCallback(this->config.callbackContext, Event::Setup, epNum, 8);
+				if(this->config.EventCallback != nullptr) {
+					this->config.EventCallback(this->config.callbackContext, Event::Setup, epNum, 8);
 				}
 			}
 
@@ -795,8 +795,8 @@ void USB::HandleRxFifoInterrupt() {
 				this->outEpState[epNum].buffer = destPtr;
 			}
 
-			if(this->config.eventCallback != nullptr) {
-				this->config.eventCallback(this->config.callbackContext, Event::TransferComplete, epNum, byteCnt);
+			if(this->config.EventCallback != nullptr) {
+				this->config.EventCallback(this->config.callbackContext, Event::TransferComplete, epNum, byteCnt);
 			}
 		}
 	}
@@ -816,8 +816,8 @@ void USB::HandleRxFifoInterrupt() {
 		setupPacket.index = (setupPktWords[1] & 0xFFFF);
 		setupPacket.length = ((setupPktWords[1] >> 16) & 0xFFFF);
 
-		// if(this->config.eventCallback != nullptr) {
-		// 	this->config.eventCallback(this->config.callbackContext, Event::Setup, epNum, 8);
+		// if(this->config.EventCallback != nullptr) {
+		// 	this->config.EventCallback(this->config.callbackContext, Event::Setup, epNum, 8);
 		// }
 	}
 	else {
@@ -1097,8 +1097,8 @@ void USB::InterruptHandler() {
 
 		this->StartEp0Setup();
 
-		if(this->config.eventCallback != nullptr) {
-			this->config.eventCallback(this->config.callbackContext, Event::Reset, 0, 0);
+		if(this->config.EventCallback != nullptr) {
+			this->config.EventCallback(this->config.callbackContext, Event::Reset, 0, 0);
 		}
 	}
 
@@ -1134,15 +1134,15 @@ void USB::InterruptHandler() {
 	if(((this->irqStatus & USB_OTG_GINTSTS_WKUINT) == USB_OTG_GINTSTS_WKUINT)) {
 		// Clear flags
 		WRITE_REG(this->instance->GINTSTS, USB_OTG_GINTSTS_WKUINT);
-		if(this->config.eventCallback != nullptr) {
-			this->config.eventCallback(this->config.callbackContext, Event::Resume, 0, 0);
+		if(this->config.EventCallback != nullptr) {
+			this->config.EventCallback(this->config.callbackContext, Event::Resume, 0, 0);
 		}
 	}
 	if(((this->irqStatus & USB_OTG_GINTSTS_USBSUSP) == USB_OTG_GINTSTS_USBSUSP)) {
 		// Clear flags
 		WRITE_REG(this->instance->GINTSTS, USB_OTG_GINTSTS_USBSUSP);
-		if(this->config.eventCallback != nullptr) {
-			this->config.eventCallback(this->config.callbackContext, Event::Suspend, 0, 0);
+		if(this->config.EventCallback != nullptr) {
+			this->config.EventCallback(this->config.callbackContext, Event::Suspend, 0, 0);
 		}
 	}
 }

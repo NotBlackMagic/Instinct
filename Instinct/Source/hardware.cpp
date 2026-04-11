@@ -17,8 +17,8 @@ GPIO csiIO3(GPIOG, LL_GPIO_PIN_9);
 GPIO csiIO4(GPIOG, LL_GPIO_PIN_11);
 GPIO csiIO5(GPIOG, LL_GPIO_PIN_12);
 
-GPIO internalIMUPwEn(GPIOD, LL_GPIO_PIN_13);
-GPIO internalIMUInt(GPIOG, LL_GPIO_PIN_15);
+GPIO onboardIMUPwEn(GPIOD, LL_GPIO_PIN_13);
+GPIO onboardIMUInt(GPIOG, LL_GPIO_PIN_15);
 GPIO ext1IMUPwEn(GPIOD, LL_GPIO_PIN_10);
 GPIO ext2IMUPwEn(GPIOC, LL_GPIO_PIN_13);
 GPIO extIMUHeater(GPIOE, LL_GPIO_PIN_3);
@@ -336,11 +336,11 @@ ICM45686 ext2IMU(spi2);
 BMM350 extMag(i2c4, 0x14);
 BMP581 extBaro(i2c4, 0x47);
 
-// OV7670 ov7670(i3c1);
+OV7670 ov7670(i3c1, 0x21);
 
-// CameraDCMI cameraSD(dcmi, ov7670, dcmiDMAChannel);
+CameraDCMI cameraSD(dcmi, ov7670, dcmiDMAChannel);
 
-// USBClassUVC usbUVC;
+USBClassUVC usbUVC;
 
 void HardwareInit() {
 	// Initialize Physical Layer
@@ -389,7 +389,7 @@ void HardwareInit() {
 	camPwdn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
 	csiPwdn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
 	csiRst.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
-	internalIMUPwEn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::NoPull});
+	onboardIMUPwEn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::NoPull});
 	ext1IMUPwEn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::NoPull});
 	ext2IMUPwEn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::NoPull});
 	extIMUHeater.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::NoPull});
@@ -397,7 +397,7 @@ void HardwareInit() {
 	// Inputs
 	userButton.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullUp});
 	sdDet.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullUp});
-	internalIMUInt.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
+	onboardIMUInt.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
 	ext1IMUInt.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
 	ext2IMUInt.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
 
@@ -409,7 +409,7 @@ void HardwareInit() {
 	camPwdn.Write(0);
 	csiPwdn.Write(1);
 	csiRst.Write(0);
-	internalIMUPwEn.Write(0);	// Power down/disable LDO
+	onboardIMUPwEn.Write(0);	// Power down/disable LDO
 	ext1IMUPwEn.Write(0);		// Power down/disable LDO
 	ext2IMUPwEn.Write(0);		// Power down/disable LDO
 	LOG_INFO("GPIO Init OK.");

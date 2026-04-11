@@ -63,7 +63,7 @@ class USB {
 			bool useDMA;
 
 			// Callbacks
-			void (*eventCallback)(void* ctx, Event evt, uint8_t epAddr, uint32_t len);
+			void (*EventCallback)(void* ctx, Event evt, uint8_t epAddr, uint32_t len);
 			void* callbackContext;
 		};
 

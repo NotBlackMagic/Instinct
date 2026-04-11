@@ -1,3 +1,12 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:    SDK/Drivers/Sensors/lsm6dso.hpp
+ * Author:  NotBlackMagic
+ * Brief:   LSM6DSO 6-Axis IMU driver class for STM32N6.
+ */
+
 #pragma once
 
 #include <stdint.h>
@@ -9,6 +18,11 @@
 
 class LSM6DSO {
 	public:
+		// Standard Chip identifications
+		static constexpr uint8_t i2cAddrPrimary = 0x6A;
+		static constexpr uint8_t i2cAddrSecondary = 0x6B;
+		static constexpr uint8_t chipID = 0xE9;
+
 		enum class Register : uint8_t {
 			FUNC_CFG_ACCESS = 0x01,
 			PIN_CTRL = 0x02,
@@ -35,10 +49,10 @@ class LSM6DSO {
 			WAKE_UP_SRC = 0x1B,
 			TAP_SRC = 0x1C,
 			D6D_SRC = 0x1D,
-			STATUS_REG =  0x1E,
+			STATUS_REG = 0x1E,
 			STATUS_SPIAUX = 0x1E,
-			OUT_TEMP_L =  0x20,
-			OUT_TEMP_H =  0x21,
+			OUT_TEMP_L = 0x20,
+			OUT_TEMP_H = 0x21,
 			OUTX_L_G = 0x22,
 			OUTX_H_G = 0x23,
 			OUTY_L_G = 0x24,
@@ -209,31 +223,31 @@ class LSM6DSO {
 		};
 
 		enum class SampleRate : uint8_t {
-			SampleRate_PwDown = 0x00,
-			SampleRate_12Hz5 = 0x01,
-			SampleRate_26Hz = 0x02,
-			SampleRate_52Hz = 0x03,
-			SampleRate_104Hz = 0x04,
-			SampleRate_208Hz = 0x05,
-			SampleRate_416Hz = 0x06,
-			SampleRate_833Hz = 0x07,
-			SampleRate_1666Hz = 0x08,
-			SampleRate_3333Hz = 0x09,
-			SampleRate_6666Hz = 0x0A
+			Off = 0x00,
+			Hz12_5 = 0x01,
+			Hz26 = 0x02,
+			Hz52 = 0x03,
+			Hz104 = 0x04,
+			Hz208 = 0x05,
+			Hz416 = 0x06,
+			Hz833 = 0x07,
+			Hz1666 = 0x08,
+			Hz3333 = 0x09,
+			Hz6666 = 0x0A
 		};
 
-		enum class AccelFullScale : uint8_t {
-			Scale_2g = 0x00,		//0.061 mg/LSB
-			Scale_16g = 0x01,		//0.488 mg/LSB
-			Scale_4g = 0x02,		//0.122 mg/LSB
-			Scale_8g = 0x03			//0.244 mg/LSB
+		enum class AccelScale : uint8_t {
+			G2 = 0x00,		//0.061 mg/LSB
+			G16 = 0x01,		//0.488 mg/LSB
+			G4 = 0x02,		//0.122 mg/LSB
+			G8 = 0x03		//0.244 mg/LSB
 		};
 		
-		enum class GyroFullScale : uint8_t {
-			Scale_250dps = 0x00,	//8.75 mdps/LSB
-			Scale_500dps = 0x01,	//17.50 mdps/LSB
-			Scale_1000dps = 0x02,	//35 mdps/LSB
-			Scale_2000dps = 0x03	//70 mdps/LSB
+		enum class GyroScale : uint8_t {
+			DPS250 = 0x00,	//8.75 mdps/LSB
+			DPS500 = 0x01,	//17.50 mdps/LSB
+			DPS1000 = 0x02,	//35 mdps/LSB
+			DPS2000 = 0x03	//70 mdps/LSB
 		};
 
 		enum class AccelLPF : uint8_t {
@@ -268,25 +282,58 @@ class LSM6DSO {
 			HPF_1Hz04 = 0x04
 		};
 
-		const float accelSens[4] = {0.061f, 0.488f, 0.122f, 0.244f};
-		const float gyroSens[4] = {8.75f, 17.5f, 35.f, 70.f};
-		const float tempSens = (1.0f/256);
-		const float tempOffset = 25.0f;
+		struct Config {
+			AccelScale accelScale;
+			GyroScale gyroScale;
+			SampleRate accelOdr;
+			SampleRate gyroOdr;
+		};
 
 		LSM6DSO(SPI& spi) : bus(spi) {};
 
-		void Init();
-		void ReadID(uint8_t& id);
-		void ReadStatus(uint8_t& status);
+		Status Init(const Config& config);
+		Status Reset();
+		Status ReadID(uint8_t& id);
+		Status ReadStatus(uint8_t& status);
 
-		bool RequestData();
-		bool GetData(float* accel, float* gyro, float*  temp);
+		Status SetScales(AccelScale accelScale, GyroScale gyroScale);
+		Status SetAccelOffsets(float offsetX, float offsetY, float offsetZ);
+		Status SetGyroOffsets(float offsetX, float offsetY, float offsetZ);
+		Status RunHardwareSelfTest();
+
+		Status RequestData();
+		Status GetData(float* accel, float* gyro, float* temp);
 
 	private:
 		SPI& bus;
+		Config config;
 
-		uint8_t buffer[16];
+		static constexpr uint16_t transferSize = 32;
+		__attribute__((aligned(32))) uint8_t txBuffer[transferSize];
+		__attribute__((aligned(32))) uint8_t rxBuffer[transferSize];
 
-		void WriteRegister(Register reg, uint8_t value);
-		void ReadRegister(Register reg, uint8_t& value);
+		static constexpr float accelSens[] = {
+			0.061f,
+			0.488f,
+			0.122f,
+			0.244f
+		};
+
+		static constexpr float gyroSens[] = {
+			8.75f,
+			17.5f,
+			35.f,
+			70.f
+		};
+
+		static constexpr float tempSens = (1.0f/256);
+
+		float accelOffset[3];
+		float gyroOffset[3];
+		static constexpr float tempOffset = 25.0f;
+
+		Status WriteRegister(Register reg, uint8_t value);
+		Status ReadRegister(Register reg, uint8_t& value);
+		Status ModifyRegister(Register reg, uint8_t mask, uint8_t value);
+		float ParseAxis(uint8_t msb, uint8_t lsb, float scaleFactor, float offset);
 };

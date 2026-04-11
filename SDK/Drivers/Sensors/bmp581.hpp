@@ -16,6 +16,11 @@
 
 class BMP581 {
 	public:
+		// Standard Chip identifications
+		static constexpr uint8_t i2cAddrPrimary = 0x46;
+		static constexpr uint8_t i2cAddrSecondary = 0x47;
+		static constexpr uint8_t chipID = 0x50;
+
 		enum class Register : uint8_t {
 			CHIP_ID = 0x01,
 			REV_ID = 0x02,
@@ -119,10 +124,6 @@ class BMP581 {
 			IIRFilter iirFilter;
 		};
 
-		static constexpr float tempSens = (1.0f/65536);		
-		static constexpr float pressureSens = (1.0f/64);
-		static constexpr float tempOffset = 0.0f;
-
 		BMP581(I2C& i2c, uint8_t addr) : bus(i2c), addr(addr) {};
 
 		Status Init(const Config& config);
@@ -142,13 +143,13 @@ class BMP581 {
 		static constexpr uint16_t transferSize = 32;
 		__attribute__((aligned(32))) uint8_t buffer[transferSize];
 
-		float pressureOffset = 0.0f;
+		static constexpr float pressureSens = (1.0f/64);
+		static constexpr float tempSens = (1.0f/65536);		
 		
+		float pressureOffset = 0.0f;
+		static constexpr float tempOffset = 0.0f;
 
 		Status WriteRegister(Register reg, uint8_t value);
 		Status ReadRegister(Register reg, uint8_t& value);
 		Status ModifyRegister(Register reg, uint8_t mask, uint8_t value);
-
-		float ParsePressure(uint8_t msb, uint8_t lsb, uint8_t xlsb);
-        float ParseTemperature(uint8_t msb, uint8_t lsb, uint8_t xlsb);
 };

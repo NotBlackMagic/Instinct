@@ -128,6 +128,7 @@ Status DMAChannel::Transfer(uint32_t srcAddr, uint32_t dstAddr, uint32_t len) {
 
 	// Ensure channel is disabled
 	LL_DMA_DisableChannel(this->instance, this->channelIndex);
+	while(LL_DMA_IsEnabledChannel(this->instance, this->channelIndex) == 0x01);
 
 	// Set address and lengths
 	LL_DMA_SetSrcAddress(this->instance, this->channelIndex, (uint32_t)this->currentSrc);
@@ -178,7 +179,10 @@ Status DMAChannel::TransferStop() {
 
 	// Disable channel
 	LL_DMA_DisableChannel(this->instance, this->channelIndex);
-	WRITE_REG(((DMA_Channel_TypeDef *)((uint32_t)this->instance + LL_DMA_CH_OFFSET_TAB[this->channelIndex]))->CTR1, 0x7F00);	// Clear all flags
+	while(LL_DMA_IsEnabledChannel(this->instance, this->channelIndex) == 0x01);
+
+	// Clear all flags
+	WRITE_REG(((DMA_Channel_TypeDef *)((uint32_t)this->instance + LL_DMA_CH_OFFSET_TAB[this->channelIndex]))->CFCR, 0x7F00);
 
 	return Status::Ok;
 }

@@ -24,14 +24,14 @@
 #include "lis2mdl.hpp"
 #include "lsm6dso.hpp"
 
-//#include "ov7670.hpp"
-// #include "cameraDCMI.hpp"
+#include "ov7670.hpp"
+#include "cameraDCMI.hpp"
 
 #include "logger.hpp"
 
 #include "fx_api.h"
 
-//#include "usbClassUVC.hpp"
+#include "usbClassUVC.hpp"
 
 extern GPIO ledRed;
 extern GPIO ledBlue;
@@ -49,8 +49,8 @@ extern GPIO csiIO3;
 extern GPIO csiIO4;
 extern GPIO csiIO5;
 
-extern GPIO internalIMUPwEn;
-extern GPIO internalIMUInt;
+extern GPIO onboardIMUPwEn;
+extern GPIO onboardIMUInt;
 extern GPIO ext1IMUPwEn;
 extern GPIO ext2IMUPwEn;
 extern GPIO extIMUHeater;
@@ -107,13 +107,13 @@ extern ICM45686 ext2IMU;
 extern BMM350 extMag;
 extern BMP581 extBaro;
 
-//extern OV7670 ov7670;
+extern OV7670 ov7670;
 
 class CameraDCMI;
 extern CameraDCMI cameraSD;
 
 extern FX_MEDIA sdMedia;
 
-//extern USBClassUVC usbUVC;
+extern USBClassUVC usbUVC;
 
 void HardwareInit();

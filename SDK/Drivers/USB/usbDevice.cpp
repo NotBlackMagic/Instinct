@@ -23,7 +23,7 @@ Status USBDevice::Init(const Config& config) {
 	USB::Config hwConfig;
 	hwConfig.speed = USB::BusSpeed::High;
 	hwConfig.useDMA = true;
-	hwConfig.eventCallback = &USBDevice::EventCallbackWrapper;
+	hwConfig.EventCallback = &USBDevice::EventCallbackWrapper;
 	hwConfig.callbackContext = this;
 
 	Status status = this->bus.Init(hwConfig);
@@ -66,7 +66,7 @@ void USBDevice::EventHandler(USB::Event event, uint8_t epAddr, uint32_t len) {
 		case USB::Event::Reset:
 			this->state = State::Default;
 			this->deviceAddress = 0;
-			for (uint8_t i = 0; i < this->classCount; i++) {
+			for(uint8_t i = 0; i < this->classCount; i++) {
 				this->classes[i]->DeInit(this->bus);
 			}
 			break;
@@ -131,7 +131,7 @@ void USBDevice::HandleSetup(uint8_t epNum) {
 		if(recipient == 0x01) {
 			// Interface Recipient
 			uint8_t targetInterface = setup.index & 0xFF;
-			for (uint8_t i = 0; i < this->classCount; i++) {
+			for(uint8_t i = 0; i < this->classCount; i++) {
 				if(this->classes[i]->HasInterface(targetInterface) == true) {
 					if(this->classes[i]->OnSetup(this->bus, setup) != Status::Ok) {
 						this->ControlStall();
@@ -199,8 +199,8 @@ void USBDevice::HandleTransferComplete(uint8_t epAddr, uint32_t len) {
 	}
 	else {
 		// Standard class endpoint
-		for (uint8_t i = 0; i < this->classCount; i++) {
-			if (this->classes[i]->HasEndpoint(epAddr) == true) {
+		for(uint8_t i = 0; i < this->classCount; i++) {
+			if(this->classes[i]->HasEndpoint(epAddr) == true) {
 				if(isCmdIn == true) {
 					this->classes[i]->OnDataIn(this->bus, epNum);
 				} else {
@@ -273,9 +273,9 @@ void USBDevice::StandardInterfaceRequest(const USB::SetupPacket& setup) {
 		}
 		case USBDevice::Code::SetInterface:
 			// Acknowledge the alternate setting change. 
-			for (uint8_t i = 0; i < this->classCount; i++) {
+			for(uint8_t i = 0; i < this->classCount; i++) {
 				if(this->classes[i]->HasInterface(targetInterface) == true) {
-					if (this->classes[i]->OnSetup(this->bus, setup) == Status::Ok) {
+					if(this->classes[i]->OnSetup(this->bus, setup) == Status::Ok) {
 						return; // Class successfully handled it and sent the ACK
 					}
 				}
@@ -303,28 +303,30 @@ void USBDevice::StandardEndpointRequest(const USB::SetupPacket& setup) {
 		}
 		case USBDevice::Code::ClearFeature:
 			// Clear stalled endpoint
-			if (setup.value == 0x00) {
+			if(setup.value == 0x00) {
 				this->bus.ClearStall(epAddr);
 				
 				// Route the clear event to the specific class that owns this endpoint
-				for (uint8_t i = 0; i < this->classCount; i++) {
-					if (this->classes[i]->HasEndpoint(epAddr) == true) {
+				for(uint8_t i = 0; i < this->classCount; i++) {
+					if(this->classes[i]->HasEndpoint(epAddr) == true) {
 						this->classes[i]->OnEndpointClear(this->bus, epAddr);
 						break;
 					}
 				}
 
 				this->ControlACK();
-			} else {
+			} 
+			else {
 				this->ControlStall();
 			}
 			break;
 		case USBDevice::Code::SetFeature:
 			// The only standard endpoint feature is ENDPOINT_HALT (0x00)
-			if (setup.value == 0x00) {
+			if(setup.value == 0x00) {
 				this->bus.StallEndpoint(epAddr);
 				this->ControlACK();
-			} else {
+			} 
+			else {
 				this->ControlStall();
 			}
 			break;
@@ -372,14 +374,14 @@ void USBDevice::GetDescriptor(const USB::SetupPacket& setup) {
 			uint16_t totalLen = 9;	// Start with header length
 
 			// Calculate total length of all class descriptors
-			for (uint8_t i = 0; i < this->classCount; i++) {
+			for(uint8_t i = 0; i < this->classCount; i++) {
 				uint16_t classDescLen = 0;
 				this->classes[i]->GetConfigDescriptor(this->bus.GetBusSpeed(), &classDescLen);
 				totalLen += classDescLen;
 			}
 
 			// Limit total length to our buffer size to prevent overflow
-			if (totalLen > sizeof(this->ep0TxBuffer)) {
+			if(totalLen > sizeof(this->ep0TxBuffer)) {
 				totalLen = sizeof(this->ep0TxBuffer);
 			}
 
@@ -396,18 +398,18 @@ void USBDevice::GetDescriptor(const USB::SetupPacket& setup) {
 			};
 
 			// Assemble the full descriptor in the TX buffer
-			for (uint8_t i = 0; i < 9; i++) {
+			for(uint8_t i = 0; i < 9; i++) {
 				this->ep0TxBuffer[i] = configHdr[i];
 			}
 
 			// Append all class descriptors
 			uint16_t currentOffset = 9;
-			for (uint8_t i = 0; i < this->classCount; i++) {
+			for(uint8_t i = 0; i < this->classCount; i++) {
 				uint16_t classDescLen = 0;
 				const uint8_t* classDesc = this->classes[i]->GetConfigDescriptor(this->bus.GetBusSpeed(), &classDescLen);
 				
-				for (uint16_t j = 0; j < classDescLen; j++) {
-					if (currentOffset < sizeof(this->ep0TxBuffer)) {
+				for(uint16_t j = 0; j < classDescLen; j++) {
+					if(currentOffset < sizeof(this->ep0TxBuffer)) {
 						this->ep0TxBuffer[currentOffset++] = classDesc[j];
 					}
 				}
@@ -468,7 +470,7 @@ void USBDevice::SetConfiguration(const USB::SetupPacket& setup) {
 		this->state = State::Addressed;
 
 		// De-Initialize ALL class driver
-		for (uint8_t i = 0; i < this->classCount; i++) {
+		for(uint8_t i = 0; i < this->classCount; i++) {
 			this->classes[i]->DeInit(this->bus);
 		}
 
@@ -480,8 +482,8 @@ void USBDevice::SetConfiguration(const USB::SetupPacket& setup) {
 
 		// Initialize ALL class driver
 		bool allInitSuccess = true;
-		for (uint8_t i = 0; i < this->classCount; i++) {
-			if (this->classes[i]->Init(this->bus) != Status::Ok) {
+		for(uint8_t i = 0; i < this->classCount; i++) {
+			if(this->classes[i]->Init(this->bus) != Status::Ok) {
 				allInitSuccess = false;
 				break;
 			}
@@ -519,8 +521,8 @@ void USBDevice::SendStringDescriptor(uint8_t index, uint16_t reqLength) {
 			break;
 		default:
 			// Allow classes to handle custom strings (like 0xEE for MS OS 2.0)
-			for (uint8_t i = 0; i < this->classCount; i++) {
-				if (this->classes[i]->HandleStringDescriptor(this->bus, index, reqLength)) {
+			for(uint8_t i = 0; i < this->classCount; i++) {
+				if(this->classes[i]->HandleStringDescriptor(this->bus, index, reqLength)) {
 					return; // Class handled it
 				}
 			}
@@ -565,14 +567,14 @@ void USBDevice::ControlTransmit(const uint8_t* data, uint16_t len, uint16_t reqL
 
 	// Copy data to local Endpoint 0 buffer
 	if(data != this->ep0TxBuffer) {
-		for (uint16_t i = 0; i < transferLength; i++) {
+		for(uint16_t i = 0; i < transferLength; i++) {
 			this->ep0TxBuffer[i] = data[i];
 		}
 	}
 
 	// Software chunking to handle EP0 packet size limit (64 bytes)
 	this->ep0TxData = this->ep0TxBuffer;
-    this->ep0TxRemaining = transferLength;
+	this->ep0TxRemaining = transferLength;
 
 	// Grab the first 64 bytes (or less)
 	uint16_t chunk = (this->ep0TxRemaining > 64) ? 64 : this->ep0TxRemaining;

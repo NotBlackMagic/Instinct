@@ -105,7 +105,7 @@ Status USBClassCDC::AssignResource(uint8_t& nextInterfaceId, uint8_t& nextInEp, 
 	this->commInterface = nextInterfaceId++;
 	this->dataInterface = nextInterfaceId++;
 
-	this->intInEp  = 0x80 | nextInEp++;
+	this->intInEp = 0x80 | nextInEp++;
 	this->bulkInEp = 0x80 | nextInEp++;
 	this->bulkOutEp = nextOutEp++;
 
@@ -158,7 +158,7 @@ Status USBClassCDC::Init(USB& usb) {
 
 Status USBClassCDC::DeInit(USB& usb) {
 	(void)usb;
-	if (this->bus != nullptr) {
+	if(this->bus != nullptr) {
 		// Close endpoints
 		this->bus->CloseEndpoint(this->intInEp);
 		this->bus->CloseEndpoint(this->bulkInEp);
@@ -229,7 +229,7 @@ Status USBClassCDC::OnSetup(USB& usb, const USB::SetupPacket& setup) {
 
 Status USBClassCDC::OnDataIn(USB& usb, uint8_t epNum) {
 	(void)usb;
-	if (epNum == (bulkInEp & 0x7F)) {
+	if(epNum == (bulkInEp & 0x7F)) {
 		// Bulk IN transfer complete. The hardware FIFO is ready for the next Transmit().
 		this->txBusy = false;
 		
@@ -242,7 +242,7 @@ Status USBClassCDC::OnDataIn(USB& usb, uint8_t epNum) {
 Status USBClassCDC::OnDataOut(USB& usb, uint8_t epNum, uint32_t len) {
 	(void)usb;
 	if(epNum == 0x00) {
-		if (len == 7) {
+		if(len == 7) {
 			// Convert 7-byte little-endian array back to struct
 			this->UnpackLineCoding();
 
@@ -285,7 +285,7 @@ Status USBClassCDC::Write(const uint8_t* buf, uint32_t len) {
 	// Push application data into the TX ring buffer
 	for(uint32_t i = 0; i < bytesToWrite; i++) {
 		this->txBuffer[this->txBufHead] = buf[i];
-        this->txBufHead = (this->txBufHead + 1) % this->txBufferSize;
+		this->txBufHead = (this->txBufHead + 1) % this->txBufferSize;
 	}
 
 	// Kickstart the transmission pipeline

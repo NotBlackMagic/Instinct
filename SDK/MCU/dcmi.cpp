@@ -49,13 +49,13 @@ Status Dcmi::Init(const Config &config) {
 	NVIC_SetPriority(this->irqCall, this->irqPriority);
 	NVIC_EnableIRQ(this->irqCall);
 	// MODIFY_REG(this->instance->IER, DCMI_IER_FRAME_IE, DCMI_IER_FRAME_IE);	// Capture complete interrupt enable
-	// MODIFY_REG(this->instance->IER, DCMI_IER_OVR_IE, DCMI_IER_OVR_IE);		// Overrun interrupt enable
-	// MODIFY_REG(this->instance->IER, DCMI_IER_ERR_IE, DCMI_IER_ERR_IE);		// Synchronization error interrupt enable
+	MODIFY_REG(this->instance->IER, DCMI_IER_OVR_IE, DCMI_IER_OVR_IE);		// Overrun interrupt enable
+	MODIFY_REG(this->instance->IER, DCMI_IER_ERR_IE, DCMI_IER_ERR_IE);		// Synchronization error interrupt enable
 	// MODIFY_REG(this->instance->IER, DCMI_IER_VSYNC_IE, DCMI_IER_VSYNC_IE);	// VSYNC interrupt enable
 	// MODIFY_REG(this->instance->IER, DCMI_IER_LINE_IE, DCMI_IER_LINE_IE);	// Line interrupt enable
 
 	// Enable DCMI
-	MODIFY_REG(this->instance->CR, DCMI_CR_ENABLE_Msk, 0x00);		// Enable DCMI Interface
+	MODIFY_REG(this->instance->CR, DCMI_CR_ENABLE_Msk, 0x00);		// Disable DCMI Interface
 
 	return Status::Ok;
 }
@@ -70,6 +70,9 @@ Status Dcmi::Start(CaptureMode mode) {
 		// Continuous grab mode
 		MODIFY_REG(this->instance->CR, DCMI_CR_CM, 0x00);
 	}
+
+	// Clear all flags
+	WRITE_REG(this->instance->ICR, (DCMI_ICR_OVR_ISC | DCMI_ICR_ERR_ISC | DCMI_ICR_FRAME_ISC | DCMI_ICR_VSYNC_ISC | DCMI_ICR_LINE_ISC));
 
 	// Re-enable the DCMI peripheral (0 to 1 transition resets the FIFO)
 	MODIFY_REG(this->instance->CR, DCMI_CR_ENABLE_Msk, DCMI_CR_ENABLE);
@@ -90,12 +93,17 @@ void Dcmi::Stop() {
 // ---------------------------------------------------------
 // IRQ Handler
 // ---------------------------------------------------------
-
 void Dcmi::InterruptHandler() {
 	// Handle Overrun
 	if(READ_BIT(this->instance->MISR, DCMI_MIS_OVR_MIS) == DCMI_IER_OVR_IE) {
 		// Clear Interrupt
 		MODIFY_REG(this->instance->ICR, DCMI_ICR_OVR_ISC_Msk, DCMI_ICR_OVR_ISC);
+	}
+
+	// Handle Synchronization Error
+	if(READ_BIT(this->instance->MISR, DCMI_MIS_ERR_MIS) == DCMI_IER_ERR_IE) {
+		// Clear Interrupt
+		MODIFY_REG(this->instance->ICR, DCMI_ICR_ERR_ISC_Msk, DCMI_ICR_ERR_ISC);
 	}
 
 	//Handle Capture Complete

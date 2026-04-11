@@ -16,6 +16,12 @@
 
 class BMM350 {
 	public:
+		// Standard Chip identifications
+		static constexpr uint8_t i2cAddrPrimary = 0x14;
+		static constexpr uint8_t i2cAddrSecondary = 0x15;
+		static constexpr uint8_t chipID = 0x33;
+
+		/// @brief Device register map.
 		enum class Register : uint8_t {
 			CHIP_ID = 0x00,
 			ERR_REG = 0x02,
@@ -54,6 +60,7 @@ class BMM350 {
 			CMD = 0x7E
 		};
 
+		/// @brief BMM350 compensation data (from OTP) structure.
 		struct CompensationData {
 			// Offsets
 			float tempOffset;
@@ -65,14 +72,16 @@ class BMM350 {
 			float sensX;
 			float sensY;
 			float sensZ;
-			//TCO
+			// TCO
 			float tcoX;
 			float tcoY;
 			float tcoZ;
-			//TCS
+			// TCS
 			float tcsX;
 			float tcsY;
 			float tcsZ;
+			// T0 Reading
+			float t0;
 			// Crossaxis
 			float crossXY;
 			float crossYX;
@@ -80,6 +89,7 @@ class BMM350 {
 			float crossZY; 
 		};
 
+		/// @brief Supported output data rates (ODR).
 		enum class OutputDataRate : uint8_t {
 			Hz400 = 0x02,
 			Hz200 = 0x03,
@@ -92,6 +102,7 @@ class BMM350 {
 			Hz1_5625 = 0x0A
 		};
 
+		/// @brief Supported data filtering/averaging modes.
 		enum class Averaging : uint8_t {
 			NoAvg = 0x00,
 			Avg2 = 0x01,
@@ -99,21 +110,51 @@ class BMM350 {
 			Avg8 = 0x03
 		};
 
+		/// @brief BMM350 sensor configuration structure.
 		struct Config {
 			OutputDataRate odr;
 			Averaging avg;
 		};
 
+		/// @brief Constructor.
+		/// @param i2c	Reference to the low-level bus driver.
+		/// @param addr	Bus address.
 		BMM350(I2C& i2c, uint8_t addr) : bus(i2c), addr(addr) {};
 
+		/// @brief Initializes the BMM350 magnetometer.
+		/// @param config BMM350 magnetometer configuration.
+		/// @return Status::Ok if initialization succeeded, or Status::Error if the config was invalid or failed.
 		Status Init(const Config& config);
+
+		/// @brief Resets the sensor device, using software reset.
+		/// @return Status::Ok if reset succeeded cleanly.
 		Status Reset();
+
+		/// @brief Reads the Manufacturer and Device IDs.
+		/// @param id Device ID, or manufacturer ID.
+		/// @return Status::Ok if read succeeded, or Status::Error if failed.
 		Status ReadID(uint8_t& id);
 
+		/// @brief Sets the magnetic field offset value, to be added to the read value.
+		/// @param offsetX Offset for x-axis.
+		/// @param offsetY Offset for y-axis.
+		/// @param offsetZ Offset for z-axis.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
 		Status SetOffsets(float offsetX, float offsetY, float offsetZ);
+
+		/// @brief Performs a hardware self test.
+		/// @return Status::Ok if self test passed, Status::Error if failed.
 		Status RunHardwareSelfTest();
 
+		/// @brief Start a non-blocking data transfer request (calls TransferAsync of the underlying bus).
+		/// @details Returns immediately. Use TransferWait() to synchronize completion.
+		/// @return Status::Ok if the transfer started, or Status::Busy if the bus is locked by another thread.
 		Status RequestData();
+
+		/// @brief Blocks the current thread until data transfer completes.
+		/// @param mag	Pointer to array be filled with received field data (x, y, z).
+		/// @param temp	Pointer to be filled with received temperature readings.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
 		Status GetData(float* mag, float* temp);
 
 	private:

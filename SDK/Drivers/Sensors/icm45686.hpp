@@ -16,6 +16,11 @@
 
 class ICM45686 {
 	public:
+		// Standard Chip identifications
+		static constexpr uint8_t i2cAddrPrimary = 0x68;
+		static constexpr uint8_t i2cAddrSecondary = 0x69;
+		static constexpr uint8_t chipID = 0xE9;
+
 		enum class Register : uint8_t {
 			ACCEL_DATA_X1_UI = 0x00,
 			ACCEL_DATA_X0_UI = 0x01,
@@ -409,29 +414,6 @@ class ICM45686 {
 			OutputDataRate gyroOdr;
 		};
 
-		static constexpr float accelSens[] = {
-			32.0f / 32768.0f,
-			16.0f / 32768.0f,
-			8.0f / 32768.0f,
-			4.0f / 32768.0f,
-			2.0f / 32768.0f
-		};
-
-		static constexpr float gyroSens[] = {
-			4000.0f / 32768.0f,
-			2000.0f / 32768.0f,
-			1000.0f / 32768.0f,
-			500.0f / 32768.0f,
-			250.0f / 32768.0f,
-			125.0f / 32768.0f,
-			62.5f / 32768.0f,
-			31.25f / 32768.0f,
-			15.625f / 32768.0f
-		};
-
-		static constexpr float tempSens = (1.0f/256);
-		static constexpr float tempOffset = 25.0f;
-
 		ICM45686(SPI& spi) : bus(spi) {};
 
 		Status Init(const Config& config);
@@ -453,9 +435,32 @@ class ICM45686 {
 		static constexpr uint16_t transferSize = 32;
 		__attribute__((aligned(32))) uint8_t txBuffer[transferSize];
 		__attribute__((aligned(32))) uint8_t rxBuffer[transferSize];
+
+		static constexpr float accelSens[] = {
+			32.0f / 32768.0f,
+			16.0f / 32768.0f,
+			8.0f / 32768.0f,
+			4.0f / 32768.0f,
+			2.0f / 32768.0f
+		};
+
+		static constexpr float gyroSens[] = {
+			4000.0f / 32768.0f,
+			2000.0f / 32768.0f,
+			1000.0f / 32768.0f,
+			500.0f / 32768.0f,
+			250.0f / 32768.0f,
+			125.0f / 32768.0f,
+			62.5f / 32768.0f,
+			31.25f / 32768.0f,
+			15.625f / 32768.0f
+		};
+
+		static constexpr float tempSens = (1.0f/256);
 		
 		float accelOffset[3];
 		float gyroOffset[3];
+		static constexpr float tempOffset = 25.0f;
 
 		Status WriteRegister(Register reg, uint8_t value);
 		Status ReadRegister(Register reg, uint8_t& value);
