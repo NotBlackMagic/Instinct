@@ -1,6 +1,15 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:    Instinct/Modules/Messaging/PubSub/Messages/sensors.hpp
+ * Author:  NotBlackMagic
+ * Brief:   Topic messages definitions for sensor messages.
+ */
+
 #pragma once
 
-#include "Common.hpp"
+#include "common.hpp"
 
 struct AccelMsg {
 	Timestamp timestamp;	// Microseconds

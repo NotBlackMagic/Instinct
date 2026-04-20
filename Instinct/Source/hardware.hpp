@@ -7,14 +7,17 @@
 #include "hyperbus.hpp"
 #include "i2c.hpp"
 #include "i3c.hpp"
+#include "jpeg.hpp"
 #include "sdmmc.hpp"
 #include "status.hpp"
 #include "spi.hpp"
 #include "system.hpp"
 #include "uart.hpp"
+#include "usb.hpp"
 
 #include "hyperFlash.hpp"
 #include "hyperRAM.hpp"
+#include "sd.hpp"
 
 #include "bmm350.hpp"
 #include "bmp581.hpp"
@@ -26,12 +29,15 @@
 
 #include "ov7670.hpp"
 #include "cameraDCMI.hpp"
+#include "jpegEncoder.hpp"
 
 #include "logger.hpp"
 
 #include "fx_api.h"
 
+#include "usbClassCDC.hpp"
 #include "usbClassUVC.hpp"
+#include "usbDevice.hpp"
 
 extern GPIO ledRed;
 extern GPIO ledBlue;
@@ -70,6 +76,7 @@ extern GPIO sdVioSel;
 extern GPIO hdRadioEn;
 
 extern Dcmi dcmi;
+extern Jpeg jpeg;
 
 extern HyperRAM::Config extRAMConfig;
 extern HyperBus hyperBus1;
@@ -86,7 +93,11 @@ extern I2C i2c4;
 // extern I3C i3c1;
 extern I3C i3c2;
 
+extern SD::Config sdConfig;
 extern SDMMC sdmmc1;
+extern SD sdCard;
+extern FX_MEDIA sdMedia;
+
 extern SDMMC sdmmc2;
 
 extern SPI spi1;
@@ -96,6 +107,8 @@ extern SPI spi4;
 extern UART uart4;
 
 extern DMAChannel dcmiDMAChannel;
+extern DMAChannel jpegEncInDMAChannel;
+extern DMAChannel jpegEncOutDMAChannel;
 
 extern INA700 ina700;
 
@@ -112,8 +125,12 @@ extern OV7670 ov7670;
 class CameraDCMI;
 extern CameraDCMI cameraSD;
 
-extern FX_MEDIA sdMedia;
+class JPEGEncoder;
+extern JPEGEncoder jpegEncoder;
 
+extern USB usbHardware;
+extern USBDevice usbDevice;
+extern USBClassCDC usbCDC;
 extern USBClassUVC usbUVC;
 
 void HardwareInit();

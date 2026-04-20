@@ -49,10 +49,10 @@ Status Dcmi::Init(const Config &config) {
 	NVIC_SetPriority(this->irqCall, this->irqPriority);
 	NVIC_EnableIRQ(this->irqCall);
 	// MODIFY_REG(this->instance->IER, DCMI_IER_FRAME_IE, DCMI_IER_FRAME_IE);	// Capture complete interrupt enable
-	MODIFY_REG(this->instance->IER, DCMI_IER_OVR_IE, DCMI_IER_OVR_IE);		// Overrun interrupt enable
-	MODIFY_REG(this->instance->IER, DCMI_IER_ERR_IE, DCMI_IER_ERR_IE);		// Synchronization error interrupt enable
+	MODIFY_REG(this->instance->IER, DCMI_IER_OVR_IE, DCMI_IER_OVR_IE);			// Overrun interrupt enable
+	MODIFY_REG(this->instance->IER, DCMI_IER_ERR_IE, DCMI_IER_ERR_IE);			// Synchronization error interrupt enable
 	// MODIFY_REG(this->instance->IER, DCMI_IER_VSYNC_IE, DCMI_IER_VSYNC_IE);	// VSYNC interrupt enable
-	// MODIFY_REG(this->instance->IER, DCMI_IER_LINE_IE, DCMI_IER_LINE_IE);	// Line interrupt enable
+	// MODIFY_REG(this->instance->IER, DCMI_IER_LINE_IE, DCMI_IER_LINE_IE);		// Line interrupt enable
 
 	// Enable DCMI
 	MODIFY_REG(this->instance->CR, DCMI_CR_ENABLE_Msk, 0x00);		// Disable DCMI Interface
@@ -83,11 +83,12 @@ Status Dcmi::Start(CaptureMode mode) {
 	return Status::Ok;
 }
 
-void Dcmi::Stop() {
+Status Dcmi::Stop() {
 	// Capture Disable
 	MODIFY_REG(this->instance->CR, DCMI_CR_CAPTURE_Msk, 0x00);
 	// Disable the entire DCMI peripheral to flush the internal FIFO
 	MODIFY_REG(this->instance->CR, DCMI_CR_ENABLE_Msk, 0x00);
+	return Status::Ok;
 }
 
 // ---------------------------------------------------------

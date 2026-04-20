@@ -67,9 +67,9 @@ class Dcmi {
 		/// @return Status::Ok
 		Status Start(CaptureMode mode);
 
-		void Stop();
-
-		bool WaitForFrame(uint32_t timeoutTicks);
+		/// @brief Aborts the current capture.
+		/// @return Status::Ok.
+		Status Stop();
 
 		/// @brief Interrupt Service Routine handler.
 		/// @warning This function is called by the NVIC. Do not call manually.

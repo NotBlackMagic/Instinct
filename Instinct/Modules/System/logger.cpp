@@ -18,7 +18,7 @@ Logger& Logger::Instance() {
 Logger::Logger()
 	: 	consolePort(nullptr),
 		consoleMinLevel(Logger::LogLevel::Info), 
-		sdMinLevel(Logger::LogLevel::Debug),
+		sdMinLevel(Logger::LogLevel::Info),
 		telemLevel(Logger::LogLevel::Warn),
 		initialized(false) {}
 
@@ -58,15 +58,16 @@ void Logger::Log(Logger::LogLevel level, const char* file, int line, const char*
 	// Lock Logger
 	bool useLock = initialized && (tx_thread_identify() != nullptr);
 	if(useLock == true) {
-		if (tx_mutex_get(&mutex, TX_WAIT_FOREVER) != TX_SUCCESS) {
+		if(tx_mutex_get(&mutex, TX_WAIT_FOREVER) != TX_SUCCESS) {
 			return;
 		}
 	}
 
-	char buffer[maxLogLines + 5];
+	// Allocate extra space for leading (5) and trailing (5) color codes
+	char buffer[maxLogLines + 13];
 	uint16_t index;
 
-	static const size_t colorLen = 5;
+	static const uint16_t colorLen = 5;
 	const char* colorCode = "\033[39m"; // Default Reset (4 bytes, padded to 5)
 	const char* tagPtr = "";
 
@@ -105,9 +106,8 @@ void Logger::Log(Logger::LogLevel level, const char* file, int line, const char*
 			return;
 	}
 
-	// Write color header
-	memcpy(buffer, colorCode, colorLen);
-	index = colorLen;
+	// Skip color code spacing at beginning (only used for console/terminal/shell)
+	index = colorLen;	
 
 	// Add timestamp
 	float timeSec = (float)tx_time_get() / TX_TIMER_TICKS_PER_SECOND;
@@ -142,33 +142,71 @@ void Logger::Log(Logger::LogLevel level, const char* file, int line, const char*
 	va_end(args);
 
 	// Add newline and reset
-	if(index < maxLogLines - 3) {
+	if(index < maxLogLines + colorLen - 2) {
 		buffer[index++] = '\r';
 		buffer[index++] = '\n';
 		buffer[index] = '\0';
 	}
 	else {
-		buffer[maxLogLines-3] = '\r';
-		buffer[maxLogLines-2] = '\n';
-		buffer[maxLogLines-1] = '\0';
+		index = maxLogLines + colorLen - 2;
+		buffer[index++] = '\r';
+		buffer[index++] = '\n';
+		buffer[index] = '\0';
 	}
 
 	// Send to all log message handlers
 	if(level >= consoleMinLevel && consolePort != nullptr) {
+		// Insert the active color code at the very beginning (index 0)
+		memcpy(&buffer[0], colorCode, colorLen);
+		
 		// Add color reset code to end
 		memcpy(&buffer[index], "\033[39m", colorLen);
-		index += colorLen;
 
-		consolePort->Transmit((uint8_t*)buffer, index);
+		consolePort->Transmit((uint8_t*)buffer, (index + colorLen));
 	}
 
 	if(level >= sdMinLevel) {
-		// RingBufWrite(&_sdBuf, buffer + ColorLen, offset - ColorLen);
+		// Copy the formatted string into the circular buffer
+		for(uint16_t i = colorLen; i < index; i++) {
+			if(sdCount < sdBufferSize) {
+				sdBuffer[sdHead] = buffer[i];
+				sdHead = (sdHead + 1) % sdBufferSize;
+				sdCount++;
+			}
+			else {
+				// Buffer overflow!
+				break;
+			}
+		}
 	}
 
 	if(useLock == true) {
 		tx_mutex_put(&mutex);
 	}
+}
+
+uint16_t Logger::ReadSDBuffer(uint8_t* outBuffer, uint16_t maxLen) {
+	// Lock Logger
+	bool useLock = initialized && (tx_thread_identify() != nullptr);
+	if(useLock == true) {
+		if(tx_mutex_get(&mutex, TX_WAIT_FOREVER) != TX_SUCCESS) {
+			return 0;
+		}
+	}
+
+	uint16_t bytesRead = 0;
+	while (sdCount > 0 && bytesRead < maxLen) {
+		outBuffer[bytesRead] = sdBuffer[sdTail];
+		sdTail = (sdTail + 1) % sdBufferSize;
+		sdCount = sdCount - 1;
+		bytesRead = bytesRead + 1;
+	}
+
+	if(useLock == true) {
+		tx_mutex_put(&mutex);
+	}
+	
+	return bytesRead;
 }
 
 void Logger::Printf(const char* fmt, ...) {
@@ -204,7 +242,7 @@ void Logger::Write(const char* str) {
 	Write(str, strlen(str));
 }
 
-void Logger::Write(const char* data, size_t len) {
+void Logger::Write(const char* data, uint16_t len) {
 	if(len == 0) {
 		return;
 	}
@@ -212,7 +250,7 @@ void Logger::Write(const char* data, size_t len) {
 	// Lock Logger
 	bool useLock = initialized && (tx_thread_identify() != nullptr);
 	if(useLock == true) {
-		if (tx_mutex_get(&mutex, TX_WAIT_FOREVER) != TX_SUCCESS) {
+		if(tx_mutex_get(&mutex, TX_WAIT_FOREVER) != TX_SUCCESS) {
 			return;
 		}
 	}

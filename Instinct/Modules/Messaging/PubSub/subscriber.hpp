@@ -1,3 +1,12 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:    Instinct/Modules/Messaging/PubSub/subscriber.hpp
+ * Author:  NotBlackMagic
+ * Brief:   PubSub topic subscriber logic.
+ */
+
 #pragma once
 
 #include "tx_api.h"

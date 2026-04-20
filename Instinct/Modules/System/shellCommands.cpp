@@ -12,15 +12,15 @@ extern char _sdata[], _edata[];
 extern char _sbss[],  _ebss[];
 extern char _estack[];
 
-//Basic commands
+// Basic commands
 
 static bool CommandHelp(const char* args) {
 	(void)args;
 	Logger::Instance().Write("--- Available Commands ---\r\n");
-	//Iterate through the list of commands regsitered
+	// Iterate through the list of commands regsitered
 	const Shell::CommandList* currentList = Shell::GetRegistry();
 	while(currentList != nullptr) {
-		//Iterate through commands in each list (module)
+		// Iterate through commands in each list (module)
 		const Shell::CommandEntry* entry = currentList->commandGroup;
 
 		while(entry->name != nullptr) {
@@ -28,7 +28,7 @@ static bool CommandHelp(const char* args) {
 			snprintf(buffer, sizeof(buffer), "  %-12s - %s\r\n", entry->name, (entry->helpText) ? entry->helpText : "");
 
 			Logger::Instance().Write(buffer);
-			entry++;	//Go to next command in this list/array
+			entry++;	// Go to next command in this list/array
 		}
 
 		currentList = currentList->next;
@@ -39,12 +39,12 @@ static bool CommandHelp(const char* args) {
 
 static bool CommandClear(const char* args) {
 	(void)args;
-	//ANSI Code to clear screen and move cursor home
+	// ANSI Code to clear screen and move cursor home
 	Logger::Instance().Write("\033[2J\033[H");
 	return true;
 }
 
-//System status commands
+// System status commands
 static bool CommandInfo(const char* args) {
 	(void)args;
 	Logger::Instance().Write("\r\n--- SYSTEM INFORMATION ---\r\n");
@@ -91,7 +91,7 @@ static bool CommandStatus(const char* args) {
 	(void)args;
 	Logger::Instance().Printf("CPU: STM32N6 @ 800MHz\r\n");
 	Logger::Instance().Printf("Tick: %lu ms\r\n", HAL_GetTick());
-	//TBD: add Battery Voltage, Stack usage, etc.
+	// TBD: add Battery Voltage, Stack usage, etc.
 	return true;
 }
 
@@ -127,7 +127,7 @@ static bool CommandMemory(const char* args) {
 	return true;
 }
 
-//Helper to decode numeric states into human-readable strings
+// Helper to decode numeric states into human-readable strings
 static const char* GetThreadState(UINT state) {
 	switch (state) {
 		case TX_READY:             return "READY";
@@ -148,20 +148,43 @@ static const char* GetThreadState(UINT state) {
 	}
 }
 
+#ifdef TX_EXECUTION_PROFILE_ENABLE
+// ThreadX global variables for system profiling
+extern ULONG64 _tx_execution_idle_time_total;
+extern ULONG64 _tx_execution_isr_time_total;
+#endif
+
 static bool CommandRTOS(const char* args) {
 	(void)args;
-	Logger::Instance().Write("------------------------------------------------------------\r\n");
-	Logger::Instance().Write("NAME         STATE   PRIO   STACK (Used/Max)   RUN COUNT\r\n");
-	Logger::Instance().Write("------------------------------------------------------------\r\n");
+	Logger::Instance().Write("--------------------------------------------------------------------------------\r\n");
+	Logger::Instance().Write("NAME         STATE   PRIO   STACK (Used/Max)   RUN COUNT   CPU %\r\n");
+	Logger::Instance().Write("--------------------------------------------------------------------------------\r\n");
 
 	UINT state = tx_interrupt_control(TX_INT_DISABLE);
 	TX_THREAD* thread = _tx_thread_created_ptr;
+
+#ifdef TX_EXECUTION_PROFILE_ENABLE
+	// Snap the global times while interrupts are disabled to prevent drift
+	ULONG64 totalIdle = _tx_execution_idle_time_total;
+	ULONG64 totalIsr = _tx_execution_isr_time_total;
+#endif
+
 	tx_interrupt_control(state);
 
 	if (thread == nullptr) {
 		Logger::Instance().Write("No threads found!\r\n");
 		return true;
 	}
+
+#ifdef TX_EXECUTION_PROFILE_ENABLE
+	// 1. Calculate the absolute total time the CPU has been running
+	ULONG64 totalSystemTime = totalIdle + totalIsr;
+	TX_THREAD* tempThread = thread;
+	do {
+		totalSystemTime += tempThread->tx_thread_execution_time_total;
+		tempThread = tempThread->tx_thread_created_next;
+	} while (tempThread != thread);
+#endif
 
 	//Iterate through thread list
 	TX_THREAD* startThread = thread;
@@ -180,15 +203,26 @@ static bool CommandRTOS(const char* args) {
 			usagePercent = (used * 100) / stackSize;
 		}
 
+		// Calculate CPU Percentage for this specific thread
+		uint32_t cpuPercent = 0;
+#ifdef TX_EXECUTION_PROFILE_ENABLE
+		if (totalSystemTime > 0) {
+			// Multiply by 1000 for 1 decimal place (e.g., 154 = 15.4%)
+			cpuPercent = (uint32_t)((thread->tx_thread_execution_time_total * 1000) / totalSystemTime); 
+		}
+#endif
+
 		// Format the line
-		snprintf(buffer, sizeof(buffer), "%-12.12s %-7s %2d     %4lu / %4lu (%2lu%%)   %lu\r\n",
+		snprintf(buffer, sizeof(buffer), "%-12.12s %-7s %2d     %4lu / %4lu (%2lu%%)   %-9lu   %2lu.%01lu%%\r\n",
 			thread->tx_thread_name ? thread->tx_thread_name : "???",
 			GetThreadState(thread->tx_thread_state),
 			thread->tx_thread_priority,
 			(unsigned long)used,
 			(unsigned long)stackSize,
 			(unsigned long)usagePercent,
-			(unsigned long)thread->tx_thread_run_count
+			(unsigned long)thread->tx_thread_run_count,
+			(unsigned long)(cpuPercent / 10), 
+            (unsigned long)(cpuPercent % 10)
 		);
 
 		Logger::Instance().Write(buffer);
@@ -198,11 +232,23 @@ static bool CommandRTOS(const char* args) {
 
 	} while (thread != startThread);
 
+#ifdef TX_EXECUTION_PROFILE_ENABLE
+	// Print System level stats (Idle and ISR) at the bottom
+	uint32_t idlePercent = (totalSystemTime > 0) ? (uint32_t)((totalIdle * 1000) / totalSystemTime) : 0;
+	uint32_t isrPercent = (totalSystemTime > 0) ? (uint32_t)((totalIsr * 1000) / totalSystemTime) : 0;
+
+	Logger::Instance().Write("--------------------------------------------------------------------------------\r\n");
+	snprintf(buffer, sizeof(buffer), "System Idle: %2lu.%01lu%%  |  Hardware ISRs: %2lu.%01lu%%\r\n", 
+			(unsigned long)(idlePercent / 10), (unsigned long)(idlePercent % 10),
+			(unsigned long)(isrPercent / 10), (unsigned long)(isrPercent % 10));
+	Logger::Instance().Write(buffer);
+#endif
+
 	Logger::Instance().Write("------------------------------------------------------------\r\n");
 	return true;
 }
 
-//Control commands
+// Control commands
 static bool CommandReboot(const char* args) {
 	(void)args;
 	Logger::Instance().Write("Rebooting...\r\n");
@@ -222,28 +268,28 @@ static bool CommandLog(const char* args) {
 	return true;
 }
 
-//SYSTEM COMMANDS
+// SYSTEM COMMANDS
 static const Shell::CommandEntry systemCommands[] {
-	//Basic commands
+	// Basic commands
 	{ "help",	CommandHelp,	"Lists commands" },
 	{ "?",	CommandHelp,	"Lists commands" },
 	{ "clear",CommandClear,	"Clear terminal" },
 
-	//System status commands
+	// System status commands
 	{"info",		CommandInfo, "Board & FW info" },
 	{ "version",	CommandVersion,"Firmware info" },
 	{ "status",	CommandStatus,	"System stats" },
 	{ "ps",		CommandRTOS,	"Thread status" },
 	{ "mem",		CommandMemory,	"Memory usage" },
 
-	//Control commands
+	// Control commands
 	{ "reboot",	CommandReboot,		"Reboots system" },
 	{ "log",		CommandLog,	"Set Log Level (0-6)" },
 	
 	{ nullptr,	nullptr,		nullptr } // Terminator
 };
 
-//Static memory for the node
+// Static memory for the node
 static Shell::CommandList systemShellNode;
 
 void RegisterSystemCommands() {

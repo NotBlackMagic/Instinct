@@ -4,7 +4,7 @@
  *
  * File:    SDK/MCU/dmaChannel.hpp
  * Author:  NotBlackMagic
- * Brief:   
+ * Brief:   DMA channel driver class (HPDMA and GPDMA) for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
 #pragma once
@@ -56,6 +56,14 @@ class DMAChannel {
 			bool incSrc;
 			bool incDst;
 
+			// Advanced settings (Optional, defaults to 1)
+			uint32_t srcBurstLength = 1; 
+			uint32_t dstBurstLength = 1;
+
+			// Multi-block reload hooks for enable/disable DMA requests
+			void (*StateCallback)(void* ctx, bool enable) = nullptr;
+			void* callbackContext = nullptr;
+
 			// RIF / Security Settings
 			// bool IsSecure;
 			// bool IsPrivileged;
@@ -94,24 +102,29 @@ class DMAChannel {
 		/// @return Status::Ok if transfer stopped successfully, or Status::Error otherwise.
 		Status TransferStop();
 
+		uint32_t GetRemaining();
+
 		/// @brief Interrupt Service Routine handler.
 		/// @warning This function is called by the NVIC. Do not call manually.
 		void InterruptHandler();
 	
 	private:
 		enum class Port {
-			Port0 = 0, // AXI (Memory/High-Speed)
-			Port1 = 1  // AHB/APB (Peripherals)
+			Port0 = 0,	// AXI (Memory/High-Speed)
+			Port1 = 1	// AHB/APB (Peripherals)
 		};
 
 		DMA_TypeDef* instance;
 		uint8_t channelIndex;
 		IRQn_Type irqCall;
 		uint8_t irqPriority;
+		Config config;
 
-		// Transaction Context, used for software-managed multi-block transfers (>65k limit and no 2D support)
+		// Transaction Context, used for software-managed multi-block transfers (>65k limit and no 2D support, also for when required to disable DMA request between blocks i.e, JPEG)
 		uint32_t currentSrc;
 		uint32_t currentDst;
+		uint32_t blockSize;
+		uint32_t remainingBytes;
 
 		// Synchronization
 		TX_EVENT_FLAGS_GROUP event;

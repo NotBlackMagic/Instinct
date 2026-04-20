@@ -239,8 +239,13 @@
 
 /*#define TX_SAFETY_CRITICAL*/
 
-/* USER CODE BEGIN 2 */
+/* Enable the execution profile kit */
+#define TX_EXECUTION_PROFILE_ENABLE
 
-/* USER CODE END 2 */
+/* Tell ThreadX to use the Cortex-M DWT Cycle Counter as the time source */
+#define TX_EXECUTION_TIME_SOURCE         (*((volatile ULONG *)0xE0001004))
+
+/* The DWT Cycle Counter is a 32-bit register, so it rolls over at 0xFFFFFFFF */
+#define TX_EXECUTION_MAX_TIME_SOURCE     0xFFFFFFFF
 
 #endif

@@ -1,5 +1,15 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:    Instinct/Modules/Messaging/PubSub/topic.hpp
+ * Author:  NotBlackMagic
+ * Brief:   PubSub topic logic (main logic for the PubSub). Inherits from TopicBase class (for broker registration system).
+ */
+
 #pragma once
 
+#include <atomic>
 #include <stdint.h>
 #include <string.h>
 
@@ -8,13 +18,14 @@
 #include "tx_api.h"
 
 #include "subscriber.hpp"
+#include "topicBase.hpp"
 
-#define BARRIER() __asm volatile( "dmb" ::: "memory" )
+// #define BARRIER() __asm volatile( "dmb" ::: "memory" )
 
 template <typename T>
-class Topic {
+class Topic : public TopicBase {
 	public:
-		Topic(const char* name, uint8_t id) : name(name), id(id), version(0), head(nullptr), msgCount(0), msgTimestamp(0), subCount(0) {}
+		Topic(const char* name, uint8_t topicId, uint8_t instance = 0) : TopicBase(name, topicId, instance), version(0), head(nullptr) {}
 
 		// Delete copy constructors
 		Topic(const Topic&) = delete;
@@ -73,11 +84,11 @@ class Topic {
 			}
 			else {
 				Subscriber<T>* prev = head;
-				while (prev->next != nullptr && prev->next != sub) {
+				while(prev->next != nullptr && prev->next != sub) {
 					prev = prev->next;
 				}
 
-				if (prev->next == sub) {
+				if(prev->next == sub) {
 					// Bypass the node
 					prev->next = sub->next;
 					found = true;
@@ -105,21 +116,38 @@ class Topic {
 			// Capture time
 			uint64_t now = Time::GetUs();
 
+			// Calculate Rate (Period)
+			if(publishTimestamp != 0) {
+				uint32_t delta = (uint32_t)(now - publishTimestamp);
+				
+				if(averagePeriodUs == 0) {
+					averagePeriodUs = delta; // Seed the average on first real delta
+				}
+				else {
+					// Moving average Filter, (using fast bitwise shifts
+					averagePeriodUs = averagePeriodUs - (averagePeriodUs >> 3) + (delta >> 3);
+				}
+			}
+
 			// Increment Version (Odd number = "I am writing")
-			version = version + 1;
+			// version = version + 1;
+			version.fetch_add(1, std::memory_order_relaxed);
 
 			// Barrier: Ensure version increment lands before data write starts
-			BARRIER();
+			// BARRIER();
+			std::atomic_thread_fence(std::memory_order_release);
 			// Copy Data
 			data = msg;
 			// Update Stats
 			msgCount += 1;
-			msgTimestamp = now;
+			publishTimestamp = now;
 			// Barrier: Ensure data write finishes before version increments again
-			BARRIER();
+			// BARRIER();
+			std::atomic_thread_fence(std::memory_order_release);
 
 			// Increment Version (Even number = "I am done")
-			version += 1;
+			// version += 1;
+			version.fetch_add(1, std::memory_order_relaxed);
 
 			// Notify all subscribers
 			Subscriber<T>* curr = head;
@@ -129,7 +157,7 @@ class Topic {
 			}
 		}
 
-		bool Peak(T& msg) {
+		bool Peek(T& msg) {
 			uint32_t v1, v2;
 			uint8_t retries = 0;
 			const uint8_t maxRetries = 5;
@@ -140,16 +168,21 @@ class Topic {
 					return false;
 				}
 				
-				v1 = version;
-				if (v1 & 1) {
+				// v1 = version;
+				v1 = version.load(std::memory_order_acquire);
+				// If odd, publisher is currently writing. Try again.
+				if(v1 & 1) {
 					continue;
 				} 
 
-				BARRIER();
+				// BARRIER();
 				msg = data;
-				BARRIER();
+				// BARRIER();
 
-				v2 = version;
+				std::atomic_thread_fence(std::memory_order_acquire);
+
+				// v2 = version;
+				v2 = version.load(std::memory_order_relaxed);
 			} while (v1 != v2);
 
 			return true;
@@ -163,30 +196,16 @@ class Topic {
 			UINT status = tx_semaphore_get(&sub->semaphore, ticks);
 		
 			if(status == TX_SUCCESS) {
-				Peak(msg); // Reuse the read function
+				Peek(msg); // Reuse the read function
 				return true;
 			}
 
 			return false;
 		}
 
-		const char* GetName() const { return name; }
-		uint8_t GetID() const { return id; }
-		void GetStats(uint32_t& msgCount, uint32_t& msgTimestamp, uint32_t& subCount) {
-			msgCount = this->msgCount;
-			msgTimestamp = this->msgTimestamp;
-			subCount = this->subCount;
-		}
-
 	private:
-		const char* name;
-		uint8_t id;
-		volatile uint32_t version;
+		// volatile uint32_t version;
+		std::atomic<uint32_t> version;
 		T data;
 		Subscriber<T>* head;
-
-		// Stats variables
-		volatile uint32_t msgCount;
-		volatile uint64_t msgTimestamp;
-		volatile uint8_t subCount;
 };

@@ -26,6 +26,7 @@ void Console::Init(UART* uart) {
 	RegisterCameraCommands();
 	// RegisterPWMCommands();
 	// RegisterFlashCommands();
+	RegisterPubSubCommands();
 
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Console"),
 											Console::Run,

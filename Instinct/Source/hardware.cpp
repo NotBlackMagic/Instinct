@@ -40,6 +40,9 @@ GPIO hdRadioEn(GPIOQ, LL_GPIO_PIN_0);
 Dcmi dcmi(DCMI);
 extern "C" void DCMI_PSSI_IRQHandler(void) { dcmi.InterruptHandler(); }
 
+Jpeg jpeg(JPEG);
+extern "C" void JPEG_IRQHandler(void) { jpeg.InterruptHandler(); }
+
 // Default for Rev. A is: Cypress S80KS2564
 HyperRAM::Config extRAMConfig = {	
 	.deviceName = "Cypress S80KS2564",
@@ -95,6 +98,14 @@ extern "C" void I3C1_EV_IRQHandler(void) { i3c1.InterruptHandler(); }
 I3C i3c2(I3C2);
 extern "C" void I3C2_EV_IRQHandler(void) { i3c2.InterruptHandler(); }
 
+SD::Config sdConfig = {
+	.use4BitMode = true,
+	.use1V8Level = false,
+	.useHighSpeed = true,
+	.useUHS = false,
+	.vioSelectPin = &sdVioSel
+};
+SD sdCard = SD(sdmmc1);
 SDMMC sdmmc1(SDMMC1);
 extern "C" void SDMMC1_IRQHandler(void) { sdmmc1.InterruptHandler(); }
 SDMMC sdmmc2(SDMMC2);
@@ -113,8 +124,20 @@ extern "C" void SPI4_IRQHandler(void) { spi4.InterruptHandler(); }
 UART uart4(UART4);
 extern "C" void UART4_IRQHandler(void) { uart4.InterruptHandler(); }
 
+USB usbHardware(USB1_OTG_HS);
+extern "C" void USB1_OTG_HS_IRQHandler(void) { usbHardware.InterruptHandler(); }
+USBDevice usbDevice(usbHardware);
+USBClassCDC usbCDC;
+USBClassUVC usbUVC;
+
 DMAChannel dcmiDMAChannel(HPDMA1, LL_DMA_CHANNEL_15);
 extern "C" void HPDMA1_Channel15_IRQHandler(void) { dcmiDMAChannel.InterruptHandler(); }
+
+DMAChannel jpegEncInDMAChannel(HPDMA1, LL_DMA_CHANNEL_13);
+extern "C" void HPDMA1_Channel13_IRQHandler(void) { jpegEncInDMAChannel.InterruptHandler(); }
+
+DMAChannel jpegEncOutDMAChannel(HPDMA1, LL_DMA_CHANNEL_14);
+extern "C" void HPDMA1_Channel14_IRQHandler(void) { jpegEncOutDMAChannel.InterruptHandler(); }
 
 // EXTI Interrupt Routing
 extern "C" void EXTI0_IRQHandler(void) {
@@ -340,10 +363,15 @@ OV7670 ov7670(i3c1, 0x21);
 
 CameraDCMI cameraSD(dcmi, ov7670, dcmiDMAChannel);
 
-USBClassUVC usbUVC;
+JPEGEncoder jpegEncoder(jpeg, jpegEncInDMAChannel, jpegEncOutDMAChannel);
 
 void HardwareInit() {
 	// Initialize Physical Layer
+
+	// Initialize Cortex-M DWT Cycle Counter
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;	// Enable Trace system
+	DWT->CYCCNT = 0;								// Reset the counter
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;			// Start the counter
 
 	// Initialize general purpose GPIOs
 	BoardGPIOInit();

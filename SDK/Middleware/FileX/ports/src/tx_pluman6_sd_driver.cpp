@@ -8,6 +8,7 @@
 #include "tx_pluman6_sd_driver.h"
 
 extern SD sdCard;
+extern SD::Config sdConfig;
 
 // Internal Bounce Buffer for Boot Sector (MBR) reads
 // FileX sometimes reads Sector 0 into an unaligned stack variable.
@@ -19,14 +20,7 @@ extern "C" void PlumaSDDriver(FX_MEDIA *media_ptr) {
 	switch(media_ptr->fx_media_driver_request) {
 		case FX_DRIVER_INIT: {
 			// Initialize the SD Card
-			SD::Config cfg;
-			cfg.use4BitMode = true;
-			cfg.use1V8Level = false;
-			cfg.useHighSpeed = true; 
-			cfg.useUHS = false;
-			cfg.vioSelectPin = &sdVioSel;
-
-			if(sdCard.Init(cfg) == Status::Ok) {
+			if(sdCard.Init(sdConfig) == Status::Ok) {
 				media_ptr->fx_media_driver_status = FX_SUCCESS;
 				
 				// Pass SD card geometry to FIleX

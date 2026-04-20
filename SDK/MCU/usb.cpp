@@ -10,7 +10,7 @@
 USB::USB(USB_OTG_GlobalTypeDef* instance) {
 	this->instance = instance;
 	this->device = ((USB_OTG_DeviceTypeDef *)((uint32_t)this->instance + USB_OTG_DEVICE_BASE));
-	this->irqPriority = 0x0E; // Lowest priority (safe default)
+	this->irqPriority = 0x0D; // Lowest priority (safe default)
 }
 
 Status USB::Init(const Config &config) {

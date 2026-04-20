@@ -71,8 +71,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Acquisition
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Control
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging/PubSub
-	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging/Topics
-	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging/Topics/Messages
+	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging/PubSub/Messages
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/System
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Vision
 
@@ -95,6 +94,10 @@ include_directories(
 	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Inc
 	${PLUMA_SDK_PATH}/Middleware/CMSIS/Include
 	${PLUMA_SDK_PATH}/Middleware/CMSIS/Device/ST/STM32N6xx/Include
+	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/inc
+	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/src/common
+	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/src/h264
+	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/src/jpeg
 )
 
 # Sources
@@ -156,6 +159,14 @@ file(GLOB FILEX_SOURCES
 	"${FILEX_ROOT}/ports/src/*.cpp"
 )
 
+# VideoEncoder (VENC) Sources
+set(VENC_ROOT "${PLUMA_SDK_PATH}/Middleware/VideoEncoder")
+file(GLOB VENC_SOURCES
+	"${VENC_ROOT}/src/common/*.c"
+	"${VENC_ROOT}/src/h264/*.c"
+	"${VENC_ROOT}/src/jpeg/*.c"
+)
+
 # Create Executable
 enable_language(ASM)
 
@@ -166,6 +177,7 @@ add_executable(${CMAKE_PROJECT_NAME}
     ${ST_DRIVER_SOURCES}
     ${THREADX_SOURCES}
 	${FILEX_SOURCES}
+	${VENC_SOURCES}
 )
 
 # Linker script

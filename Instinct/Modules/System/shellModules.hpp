@@ -28,3 +28,4 @@ void RegisterSerialCommands();
 void RegisterCameraCommands();
 void RegisterPWMCommands();
 void RegisterFlashCommands();
+void RegisterPubSubCommands();

@@ -1,3 +1,12 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:    Instinct/Modules/Messaging/PubSub/Messages/topicIDs.hpp
+ * Author:  NotBlackMagic
+ * Brief:   List of all topic IDs available.
+ */
+
 #pragma once
 
 #include <stdint.h>

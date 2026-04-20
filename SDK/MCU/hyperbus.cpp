@@ -92,11 +92,16 @@ Status HyperBus::Init(const Config &config) {
 	MODIFY_REG(this->instance->DCR1, XSPI_DCR1_MTYP, ((4) << XSPI_DCR1_MTYP_Pos));			// Set Memory type: 4 -> HyperBus memory mode, 5 -> HyperBus register mode
 	MODIFY_REG(this->instance->DCR1, XSPI_DCR1_EXTENDMEM, 0x00);							// Set extended memory support: NCS1 and NCS2 depend on CSSEL
 	MODIFY_REG(this->instance->DCR1, XSPI_DCR1_DEVSIZE, (devSizeVal << XSPI_DCR1_DEVSIZE_Pos));	// Set Device size (2^[DEVSIZE+1])
-	MODIFY_REG(this->instance->DCR1, XSPI_DCR1_CSHT, ((0) << XSPI_DCR1_CSHT_Pos));			// Set CS high time: High at least 1 cycle
+	MODIFY_REG(this->instance->DCR1, XSPI_DCR1_CSHT, ((4) << XSPI_DCR1_CSHT_Pos));			// Set CS high time: High at least 5 cycles
 	MODIFY_REG(this->instance->DCR1, XSPI_DCR1_FRCK, 0x00);									// Set free running clock: Disabled
 	// MODIFY_REG(this->instance->DCR1, XSPI_DCR1_CKMODE, 0x00);							// Set clock mode: Mode 0 (CLK low while nCS high) READ ONLY
 
 	MODIFY_REG(this->instance->DCR2, XSPI_DCR2_WRAPSIZE, 0x00);								// Set wrap size: Wrapped reads are not supported by the memory
+
+	MODIFY_REG(this->instance->DCR3, XSPI_DCR3_CSBOUND, 0x00);		// Set NCS boundary (2^CSBOUND): Disabled
+	MODIFY_REG(this->instance->DCR3, XSPI_DCR3_MAXTRAN, 0x00);		// Set maximum transfer (MAXTRAN + 1): Disabled
+
+	MODIFY_REG(this->instance->DCR4, XSPI_DCR4_REFRESH, config.refreshRate);	// Set refresh rate: Disabled, only used/required for HyperRAM devices
 
 	// Calculate best prescaler value, equal or lower then asked frequency
 	uint32_t prescaler = 0;				// 0: DIV1, 1: DIV2, 2: DIV3, etc...
@@ -110,14 +115,11 @@ Status HyperBus::Init(const Config &config) {
 	else {
 		prescaler = 255;
 	}
+	while((this->instance->SR & XSPI_SR_BUSY_Msk) == XSPI_SR_BUSY);	// Wait for not BUSY
 	MODIFY_REG(this->instance->DCR2, XSPI_DCR2_PRESCALER, ((prescaler) << XSPI_DCR2_PRESCALER_Pos));	// Set clock prescaler (Fclk = Fkernel/[value+1])
-	while((this->instance->SR & XSPI_SR_BUSY_Msk) == XSPI_SR_BUSY); 									// Wait for calibrations to complete
+	while((this->instance->SR & XSPI_SR_BUSY_Msk) == XSPI_SR_BUSY);	// Wait for calibrations to complete
 
-
-	MODIFY_REG(this->instance->DCR3, XSPI_DCR3_CSBOUND, 0x00);		// Set NCS boundary (2^CSBOUND): Disabled
-	MODIFY_REG(this->instance->DCR3, XSPI_DCR3_MAXTRAN, 0x00);		// Set maximum transfer (MAXTRAN + 1): Disabled
-
-	MODIFY_REG(this->instance->DCR4, XSPI_DCR4_REFRESH, config.refreshRate);	// Set refresh rate: Disabled, only used/required for HyperRAM devices
+	MODIFY_REG(this->instance->TCR, (XSPI_TCR_SSHIFT), 0x00);	// Configure sample shifting
 
 	// HyperBus latency configuration
 	uint32_t writeZeroLatencyVal = 0x00;
@@ -289,8 +291,6 @@ Status HyperBus::Command(AddressSpace space, uint32_t addr, AddrSize addrSize, B
 	//36-16 (256M) | Row & Up Col Addr | Half page component of target address
 	//15-3         | Reserved          | Reserved for future column address expansion. Set to 0
 	//2-0          | Lower Column Addr | Lower Column component of the target address: System word address bits A2–0 selecting the starting word within a half-page.
-
-	//Thread Safety: TODO
 
 	uint32_t dqsMode = ((uint32_t)XSPI_CCR_DQSE);
 
