@@ -121,6 +121,18 @@ extern "C" void SPI2_IRQHandler(void) { spi2.InterruptHandler(); }
 SPI spi4(SPI4);
 extern "C" void SPI4_IRQHandler(void) { spi4.InterruptHandler(); }
 
+Timer timer2(TIM2);
+PWM pwm1Ch1(timer2, PWM::Channel::Ch1);
+PWM pwm1Ch2(timer2, PWM::Channel::Ch2);
+PWM pwm1Ch3(timer2, PWM::Channel::Ch3);
+PWM pwm1Ch4(timer2, PWM::Channel::Ch4);
+
+Timer timer8(TIM8);
+PWM pwm2Ch1(timer8, PWM::Channel::Ch1);
+PWM pwm2Ch2(timer8, PWM::Channel::Ch2);
+PWM pwm2Ch3(timer8, PWM::Channel::Ch3);
+PWM pwm2Ch4(timer8, PWM::Channel::Ch4);
+
 UART uart4(UART4);
 extern "C" void UART4_IRQHandler(void) { uart4.InterruptHandler(); }
 
@@ -387,8 +399,8 @@ void HardwareInit() {
 	BoardI3C1Init();
 	BoardI3C2Init();
 	// PWM peripherals
-	// BoardPWM2Init();
-	// BoardPWM8Init();
+	BoardPWM2Init();
+	BoardPWM8Init();
 	// SDMMC peripherals
 	BoardSDMMC1Init();
 	// BoardSDMMC2Init();
@@ -461,6 +473,24 @@ void HardwareInit() {
 	spi1.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 1000000, .polarity = SPI::ClockPolarity::High, .phase = SPI::ClockPhase::SecondEdge, .bitOrder = SPI::BitOrder::MSBFirst});
 	spi2.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 1000000, .polarity = SPI::ClockPolarity::High, .phase = SPI::ClockPhase::SecondEdge, .bitOrder = SPI::BitOrder::MSBFirst});
 	LOG_INFO("SPIs Init OK.");
+
+	// Initialize Timers
+	timer2.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::AXI), .frequencyHz = 50});
+	timer2.Start();
+    timer8.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::AXI), .frequencyHz = 50});
+	timer8.Start();
+	LOG_INFO("TIMs Init OK.");
+
+	// Initialize PWMs
+	pwm1Ch1.Init({.polarity = PWM::Polarity::High});
+	pwm1Ch2.Init({.polarity = PWM::Polarity::High});
+	pwm1Ch3.Init({.polarity = PWM::Polarity::High});
+	pwm1Ch4.Init({.polarity = PWM::Polarity::High});
+	pwm2Ch1.Init({.polarity = PWM::Polarity::High});
+	pwm2Ch2.Init({.polarity = PWM::Polarity::High});
+	pwm2Ch3.Init({.polarity = PWM::Polarity::High});
+	pwm2Ch4.Init({.polarity = PWM::Polarity::High});
+	LOG_INFO("PWMs Init OK.");
 
 	// Configure XSPI clock (needs the System stuff to be initialized!!)
 	extRAMConfig.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC3);	// From IC3

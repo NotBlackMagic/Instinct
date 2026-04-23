@@ -571,10 +571,10 @@ void tx_application_define(void *first_unused_memory) {
 	// }
 
 	// Allocate the stack
-	status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
-	if(status != TX_SUCCESS) {
-		LOG_ERR("ThreadX Stack 3 Allocate Failed.");
-	}
+	// status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
+	// if(status != TX_SUCCESS) {
+	// 	LOG_ERR("ThreadX Stack 3 Allocate Failed.");
+	// }
 	// // Create USB thread
 	// status = tx_thread_create(&usbThread, const_cast<char*>("USB Thread"),
 	// 										USBThread, 0,

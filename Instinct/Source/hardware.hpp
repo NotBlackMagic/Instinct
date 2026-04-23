@@ -8,10 +8,12 @@
 #include "i2c.hpp"
 #include "i3c.hpp"
 #include "jpeg.hpp"
+#include "pwm.hpp"
 #include "sdmmc.hpp"
 #include "status.hpp"
 #include "spi.hpp"
 #include "system.hpp"
+#include "timer.hpp"
 #include "uart.hpp"
 #include "usb.hpp"
 
@@ -103,6 +105,18 @@ extern SDMMC sdmmc2;
 extern SPI spi1;
 extern SPI spi2;
 extern SPI spi4;
+
+extern Timer tim2;
+extern PWM pwm1Ch1;
+extern PWM pwm1Ch2;
+extern PWM pwm1Ch3;
+extern PWM pwm1Ch4;
+
+extern Timer tim8;
+extern PWM pwm2Ch1;
+extern PWM pwm2Ch2;
+extern PWM pwm2Ch3;
+extern PWM pwm2Ch4;
 
 extern UART uart4;
 

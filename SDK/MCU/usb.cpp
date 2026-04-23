@@ -242,7 +242,7 @@ Status USB::SetAddress(uint8_t address) {
 }
 
 Status USB::OpenEndpoint(uint8_t epAddr, EndpointType type, uint16_t maxPacketSize) {
-	if (this->IsValidEndpoint(epAddr) == false) {
+	if(this->IsValidEndpoint(epAddr) == false) {
 		return Status::Error;
 	}
 
@@ -250,7 +250,7 @@ Status USB::OpenEndpoint(uint8_t epAddr, EndpointType type, uint16_t maxPacketSi
 	bool isCmdIn = ((epAddr & 0x80) == 0x80);
 
 	// EP0 is initialized internally by the core/driver, lockout for user change!
-	if (epNum == 0) {
+	if(epNum == 0) {
 		return Status::Error;
 	}
 
@@ -274,6 +274,9 @@ Status USB::OpenEndpoint(uint8_t epAddr, EndpointType type, uint16_t maxPacketSi
 			WRITE_REG(inEp->DIEPCTL, epConfig);	
 		}
 
+		// Clear any pending interrupts
+		WRITE_REG(inEp->DIEPINT, 0xFFFFFFFF);
+
 		// Unmask the interrupt for this IN endpoint
 		SET_BIT(this->device->DAINTMSK, (uint32_t)(1UL << epNum) & USB_OTG_DAINTMSK_IEPM_Msk);
 	}
@@ -289,6 +292,9 @@ Status USB::OpenEndpoint(uint8_t epAddr, EndpointType type, uint16_t maxPacketSi
 			WRITE_REG(outEp->DOEPCTL, epConfig);	
 		}
 
+		// Clear any pending interrupts
+		WRITE_REG(outEp->DOEPINT, 0xFFFFFFFF);
+
 		// Unmask the interrupt for this OUT endpoint
 		SET_BIT(this->device->DAINTMSK, (uint32_t)((1UL << epNum) << USB_OTG_DAINTMSK_OEPM_Pos) & USB_OTG_DAINTMSK_OEPM_Msk);
 	}
@@ -297,7 +303,7 @@ Status USB::OpenEndpoint(uint8_t epAddr, EndpointType type, uint16_t maxPacketSi
 }
 
 Status USB::CloseEndpoint(uint8_t epAddr) {
-	if (this->IsValidEndpoint(epAddr) == false) {
+	if(this->IsValidEndpoint(epAddr) == false) {
 		return Status::Error;
 	}
 
@@ -305,7 +311,7 @@ Status USB::CloseEndpoint(uint8_t epAddr) {
 	bool isCmdIn = ((epAddr & 0x80) == 0x80);
 
 	// EP0 is initialized internally by the core/driver, lockout for user change!
-	if (epNum == 0) {
+	if(epNum == 0) {
 		return Status::Error;
 	}
 
@@ -313,39 +319,69 @@ Status USB::CloseEndpoint(uint8_t epAddr) {
 		// Disable IN endpoint and clear bits
 		USB_OTG_INEndpointTypeDef* inEp = ((USB_OTG_INEndpointTypeDef *)((uint32_t)this->instance + USB_OTG_IN_ENDPOINT_BASE + ((epNum) * USB_OTG_EP_REG_SIZE)));
 
-		MODIFY_REG(inEp->DIEPCTL, USB_OTG_DIEPCTL_SNAK | USB_OTG_DIEPCTL_EPDIS, USB_OTG_DIEPCTL_SNAK | USB_OTG_DIEPCTL_EPDIS);
+		if((inEp->DIEPCTL & USB_OTG_DIEPCTL_EPENA) == USB_OTG_DIEPCTL_EPENA) {
+			MODIFY_REG(inEp->DIEPCTL, USB_OTG_DIEPCTL_SNAK | USB_OTG_DIEPCTL_EPDIS, USB_OTG_DIEPCTL_SNAK | USB_OTG_DIEPCTL_EPDIS);
+
+			uint32_t timeoutCount = 0xF0000;
+			while (((inEp->DIEPCTL & USB_OTG_DIEPCTL_EPENA) == USB_OTG_DIEPCTL_EPENA) && (timeoutCount > 0)) {
+				timeoutCount--;
+			}
+		}
+
+		// Mask interrupts for this IN endpoint
+		CLEAR_BIT(this->device->DEACHMSK, (uint32_t)(1UL << epNum) & USB_OTG_DAINTMSK_IEPM_Msk);
+		CLEAR_BIT(this->device->DAINTMSK, (uint32_t)(1UL << epNum) & USB_OTG_DAINTMSK_IEPM_Msk);
 
 		inEp->DIEPCTL &= ~(USB_OTG_DIEPCTL_USBAEP |
 							USB_OTG_DIEPCTL_MPSIZ |
 							USB_OTG_DIEPCTL_TXFNUM |
 							USB_OTG_DIEPCTL_SD0PID_SEVNFRM |
 							USB_OTG_DIEPCTL_EPTYP);
-
-		// Mask interrupts for this IN endpoint
-		CLEAR_BIT(this->device->DEACHMSK, (uint32_t)(1UL << epNum) & USB_OTG_DAINTMSK_IEPM_Msk);
-		CLEAR_BIT(this->device->DAINTMSK, (uint32_t)(1UL << epNum) & USB_OTG_DAINTMSK_IEPM_Msk);
 	}
 	else {
 		// Disable OUT endpoint and clear bits
 		USB_OTG_OUTEndpointTypeDef* outEp = ((USB_OTG_OUTEndpointTypeDef *)((uint32_t)this->instance + USB_OTG_OUT_ENDPOINT_BASE + ((epNum) * USB_OTG_EP_REG_SIZE)));
-	
-		MODIFY_REG(outEp->DOEPCTL, USB_OTG_DOEPCTL_SNAK | USB_OTG_DOEPCTL_EPDIS, USB_OTG_DOEPCTL_SNAK | USB_OTG_DOEPCTL_EPDIS);
+
+		if((outEp->DOEPCTL & USB_OTG_DOEPCTL_EPENA) == USB_OTG_DOEPCTL_EPENA) {
+			// Assert Global OUT NAK to pause incoming traffic
+			if((this->instance->GINTSTS & USB_OTG_GINTSTS_BOUTNAKEFF) == 0x00) {
+				MODIFY_REG(this->device->DCTL, USB_OTG_DCTL_SGONAK, USB_OTG_DCTL_SGONAK);
+			}
+
+			uint32_t timeoutCount = 0xF0000;
+			while (((this->instance->GINTSTS & USB_OTG_GINTSTS_BOUTNAKEFF) == 0x00) && (timeoutCount > 0)) {
+				timeoutCount--;
+			}
+
+			MODIFY_REG(outEp->DOEPCTL, USB_OTG_DOEPCTL_SNAK | USB_OTG_DOEPCTL_EPDIS, USB_OTG_DOEPCTL_SNAK | USB_OTG_DOEPCTL_EPDIS);
+
+			timeoutCount = 0xF0000;
+			while (((outEp->DOEPCTL & USB_OTG_DOEPCTL_EPENA) == USB_OTG_DOEPCTL_EPENA) && (timeoutCount > 0)) {
+				timeoutCount--;
+			}
+
+			// Clear the EPDISD flag
+			WRITE_REG(outEp->DOEPINT, USB_OTG_DOEPINT_EPDISD);
+
+			// Clear Global OUT NAK
+			MODIFY_REG(this->device->DCTL, USB_OTG_DCTL_CGONAK, USB_OTG_DCTL_CGONAK);
+		}
+
+		// Mask interrupts for this OUT endpoint
+		CLEAR_BIT(this->device->DEACHMSK, (uint32_t)((1UL << epNum) << USB_OTG_DAINTMSK_OEPM_Pos) & USB_OTG_DAINTMSK_OEPM_Msk);
+		CLEAR_BIT(this->device->DAINTMSK, (uint32_t)((1UL << epNum) << USB_OTG_DAINTMSK_OEPM_Pos) & USB_OTG_DAINTMSK_OEPM_Msk);
 
 		outEp->DOEPCTL &= ~(USB_OTG_DOEPCTL_USBAEP |
 							USB_OTG_DOEPCTL_MPSIZ |
 							USB_OTG_DOEPCTL_SD0PID_SEVNFRM |
 							USB_OTG_DOEPCTL_EPTYP);
-
-		// Mask interrupts for this OUT endpoint
-		CLEAR_BIT(this->device->DEACHMSK, (uint32_t)((1UL << epNum) << USB_OTG_DAINTMSK_OEPM_Pos) & USB_OTG_DAINTMSK_OEPM_Msk);
-		CLEAR_BIT(this->device->DAINTMSK, (uint32_t)((1UL << epNum) << USB_OTG_DAINTMSK_OEPM_Pos) & USB_OTG_DAINTMSK_OEPM_Msk);
 	}
 	
 	return Status::Ok;
 }
 
 Status USB::StallEndpoint(uint8_t epAddr) {
-	if (this->IsValidEndpoint(epAddr) == false) {
+	if(this->IsValidEndpoint(epAddr) == false) {
 		return Status::Error;
 	}
 
@@ -367,7 +403,7 @@ Status USB::StallEndpoint(uint8_t epAddr) {
 }
 
 Status USB::ClearStall(uint8_t epAddr) {
-	if (this->IsValidEndpoint(epAddr) == false) {
+	if(this->IsValidEndpoint(epAddr) == false) {
 		return Status::Error;
 	}
 
@@ -429,7 +465,7 @@ bool USB::IsStalled(uint8_t epAddr) {
 }
 
 Status USB::Transmit(uint8_t epAddr, const uint8_t* buf, uint32_t len) {
-	if (this->IsValidEndpoint(epAddr) == false) {
+	if(this->IsValidEndpoint(epAddr) == false) {
 		return Status::Error;
 	}
 
@@ -449,19 +485,16 @@ Status USB::Transmit(uint8_t epAddr, const uint8_t* buf, uint32_t len) {
 		pktCnt = (len + maxPacketSize - 1) / maxPacketSize;
 	}
 
-	uint32_t tSiz = (len & USB_OTG_DIEPTSIZ_XFRSIZ_Msk) | ((pktCnt << USB_OTG_DIEPTSIZ_PKTCNT_Pos) & USB_OTG_DIEPTSIZ_PKTCNT_Msk);
-	// MODIFY_REG(inEp->DIEPTSIZ, USB_OTG_DIEPTSIZ_PKTCNT, (pktCnt << USB_OTG_DIEPTSIZ_PKTCNT_Pos) & USB_OTG_DIEPTSIZ_PKTCNT_Msk);
+	MODIFY_REG(inEp->DIEPTSIZ, USB_OTG_DIEPTSIZ_PKTCNT, (pktCnt << USB_OTG_DIEPTSIZ_PKTCNT_Pos) & USB_OTG_DIEPTSIZ_PKTCNT_Msk);
 	
 	uint8_t epType = (inEp->DIEPCTL & USB_OTG_DIEPCTL_EPTYP_Msk) >> USB_OTG_DIEPCTL_EPTYP_Pos;
 	if(epType == 0x01) {
 		//EP_TYPE_ISOC
 		uint32_t mulCnt = (pktCnt > 3) ? 3 : pktCnt; // Clamp to max 3
-		tSiz |= ((mulCnt << USB_OTG_DIEPTSIZ_MULCNT_Pos) & USB_OTG_DIEPTSIZ_MULCNT_Msk);
-		// MODIFY_REG(inEp->DIEPTSIZ, USB_OTG_DIEPTSIZ_MULCNT, (pktCnt << USB_OTG_DIEPTSIZ_MULCNT_Pos) & USB_OTG_DIEPTSIZ_MULCNT_Msk);
+		MODIFY_REG(inEp->DIEPTSIZ, USB_OTG_DIEPTSIZ_MULCNT, (mulCnt << USB_OTG_DIEPTSIZ_MULCNT_Pos) & USB_OTG_DIEPTSIZ_MULCNT_Msk);
 	}
 
-	WRITE_REG(inEp->DIEPTSIZ, tSiz);
-	// MODIFY_REG(inEp->DIEPTSIZ, USB_OTG_DIEPTSIZ_XFRSIZ, (len) & USB_OTG_DIEPTSIZ_XFRSIZ_Msk);
+	MODIFY_REG(inEp->DIEPTSIZ, USB_OTG_DIEPTSIZ_XFRSIZ, (len) & USB_OTG_DIEPTSIZ_XFRSIZ_Msk);
 
 	// Save endpoint transfer context
 	this->inEpState[epNum].buffer = (uint8_t*)buf;
@@ -511,7 +544,7 @@ Status USB::Transmit(uint8_t epAddr, const uint8_t* buf, uint32_t len) {
 }
 
 Status USB::Receive(uint8_t epAddr, uint8_t* buf, uint32_t len) {
-	if (this->IsValidEndpoint(epAddr) == false) {
+	if(this->IsValidEndpoint(epAddr) == false) {
 		return Status::Error;
 	}
 
@@ -843,12 +876,13 @@ void USB::HandleTxFifoInterrupt(uint8_t epNum) {
 	// Pack bytes into 32-bit words and push to hardware safely
 	for(uint32_t i = 0; i < wordsToWrite; i++) {
 		uint32_t data = 0;
-		if (bytesLeft >= 4) {
+		if(bytesLeft >= 4) {
 			// Fast copy, 32-bit reads
 			data = *((uint32_t*)src);
 			src += 4;
 			bytesLeft -= 4;
-		} else {
+		} 
+		else {
 			// Handle the trailing 1 to 3 bytes
 			for(uint8_t b = 0; b < bytesLeft; b++) {
 				data |= ((uint32_t)(src[b]) << (b * 8));
@@ -864,7 +898,7 @@ void USB::HandleTxFifoInterrupt(uint8_t epNum) {
 	this->inEpState[epNum].count = bytesLeft;
 
 	// If all bytes are written, mask this interrupt. 
-	if (bytesLeft == 0) {
+	if(bytesLeft == 0) {
 		CLEAR_BIT(this->device->DIEPEMPMSK, 1UL << (epNum & EP_ADDR_MSK));
 	}
 }
@@ -880,7 +914,7 @@ Status USB::FlushTxFifo(uint8_t epNum) {
 	}
 
 	// Flush TX Fifo
-	MODIFY_REG(this->instance->GRSTCTL,  USB_OTG_GRSTCTL_TXFNUM, USB_OTG_GRSTCTL_TXFFLSH | ((epNum) << USB_OTG_GRSTCTL_TXFNUM_Pos));
+	MODIFY_REG(this->instance->GRSTCTL, USB_OTG_GRSTCTL_TXFNUM, USB_OTG_GRSTCTL_TXFFLSH | ((epNum) << USB_OTG_GRSTCTL_TXFNUM_Pos));
 	
 	timeoutCount = 1000000;
 	while((this->instance->GRSTCTL & USB_OTG_GRSTCTL_TXFFLSH) == USB_OTG_GRSTCTL_TXFFLSH) {
@@ -1032,7 +1066,7 @@ void USB::InterruptHandler() {
 			uint32_t epCtl = inEp->DIEPCTL;
 			uint8_t epType = (epCtl & USB_OTG_DIEPCTL_EPTYP_Msk) >> USB_OTG_DIEPCTL_EPTYP_Pos;
 			
-			if ((epCtl & USB_OTG_DIEPCTL_EPENA) && (epType == 0x01)) { // 0x01 is Isochronous
+			if((epCtl & USB_OTG_DIEPCTL_EPENA) && (epType == 0x01)) { // 0x01 is Isochronous
 				// Forcefully disable it and set SNAK to flush the failed packet
 				inEp->DIEPCTL |= (USB_OTG_DIEPCTL_EPDIS | USB_OTG_DIEPCTL_SNAK);
 			}
