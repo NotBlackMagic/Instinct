@@ -43,5 +43,9 @@ class VisionThread {
 		static void Run(ULONG input);
 
 		// Static callbacks to wrap your I2C hardware calls
+		static void ExposureTimeControl(int16_t value);
+		
 		static void BrightnessControl(int16_t value);
+		static void AutoWhiteBalanceControl(int16_t value);
+		static void WhiteBalanceTemperatureControl(int16_t value);
 };

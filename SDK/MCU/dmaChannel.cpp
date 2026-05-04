@@ -211,10 +211,10 @@ Status DMAChannel::TransferStop() {
 }
 
 uint32_t DMAChannel::GetRemaining() {
-	// uint32_t blkLen = LL_DMA_GetBlkDataLength(this->instance, this->channelIndex);
-	// uint32_t blkCnt = LL_DMA_GetBlkRptCount(this->instance, this->channelIndex);
-	// return (blkLen + this->blockSize * (blkCnt));
-	return this->remainingBytes + LL_DMA_GetBlkDataLength(this->instance, this->channelIndex);
+	uint32_t blkLen = LL_DMA_GetBlkDataLength(this->instance, this->channelIndex);
+	uint32_t blkCnt = LL_DMA_GetBlkRptCount(this->instance, this->channelIndex);
+	return this->remainingBytes + blkLen + (this->blockSize * blkCnt);
+	// return this->remainingBytes + LL_DMA_GetBlkDataLength(this->instance, this->channelIndex);
 }
 
 void DMAChannel::ConfigureRIF(bool isSecure, bool isPrivileged) {

@@ -19,4 +19,5 @@
 #include "common.hpp"
 #include "power.hpp"
 #include "sensors.hpp"
+#include "state.hpp"
 #include "topicIDs.hpp"

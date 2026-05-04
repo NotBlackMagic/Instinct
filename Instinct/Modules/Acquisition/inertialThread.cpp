@@ -10,7 +10,9 @@ TX_EVENT_FLAGS_GROUP InertialThread::event;
 // Global/Shared timestamp for the EKF
 volatile uint32_t imuTimestampUs = 0;
 
-static Topic<ImuMsg> topicImu("imu", static_cast<uint8_t>(TopicID::Imu));
+Topic<IMUMsg> InertialThread::topicIMU[3] = {	Topic<IMUMsg>("imu", static_cast<uint8_t>(TopicID::Imu), 0),
+												Topic<IMUMsg>("imu", static_cast<uint8_t>(TopicID::Imu), 1),
+												Topic<IMUMsg>("imu", static_cast<uint8_t>(TopicID::Imu), 2)};
 
 void InertialThread::OnboardIntCallback(void* context, EXTIManager::Edge edge) {
 	// Get current sample timestamp, lowest latency/jitter
@@ -29,24 +31,21 @@ void InertialThread::Ext2IntCallback(void* context, EXTIManager::Edge edge) {
 }
 
 void InertialThread::Init() {
-	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("ACQ_Inert"),
-											InertialThread::Run,
-											0,
-											threadStack,
-											sizeof(threadStack),
-											0,
-											0,
-											TX_NO_TIME_SLICE,
-											TX_AUTO_START);
+	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("ACQ_Inert"),
+													InertialThread::Run, 0,
+													threadStack, sizeof(threadStack),
+													3, 0,
+													TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX ACQ Inert Thread Create Failed.");
 	}
 
-	Broker::RegisterTopic(&topicImu);
+	Broker::RegisterTopic(&topicIMU[0]);
+	Broker::RegisterTopic(&topicIMU[1]);
 }
 
 void InertialThread::Run(ULONG input) {
-	ImuMsg imuInt;
+	IMUMsg imuInt;
 
 	LOG_INFO("Inertial Thread Initialized.");
 
@@ -65,8 +64,8 @@ void InertialThread::Run(ULONG input) {
 	LSM6DSO::Config lsmCfg = {
 		.accelScale = LSM6DSO::AccelScale::G16,
 		.gyroScale = LSM6DSO::GyroScale::DPS2000,
-		.accelOdr = LSM6DSO::SampleRate::Hz26,
-		.gyroOdr = LSM6DSO::SampleRate::Hz26
+		.accelOdr = LSM6DSO::SampleRate::Hz1666,
+		.gyroOdr = LSM6DSO::SampleRate::Hz1666
 	};
 
 	if(onboardIMU.Init(lsmCfg) == Status::Ok) {
@@ -87,8 +86,8 @@ void InertialThread::Run(ULONG input) {
 	ICM45686::Config icmCfg = {
 		.accelScale = ICM45686::AccelScale::G16,
 		.gyroScale = ICM45686::GyroScale::DPS2000,
-		.accelOdr = ICM45686::OutputDataRate::Hz25,
-		.gyroOdr = ICM45686::OutputDataRate::Hz25
+		.accelOdr = ICM45686::OutputDataRate::Hz1600,
+		.gyroOdr = ICM45686::OutputDataRate::Hz1600
 	};
 
 	if(ext2IMU.Init(icmCfg) == Status::Ok) {
@@ -117,8 +116,6 @@ void InertialThread::Run(ULONG input) {
 			// Get new data from IMU
 			ext2IMU.RequestData();
 			reqICM = 0x01;
-
-			ledRed.Toggle();
 		}
 		else if(status != TX_SUCCESS) {
 			// Handle sensor timeout (e.g., attempt software reset or trigger failsafe)
@@ -129,7 +126,7 @@ void InertialThread::Run(ULONG input) {
 		if(reqICM == 0x01) {
 			imuInt.timestamp = imuTimestampUs;
 			ext2IMU.GetData(imuInt.accel, imuInt.gyro, &imuInt.temperature);
-			topicImu.Publish(imuInt);
+			topicIMU[0].Publish(imuInt);
 		}
 	}
 }

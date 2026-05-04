@@ -152,6 +152,12 @@ class USB {
 			return this->config.speed;
 		}
 
+		/// @brief Gets the current USB frame number.
+		/// @return USB frame number.
+		uint16_t GetFrameNumber() const {
+			return static_cast<uint16_t>((this->device->DSTS >> 8) & 0x3FFF);
+		}
+
 		/// @brief Start/prepare the EP0 for a new transfer.
 		void StartEp0Setup();
 		

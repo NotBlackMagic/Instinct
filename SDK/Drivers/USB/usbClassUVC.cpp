@@ -366,7 +366,7 @@ const uint8_t* USBClassUVC::GetConfigDescriptor(USB::BusSpeed speed, uint16_t* l
 			uint8_t bytesPerPixel = (frame.format == PixelFormat::YUV420_NV12) ? 1 : 2;
 			uint32_t maxFrameSize = frame.width * frame.height * bytesPerPixel;
 
-			this->activeUVCDescriptor[offset++] = 30;			// bLength
+			this->activeUVCDescriptor[offset++] = frameDescLength;	// bLength
 			this->activeUVCDescriptor[offset++] = 0x24;			// bDescriptorType
 			this->activeUVCDescriptor[offset++] = frameSubtype;	// bDescriptorSubtype
 			this->activeUVCDescriptor[offset++] = frameIndex;	// bFrameIndex
@@ -463,7 +463,7 @@ const uint8_t* USBClassUVC::GetConfigDescriptor(USB::BusSpeed speed, uint16_t* l
 Status USBClassUVC::OnSetup(USB& usb, const USB::SetupPacket& setup) {
 	(void)usb;
 
-	LOG_INFO("SETUP: RT:%02X REQ:%02X VAL:%04X IDX:%04X LEN:%d", setup.requestType, setup.request, setup.value, setup.index, setup.length);
+	// LOG_INFO("SETUP: RT:%02X REQ:%02X VAL:%04X IDX:%04X LEN:%d", setup.requestType, setup.request, setup.value, setup.index, setup.length);
 
 	uint8_t requestTypeMask = setup.requestType & 0x60;
 	uint8_t recipientMask = setup.requestType & 0x1F;
@@ -539,14 +539,12 @@ Status USBClassUVC::OnSetup(USB& usb, const USB::SetupPacket& setup) {
 						this->bus->Receive(0x00, nullptr, 0); 
 						return this->bus->Transmit(0x80, this->probeCommitBytes, 34);
 					case UVCRequest::GetInformation:
-						// Windows asks: "What can I do with this control?"
 						// Bit 0 = Supports GET, Bit 1 = Supports SET. (0x03 means both).
 						this->probeCommitBytes[0] = 0x03;
 						this->bus->Receive(0x00, nullptr, 0); 
 						return this->bus->Transmit(0x80, this->probeCommitBytes, 1);
 					case UVCRequest::GetLength:
-						// Windows asks: "How many bytes is your Probe/Commit structure?"
-						// We must reply with exactly 34 (0x0022 in little-endian).
+						// How many bytes are in the Probe/Commit structure
 						this->probeCommitBytes[0] = 34;		// 0x22
 						this->probeCommitBytes[1] = 0x00;	// 0x00
 						this->bus->Receive(0x00, nullptr, 0); 
@@ -581,6 +579,18 @@ Status USBClassUVC::OnSetup(USB& usb, const USB::SetupPacket& setup) {
 	}
 
 	return Status::Error; // Unknown or unhandled request
+}
+
+Status USBClassUVC::OnSoF(USB& usb) {
+	(void)usb;
+
+	// // A new microframe has physically started on the bus.
+	// // If we are streaming and the hardware is free, push the data now.
+	// if(this->isStreaming && this->txBusy == false) {
+	// 	this->StartTX();
+	// }
+
+	return Status::Ok;
 }
 
 Status USBClassUVC::OnDataIn(USB& usb, uint8_t epNum) {
@@ -676,6 +686,15 @@ Status USBClassUVC::OnDataOut(USB& usb, uint8_t epNum, uint32_t len) {
 	return Status::Ok;
 }
 
+Status USBClassUVC::OnError(USB& usb, uint8_t epNum) {
+	(void)usb;
+	if(epNum == (videoInEp & 0x7F)) {
+		// The hardware missed a frame. Drop the busy lock.
+		this->txBusy = false;
+	}
+	return Status::Ok;
+}
+
 void USBClassUVC::SetControls(const ControlConfig& config) {
 	this->controls = config;
 }
@@ -705,8 +724,12 @@ Status USBClassUVC::SubmitFrame(const VisionFrame* frame) {
 	}
 
 	// Set up the tracking variables for the new frame
+	this->frameIdToggle = (this->frameIdToggle == 0) ? 1 : 0;
 	this->frameBuffer = frame->startAddress;
 	this->frameBufferRemaining = frame->payloadSize;
+
+	// Convert microseconds (1 MHz) to UVC Clock Frequency (6 MHz, as set in UVC Descriptor "dwClockFrequency" field)
+	this->framePTS = static_cast<uint32_t>(frame->timestampUs * 6);
 
 	// Kickstart the transmission pipeline
 	this->StartTX();
@@ -719,28 +742,30 @@ void USBClassUVC::StartTX() {
 		return;
 	}
 
-	// Minimum UVC Payload Header length
-	uint8_t headerLength = 2; 
+	// UVC Payload Header length, with PTS (4 bytes) and SCR (6 bytes)
+	uint8_t headerLength = 12; 
 
 	// Header Bitfield Configuration
 	// Bit 0: FID (Frame ID) - Toggles per frame
 	// Bit 1: EOF (End of Frame) - Set on the very last packet
+	// Bit 2: SCR present
+	// Bit 3_ PTS present
 	// Bit 7: EOH (End of Header) - Always set to 1 for standard compliance
-	uint8_t headerInfo = 0x80; 
+	uint8_t headerInfo = 0x8C;
 	if(this->frameIdToggle != 0) {
 		headerInfo |= 0x01; // Set the FID bit
 	}
 
 	// Handle the Idle / Starved state (in Isochronous mode, something has to be sent always!)
 	if(this->frameBufferRemaining == 0) {
-		this->epInBuffer[0] = headerLength;
-		this->epInBuffer[1] = headerInfo;
+		this->epInBuffer[0] = 2;
+		this->epInBuffer[1] = 0x80 | (this->frameIdToggle != 0 ? 0x01 : 0x00);
 		this->txBusy = true;
-		this->bus->Transmit(this->videoInEp, this->epInBuffer, headerLength);
+		this->bus->Transmit(this->videoInEp, this->epInBuffer, 2);
 		return;
 	}
 
-	// Calculate how much payload data we can fit in this single hardware packet
+	// Calculate how much payload data can fit in this single hardware packet
 	uint32_t maxPayloadSize = this->isoMaxPacketSize - headerLength;
 	uint32_t bytesToSend = this->frameBufferRemaining;
 	bool isLastPacket = false;
@@ -758,17 +783,28 @@ void USBClassUVC::StartTX() {
 	this->epInBuffer[0] = headerLength;
 	this->epInBuffer[1] = headerInfo;
 
+	// Pack PTS (Requires a hardware timer ticking at 100ns or 1ms resolution)
+	this->epInBuffer[2] = static_cast<uint8_t>(this->framePTS & 0xFF);
+	this->epInBuffer[3] = static_cast<uint8_t>((this->framePTS >> 8) & 0xFF);
+	this->epInBuffer[4] = static_cast<uint8_t>((this->framePTS >> 16) & 0xFF);
+	this->epInBuffer[5] = static_cast<uint8_t>((this->framePTS >> 24) & 0xFF);
+
+	// Pack SCR (System Clock Reference - can often mirror PTS for simple streams)
+	// Structure: [STC 32-bit] [SOF Token 16-bit]
+	uint16_t usbSofToken = this->bus->GetFrameNumber();
+	this->epInBuffer[6] = this->epInBuffer[2];
+	this->epInBuffer[7] = this->epInBuffer[3];
+	this->epInBuffer[8] = this->epInBuffer[4];
+	this->epInBuffer[9] = this->epInBuffer[5];
+	this->epInBuffer[10] = static_cast<uint8_t>(usbSofToken & 0xFF);
+	this->epInBuffer[11] = static_cast<uint8_t>((usbSofToken >> 8) & 0xFF);
+
 	// Copy video payload
 	memcpy(&this->epInBuffer[headerLength], this->frameBuffer, bytesToSend);
 
 	// Advance the frame tracking pointers
 	this->frameBuffer += bytesToSend;
 	this->frameBufferRemaining -= bytesToSend;
-
-	// If last packet, toggle FID for the next frame
-	if(isLastPacket == true) {
-		this->frameIdToggle = (this->frameIdToggle == 0) ? 1 : 0;
-	}
 
 	// Lock the pipeline and hand the buffer to driver
 	this->txBusy = true;

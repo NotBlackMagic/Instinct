@@ -119,6 +119,7 @@ extern PWM pwm2Ch3;
 extern PWM pwm2Ch4;
 
 extern UART uart4;
+extern UART hdrUART;
 
 extern DMAChannel dcmiDMAChannel;
 extern DMAChannel jpegEncInDMAChannel;

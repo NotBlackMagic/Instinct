@@ -98,16 +98,16 @@ Status LSM6DSO::Init(const Config& config) {
 	return Status::Ok;
 }
 
-Status Reset() {
+Status LSM6DSO::Reset() {
 	return Status::Ok;
 }
 
 Status LSM6DSO::ReadID(uint8_t& id) {
-	this->ReadRegister(LSM6DSO::Register::WHO_AM_I, id);
+	return this->ReadRegister(LSM6DSO::Register::WHO_AM_I, id);
 }
 
 Status LSM6DSO::ReadStatus(uint8_t& status) {
-	this->ReadRegister(LSM6DSO::Register::STATUS_REG, status);
+	return this->ReadRegister(LSM6DSO::Register::STATUS_REG, status);
 }
 
 Status LSM6DSO::SetScales(AccelScale accelScale, GyroScale gyroScale) {

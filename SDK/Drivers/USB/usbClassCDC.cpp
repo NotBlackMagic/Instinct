@@ -227,6 +227,11 @@ Status USBClassCDC::OnSetup(USB& usb, const USB::SetupPacket& setup) {
 	return Status::Error; // Unknown or unhandled request
 }
 
+Status USBClassCDC::OnSoF(USB& usb) {
+	(void)usb;
+	return Status::Ok;
+}
+
 Status USBClassCDC::OnDataIn(USB& usb, uint8_t epNum) {
 	(void)usb;
 	if(epNum == (bulkInEp & 0x7F)) {
@@ -262,6 +267,11 @@ Status USBClassCDC::OnDataOut(USB& usb, uint8_t epNum, uint32_t len) {
 		// Re-prime the endpoint to receive the next packet into the catch buffer
 		this->bus->Receive(this->bulkOutEp, this->epOutBuffer, this->bulkMaxPacketSize);
 	}
+	return Status::Ok;
+}
+
+Status USBClassCDC::OnError(USB& usb, uint8_t epNum) {
+	(void)usb;
 	return Status::Ok;
 }
 

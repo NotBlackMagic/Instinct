@@ -136,20 +136,23 @@ PWM pwm2Ch4(timer8, PWM::Channel::Ch4);
 UART uart4(UART4);
 extern "C" void UART4_IRQHandler(void) { uart4.InterruptHandler(); }
 
+UART hdrUART(UART7);
+extern "C" void UART7_IRQHandler(void) { hdrUART.InterruptHandler(); }
+
 USB usbHardware(USB1_OTG_HS);
 extern "C" void USB1_OTG_HS_IRQHandler(void) { usbHardware.InterruptHandler(); }
 USBDevice usbDevice(usbHardware);
 USBClassCDC usbCDC;
 USBClassUVC usbUVC;
 
-DMAChannel dcmiDMAChannel(HPDMA1, LL_DMA_CHANNEL_15);
-extern "C" void HPDMA1_Channel15_IRQHandler(void) { dcmiDMAChannel.InterruptHandler(); }
+DMAChannel dcmiDMAChannel(HPDMA1, LL_DMA_CHANNEL_2);
+extern "C" void HPDMA1_Channel2_IRQHandler(void) { dcmiDMAChannel.InterruptHandler(); }
 
-DMAChannel jpegEncInDMAChannel(HPDMA1, LL_DMA_CHANNEL_13);
-extern "C" void HPDMA1_Channel13_IRQHandler(void) { jpegEncInDMAChannel.InterruptHandler(); }
+DMAChannel jpegEncInDMAChannel(HPDMA1, LL_DMA_CHANNEL_0);
+extern "C" void HPDMA1_Channel0_IRQHandler(void) { jpegEncInDMAChannel.InterruptHandler(); }
 
-DMAChannel jpegEncOutDMAChannel(HPDMA1, LL_DMA_CHANNEL_14);
-extern "C" void HPDMA1_Channel14_IRQHandler(void) { jpegEncOutDMAChannel.InterruptHandler(); }
+DMAChannel jpegEncOutDMAChannel(HPDMA1, LL_DMA_CHANNEL_1);
+extern "C" void HPDMA1_Channel1_IRQHandler(void) { jpegEncOutDMAChannel.InterruptHandler(); }
 
 // EXTI Interrupt Routing
 extern "C" void EXTI0_IRQHandler(void) {
@@ -413,7 +416,7 @@ void HardwareInit() {
 	// BoardUART3Init();
 	BoardUART4Init();
 	// BoardUART6Init();
-	// BoardUART7Init();
+	BoardUART7Init();
 	// BoardUART8Init();
 	// XPSI/HyperBus peripherals
 	BoardXSPI1Init();
@@ -456,6 +459,7 @@ void HardwareInit() {
 
 	// Initialize UARTs
 	uart4.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 115200, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
+	hdrUART.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 115200, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
 	LOG_INFO("UARTs Init OK.");
 
 	// Initialize I2Cs

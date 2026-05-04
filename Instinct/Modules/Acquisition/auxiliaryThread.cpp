@@ -10,14 +10,10 @@ static Topic<MagMsg> topicMagExt("magExt", static_cast<uint8_t>(TopicID::Mag), 1
 
 void AuxiliaryThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("ACQ_Aux"),
-											AuxiliaryThread::Run,
-											0,
-											threadStack,
-											sizeof(threadStack),
-											0,
-											0,
-											TX_NO_TIME_SLICE,
-											TX_AUTO_START);
+											AuxiliaryThread::Run, 0,
+											threadStack, sizeof(threadStack),
+											4, 0,
+											TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX ACQ Aux Thread Create Failed.");
 	}
@@ -111,30 +107,30 @@ void AuxiliaryThread::Run(ULONG input) {
 
 	while(1) {
 		// Start request of sensors on DIFFERENT buses
+		magInt.timestamp = Time::GetUs();
+		magExt.timestamp = Time::GetUs();
 		onboardMag.RequestData();
 		extMag.RequestData();
 
 		// Wait for all called/triggered requests
-		magInt.timestamp = Time::GetUs();
 		onboardMag.GetData(magInt.values, &magInt.temperature);
 		onboardMag.ReadTemperature(magInt.temperature);
 		topicMagInt.Publish(magInt);
 
 		// Wait for all called/triggered requests
-		magExt.timestamp = Time::GetUs();
 		extMag.GetData(magExt.values, &magExt.temperature);
 		topicMagExt.Publish(magExt);
 
 		// Start request of sensors on shared buse from previous request
+		baroInt.timestamp = Time::GetUs();
+		baroExt.timestamp = Time::GetUs();
 		onboardBaro.RequestData();
 		extBaro.RequestData();
 
 		// Wait for all called/triggered requests
-		baroInt.timestamp = Time::GetUs();
 		onboardBaro.GetData(&baroInt.pressure, &baroInt.temperature);
 		topicBaroInt.Publish(baroInt);
 
-		baroExt.timestamp = Time::GetUs();
 		extBaro.GetData(&baroExt.pressure, &baroExt.temperature);
 		topicBaroExt.Publish(baroExt);
 

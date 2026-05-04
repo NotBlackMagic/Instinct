@@ -32,5 +32,8 @@ enum class TopicID : uint8_t {
 	Battery = 31,
 
 	// Inputs
-	RC = 40
+	RC = 40,
+
+	// Estimation / State
+	State = 50
 };

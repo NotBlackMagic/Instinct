@@ -33,6 +33,9 @@ add_compile_definitions(
     TX_INCLUDE_USER_DEFINE_FILE
     TX_SINGLE_MODE_SECURE=1
 	FX_INCLUDE_USER_DEFINE_FILE
+
+	ZENOH_THREADX_STM32=1        # Use the built-in ThreadX memory/time hooks
+	Z_FEATURE_NETWORK_CUSTOM=1   # Disable POSIX sockets, use your custom serial link
 )
 
 # Generate firmware version info
@@ -70,6 +73,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Acquisition
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Control
+	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Estimator
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging/PubSub
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging/PubSub/Messages
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/System
@@ -98,6 +102,9 @@ include_directories(
 	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/src/common
 	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/src/h264
 	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/src/jpeg
+	${PLUMA_SDK_PATH}/Middleware/ZenohPico/include
+	${PLUMA_SDK_PATH}/Middleware/ZenohPico/platforms/common
+	${PLUMA_SDK_PATH}/Middleware/ZenohPico/platforms/threadx/stm32
 )
 
 # Sources
@@ -167,6 +174,16 @@ file(GLOB VENC_SOURCES
 	"${VENC_ROOT}/src/jpeg/*.c"
 )
 
+# Zenoh-Pico Sources
+set(ZENOH_ROOT "${PLUMA_SDK_PATH}/Middleware/ZenohPico")
+file(GLOB_RECURSE ZENOH_CORE_SOURCES "${ZENOH_ROOT}/src/*.c")
+file(GLOB ZENOH_PLATFORM_SOURCES
+    "${ZENOH_ROOT}/platforms/common/*.c"
+    "${ZENOH_ROOT}/platforms/threadx/stm32/*.c"
+)
+file(GLOB ZENOH_PORT_SOURCES "${ZENOH_ROOT}/ports/*.cpp")
+set(ZENOH_SOURCES ${ZENOH_CORE_SOURCES} ${ZENOH_PLATFORM_SOURCES} ${ZENOH_PORT_SOURCES})
+
 # Create Executable
 enable_language(ASM)
 
@@ -178,6 +195,7 @@ add_executable(${CMAKE_PROJECT_NAME}
     ${THREADX_SOURCES}
 	${FILEX_SOURCES}
 	${VENC_SOURCES}
+	${ZENOH_SOURCES}
 )
 
 # Linker script

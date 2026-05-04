@@ -18,6 +18,9 @@ class InertialThread {
 		static TX_THREAD threadPtr;
 		static uint8_t threadStack[4096];
 
+		// Sensor Publishers
+		static Topic<IMUMsg> topicIMU[3];
+
 		// Synchronization
 		static TX_EVENT_FLAGS_GROUP event;
 

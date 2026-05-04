@@ -69,6 +69,11 @@ class USBClass {
 		/// @return Status::Ok if was successful.
 		virtual Status OnSetup(USB& usb, const USB::SetupPacket& setup) = 0;
 
+		/// @brief Event handler for USB On Start of Frame.
+		/// @param bus		Passed reference of the low-level bus driver.
+		/// @return Status::Ok if was successful.
+		virtual Status OnSoF(USB& usb) = 0;
+
 		/// @brief Event handler for USB Data In (Bulk write/transfer finished callback).
 		/// @param bus		Passed reference of the low-level bus driver.
 		/// @param epNum	Endpoint number.
@@ -81,6 +86,12 @@ class USBClass {
 		/// @param len		Number of bytes received.
 		/// @return Status::Ok if was successful.
 		virtual Status OnDataOut(USB& usb, uint8_t epNum, uint32_t len) = 0;
+
+		/// @brief Event handler for USB Error.
+		/// @param bus		Passed reference of the low-level bus driver.
+		/// @param epNum	Endpoint number.
+		/// @return Status::Ok if was successful.
+		virtual Status OnError(USB& usb, uint8_t epNum) = 0;
 
 		/// @brief Optional: Called when the host clears an endpoint halt/stall condition.
 		/// @param bus		Passed reference of the low-level bus driver.

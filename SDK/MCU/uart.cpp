@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/i2c.cpp
+ * File:    SDK/MCU/uart.cpp
  */
 
 #include "uart.hpp"
@@ -135,7 +135,7 @@ Status UART::Transmit(uint8_t *buf, uint16_t len) {
 	}
 
 	// Critical section!
-	// UINT state = tx_interrupt_control(TX_INT_DISABLE);
+	UINT state = tx_interrupt_control(TX_INT_DISABLE);
 	txBufHead = tmpHead;
 
 	if(this->isInitialized == true && txBusy == false) {
@@ -143,7 +143,7 @@ Status UART::Transmit(uint8_t *buf, uint16_t len) {
 		StartTX();
 	}
 	// End of critical section
-	// tx_interrupt_control(state);
+	tx_interrupt_control(state);
 
 	// Release UART device
 	if(useLock == true) {

@@ -674,7 +674,7 @@ void USB::HandleEpInInterrupt() {
 					this->FlushTxFifo(epNum);
 					
 					if(this->config.EventCallback != nullptr) {
-						this->config.EventCallback(this->config.callbackContext, Event::TransferComplete, 0x80 | epNum, 0);
+						this->config.EventCallback(this->config.callbackContext, Event::Error, 0x80 | epNum, 0);
 					}
 				}
 			}
@@ -1052,6 +1052,17 @@ void USB::InterruptHandler() {
 	// Handle IN Endpoint Interrupts (IEPINT)
 	if(((this->irqStatus & USB_OTG_GINTSTS_IEPINT) == USB_OTG_GINTSTS_IEPINT)) {
 		this->HandleEpInInterrupt();
+	}
+
+	// Handle Start of Frame (SOF)
+	if(((this->irqStatus & USB_OTG_GINTSTS_SOF) == USB_OTG_GINTSTS_SOF)) {
+		// Clear flags
+		WRITE_REG(this->instance->GINTSTS, USB_OTG_GINTSTS_SOF);
+		
+		if(this->config.EventCallback != nullptr) {
+			// Broadcast the SOF event to the USB classes
+			this->config.EventCallback(this->config.callbackContext, Event::Sof, 0, 0);
+		}
 	}
 
 	// Handle Incomplete Isochronous IN Transfer (IISOIXFR)

@@ -100,6 +100,11 @@ class USBClassCDC : public USBClass {
 		/// @return Status::Ok if was successful.
 		Status OnSetup(USB& usb, const USB::SetupPacket& setup) override;
 
+		/// @brief Event handler for USB On Start of Frame.
+		/// @param bus		Passed reference of the low-level bus driver.
+		/// @return Status::Ok if was successful.
+		Status OnSoF(USB& usb) override;
+
 		/// @brief Event handler for USB Data In (Bulk write/transfer finished callback).
 		/// @param bus		Passed reference of the low-level bus driver.
 		/// @param epNum	Endpoint number.
@@ -112,6 +117,12 @@ class USBClassCDC : public USBClass {
 		/// @param len		Number of bytes received.
 		/// @return Status::Ok if was successful.
 		Status OnDataOut(USB& usb, uint8_t epNum, uint32_t len) override;
+
+		/// @brief Event handler for USB Error.
+		/// @param bus		Passed reference of the low-level bus driver.
+		/// @param epNum	Endpoint number.
+		/// @return Status::Ok if was successful.
+		Status OnError(USB& usb, uint8_t epNum) override;
 
 		/// @brief Writes data to the internal ring buffer.
 		/// @param data	Pointer to data to write (will be copied to ring buffer so does not need to be kept after function call).

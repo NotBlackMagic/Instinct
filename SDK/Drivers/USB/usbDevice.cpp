@@ -77,6 +77,9 @@ void USBDevice::EventHandler(USB::Event event, uint8_t epAddr, uint32_t len) {
 			// TODO: Optionally restore state based on address
 			break;
 		case USB::Event::Sof:
+			for(uint8_t i = 0; i < this->classCount; i++) {
+				this->classes[i]->OnSoF(this->bus);
+			}
 			break;
 		case USB::Event::Setup: {
 			this->HandleSetup(epAddr & 0x7F);
@@ -87,6 +90,11 @@ void USBDevice::EventHandler(USB::Event event, uint8_t epAddr, uint32_t len) {
 			this->HandleTransferComplete(epAddr, len);
 			break;
 		case USB::Event::Error:
+			for(uint8_t i = 0; i < this->classCount; i++) {
+				if(this->classes[i]->HasEndpoint(epAddr) == true) {
+					this->classes[i]->OnError(this->bus, epAddr & 0x7F); 
+				}
+			}
 			break;
 		default:
 			break;
@@ -203,7 +211,8 @@ void USBDevice::HandleTransferComplete(uint8_t epAddr, uint32_t len) {
 			if(this->classes[i]->HasEndpoint(epAddr) == true) {
 				if(isCmdIn == true) {
 					this->classes[i]->OnDataIn(this->bus, epNum);
-				} else {
+				}
+				else {
 					this->classes[i]->OnDataOut(this->bus, epNum, len);
 				}
 				return; // Event handled

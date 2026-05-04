@@ -102,9 +102,9 @@ class Topic : public TopicBase {
 				// Update Stats
 				subCount = subCount - 1; 
 				
-				// Clean up the semaphore
-				// This will wake up any thread waiting on this semaphore with TX_DELETED
-				tx_semaphore_delete(&sub->semaphore);
+				// Clean up the event group
+				// This will wake up any thread waiting on this event with TX_DELETED
+				tx_event_flags_delete(&sub->eventGroup);
 				sub->isValid = false;
 			}
 
@@ -152,7 +152,7 @@ class Topic : public TopicBase {
 			// Notify all subscribers
 			Subscriber<T>* curr = head;
 			while (curr != nullptr) {
-				tx_semaphore_put(&curr->semaphore);
+				tx_event_flags_set(&curr->eventGroup, 0x01, TX_OR);
 				curr = curr->next;
 			}
 		}
@@ -193,7 +193,8 @@ class Topic : public TopicBase {
 				return false;
 			}
 
-			UINT status = tx_semaphore_get(&sub->semaphore, ticks);
+			ULONG flags;
+			UINT status = tx_event_flags_get(&sub->eventGroup, 0x01, TX_OR_CLEAR, &flags, ticks);
 		
 			if(status == TX_SUCCESS) {
 				Peek(msg); // Reuse the read function

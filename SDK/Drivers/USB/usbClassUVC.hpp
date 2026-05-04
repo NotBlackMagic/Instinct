@@ -46,23 +46,23 @@ class USBClassUVC : public USBClass {
 
 		/// @brief Processing Unit Control Selectors (Used in Setup Packets)
 		struct PUSelector {
-			static constexpr uint8_t BacklightCompensation  = 0x01;
-			static constexpr uint8_t Brightness             = 0x02;
-			static constexpr uint8_t Contrast               = 0x03;
-			static constexpr uint8_t Gain                   = 0x04;
-			static constexpr uint8_t PowerLineFrequency     = 0x05;
-			static constexpr uint8_t Hue                    = 0x06;
-			static constexpr uint8_t Saturation             = 0x07;
-			static constexpr uint8_t Sharpness              = 0x08;
-			static constexpr uint8_t Gamma                  = 0x09;
-			static constexpr uint8_t WhiteBalanceTemp       = 0x0A;
-			static constexpr uint8_t WhiteBalanceComponent  = 0x0B;
-			static constexpr uint8_t DigitalMultiplier      = 0x0C;
-			static constexpr uint8_t DigitalMultiplierLimit = 0x0D;
-			static constexpr uint8_t HueAuto                = 0x0E;
-			static constexpr uint8_t WhiteBalanceTempAuto   = 0x0F;
-			static constexpr uint8_t WhiteBalanceCompAuto   = 0x10;
-			static constexpr uint8_t ContrastAuto           = 0x11;
+				static constexpr uint8_t BacklightCompensation	= 0x01;
+				static constexpr uint8_t Brightness				= 0x02;
+				static constexpr uint8_t Contrast               = 0x03;
+				static constexpr uint8_t Gain                   = 0x04;
+				static constexpr uint8_t PowerLineFrequency     = 0x05;
+				static constexpr uint8_t Hue                    = 0x06;
+				static constexpr uint8_t Saturation             = 0x07;
+				static constexpr uint8_t Sharpness              = 0x08;
+				static constexpr uint8_t Gamma                  = 0x09;
+				static constexpr uint8_t WhiteBalanceTemp       = 0x0A; // Matches Manual slider
+				static constexpr uint8_t WhiteBalanceTempAuto   = 0x0B; // THIS WAS 0x0F - FIX IT
+				static constexpr uint8_t WhiteBalanceComponent  = 0x0C; // THIS WAS 0x0B - FIX IT
+				static constexpr uint8_t WhiteBalanceCompAuto   = 0x0D; // THIS WAS 0x10 - FIX IT
+				static constexpr uint8_t DigitalMultiplier      = 0x0E;
+				static constexpr uint8_t DigitalMultiplierLimit = 0x0F;
+				static constexpr uint8_t HueAuto                = 0x10;
+				static constexpr uint8_t ContrastAuto           = 0x11;
 		};
 
 		/// @brief Input Terminal Controls (Sensor/Lens Adjustments)
@@ -223,6 +223,11 @@ class USBClassUVC : public USBClass {
 		/// @return Status::Ok if was successful.
 		Status OnSetup(USB& usb, const USB::SetupPacket& setup) override;
 
+		/// @brief Event handler for USB On Start of Frame.
+		/// @param bus		Passed reference of the low-level bus driver.
+		/// @return Status::Ok if was successful.
+		Status OnSoF(USB& usb) override;
+
 		/// @brief Event handler for USB Data In (Isochronous write/transfer finished callback).
 		/// @param bus		Passed reference of the low-level bus driver.
 		/// @param epNum	Endpoint number.
@@ -235,6 +240,12 @@ class USBClassUVC : public USBClass {
 		/// @param len		Number of bytes received.
 		/// @return Status::Ok if was successful.
 		Status OnDataOut(USB& usb, uint8_t epNum, uint32_t len) override;
+
+		/// @brief Event handler for USB Error.
+		/// @param bus		Passed reference of the low-level bus driver.
+		/// @param epNum	Endpoint number.
+		/// @return Status::Ok if was successful.
+		Status OnError(USB& usb, uint8_t epNum) override;
 
 		/// @brief Configures which camera controls are supported by the hardware.
 		/// @param config The control configuration.
@@ -282,6 +293,7 @@ class USBClassUVC : public USBClass {
 		static constexpr uint32_t maxPacketSize = 512;
 		
 		const uint8_t* frameBuffer;
+		uint32_t framePTS;
 		uint32_t frameBufferRemaining;
 		__attribute__((aligned(32))) uint8_t activeUVCDescriptor[maxPacketSize];
 

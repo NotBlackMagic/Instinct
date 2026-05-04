@@ -20,14 +20,14 @@ class Subscriber {
 		Subscriber<T>* next;
 
 		// The signal used to wake up the thread
-		TX_SEMAPHORE semaphore;
+		TX_EVENT_FLAGS_GROUP eventGroup;
 
-		// Flag to check if semaphore is created
+		// Flag to check if event group is created
 		bool isValid;
 
 		void init() {
 			if (!isValid) {
-				tx_semaphore_create(&semaphore, (char*)"SUB", 0);
+				tx_event_flags_create(&eventGroup, (char*)"sub evt");
 				isValid = true;
 			}
 		}

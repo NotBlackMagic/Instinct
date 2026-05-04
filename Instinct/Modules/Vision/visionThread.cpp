@@ -5,21 +5,52 @@ uint8_t VisionThread::threadStack[4096];
 
 static VisionFrame rawFrameBuffer;
 static VisionFrame processedFrameBuffer;
-static VisionFrame jpegFrameBuffer;
+static VisionFrame jpegFrameBuffer[2];
+
+// Wrapper for Manual Exposure
+void VisionThread::ExposureTimeControl(int16_t value) { cameraSD.GetSensor().SetManualExposure(static_cast<uint16_t>(value)); }
 
 // Wrappers for camera controls
-void VisionThread::BrightnessControl(int16_t value) { cameraSD.GetSensor().SetBrightness(value); };
+void VisionThread::BrightnessControl(int16_t value) { cameraSD.GetSensor().SetBrightness(value); }
+
+// Wrapper for Auto White Balance (Boolean: 1 = Auto, 0 = Manual)
+void VisionThread::AutoWhiteBalanceControl(int16_t value) { cameraSD.GetSensor().SetAutoWhiteBalance(value != 0); }
+
+// Wrapper for Manual White Balance (Temperature in Kelvin)
+void VisionThread::WhiteBalanceTemperatureControl(int16_t value) {
+	// Standard UVC range is often ~2800K (warm/red) to ~6500K (cool/blue). OV7670 gains are 0x00 to 0xFF (baseline 0x40).
+	if(value < 2800) {
+		value = 2800;
+	}
+	if(value > 6500) {
+		value = 6500;
+	}
+	// Simple linear interpolation:
+	// 2800K: More red, less blue
+	// 6500K: Less red, more Blue
+	// 4650K: Equilibrium/balanced
+	uint8_t redGain = 0x60 - ((value - 2800) * 0x30) / 3700;
+	uint8_t blueGain = 0x30 + ((value - 2800) * 0x30) / 3700;
+	cameraSD.GetSensor().SetWhiteBalance(redGain, blueGain);
+}
 
 // Register all camera controls to be exposed over UVC
 USBClassUVC::UVCControlState VisionThread::puControlRegistry[] = {
 	// Selector | Len | Min | Max | Res | Def | Cur | Tgt | Dirty | Callback
-	{ USBClassUVC::PUSelector::Brightness, 2, -127, 127, 1, 0, 0, 0, false, BrightnessControl }
+	// Brightness
+	{ USBClassUVC::PUSelector::Brightness, 2, -127, 127, 1, 0, 0, 0, false, BrightnessControl },
+
+	// Auto White Balance (1 Byte, Boolean)
+	{ USBClassUVC::PUSelector::WhiteBalanceTempAuto, 1, 0, 1, 1, 1, 1, 1, false, AutoWhiteBalanceControl },
+
+	// Manual White Balance Temperature (2 Bytes, Kelvin)
+	{ USBClassUVC::PUSelector::WhiteBalanceTemp, 2, 2800, 6500, 10, 4600, 4600, 4600, false, WhiteBalanceTemperatureControl }
 };
-const uint8_t VisionThread::numPUControls = 1;
+const uint8_t VisionThread::numPUControls = 3;
 
 USBClassUVC::UVCControlState VisionThread::itControlRegistry[] = {
 	// Selector | Len | Min | Max | Res | Def | Cur | Tgt | Dirty | Callback
-	{ USBClassUVC::ITSelector::ExposureTimeAbsolute, 10, 1000, 10, 100, 0, 0, 0, false, nullptr }
+	{ USBClassUVC::ITSelector::ExposureTimeAbsolute, 4, 1, 1000, 1, 100, 100, 100, false, ExposureTimeControl}
 };
 const uint8_t VisionThread::numITControls = 1; 
 
@@ -53,6 +84,10 @@ void VisionThread::Run(ULONG input) {
 	LOG_INFO("SD-CAM Initialized.");
 	tx_thread_sleep(1000);
 
+	// cameraSD.GetSensor().SetManualExposure(0);
+	cameraSD.GetSensor().SetMaxGain(OV7670::GainCeiling::x4);
+	// cameraSD.GetSensor().SetTestPattern(true);
+
 	status = jpegEncoder.Init();
 	if(status != Status::Ok) {
 		LOG_ERR("JPEG Encoder Init Failed.");
@@ -77,20 +112,29 @@ void VisionThread::Run(ULONG input) {
 	processedFrameBuffer.allocatedSize = 640 * 480 * 2;
 	processedFrameBuffer.format = PixelFormat::Unknown;	// Handled by processor
 
-	jpegFrameBuffer.startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x200000); // Offset past raw buffer
-	jpegFrameBuffer.width = 640;
-	jpegFrameBuffer.height = 480;
-	jpegFrameBuffer.allocatedSize = 200 * 1024;		// 200 KB worst-case
-	jpegFrameBuffer.format = PixelFormat::Unknown;	// Handled by codec
-	jpegFrameBuffer.codec = VisionCodec::Jpeg;
+	jpegFrameBuffer[0].startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x200000); // Offset past raw buffer
+	jpegFrameBuffer[0].width = 640;
+	jpegFrameBuffer[0].height = 480;
+	jpegFrameBuffer[0].allocatedSize = 640 * 480 * 2;		// 200 KB worst-case
+	jpegFrameBuffer[0].format = PixelFormat::Unknown;	// Handled by codec
+	jpegFrameBuffer[0].codec = VisionCodec::Jpeg;
+
+	jpegFrameBuffer[1].startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x300000); // Offset past raw buffer
+	jpegFrameBuffer[1].width = 640;
+	jpegFrameBuffer[1].height = 480;
+	jpegFrameBuffer[1].allocatedSize = 640 * 480 * 2;		// 200 KB worst-case
+	jpegFrameBuffer[1].format = PixelFormat::Unknown;	// Handled by codec
+	jpegFrameBuffer[1].codec = VisionCodec::Jpeg;
 
 	uint32_t frameCount = 0;
 	uint32_t uvcDropedCount = 0;
-	uint32_t timestamp = Time::GetMs();
-	uint32_t deltaTime = 0;
+	uint64_t timestamp = Time::GetMs();
+	uint64_t deltaTime = 0;
+	uint32_t timeCap, timeConvMCU, timeEncJpeg;
+
+	uint8_t jpegBufIx = 0;	// The active index for hardware to write to
 
 	bool saveSnapshot = false;
-
 	bool lastBtnState = false;
 	while(1) {
 		// Process pending UVC camera control updates
@@ -130,16 +174,19 @@ void VisionThread::Run(ULONG input) {
 			}
 		}
 
-		uint32_t timeCap, timeConvMCU, timeEncJpeg;
-		uint64_t timestamp = Time::GetUs();
+		// Grab references to the active buffer
+		VisionFrame& jpegBuf = jpegFrameBuffer[jpegBufIx];
+
+		timestamp = Time::GetUs();
 		status = cameraSD.CaptureAsync(rawFrameBuffer);
-		status = Status::Ok;
 		if(status == Status::Ok) {
 			status = cameraSD.CaptureWait(1000);	// Capture takes about 43ms
+			rawFrameBuffer.timestampUs = Time::GetUs();
+
 			timeCap = Time::GetUs() - timestamp;
 			timestamp = Time::GetUs();
 
-			// status = PatternGenerator::ColorBar(rawFrameBuffer);
+			// status = PatternGenerator::Checkerboard(rawFrameBuffer);
 			if(status == Status::Ok) {
 				// Pass through image processor to transfor to MCU blocks
 				status = ImageProcessor::ConvertToMCU(rawFrameBuffer, processedFrameBuffer);	// Conversion takes about 85ms
@@ -147,19 +194,20 @@ void VisionThread::Run(ULONG input) {
 				timestamp = Time::GetUs();
 
 				// Compress Raw Frame to JPEG
-				status = jpegEncoder.EncodeAsync(processedFrameBuffer, jpegFrameBuffer, 80);
+				status = jpegEncoder.EncodeAsync(processedFrameBuffer, jpegBuf, 80);
 				if(status == Status::Ok) {
 					status = jpegEncoder.EncodeWait(1000);	// Encoding takes about 6ms
+					jpegBuf.timestampUs = Time::GetUs();
+
 					timeEncJpeg = Time::GetUs() - timestamp;
 					timestamp = Time::GetUs();
 
-					// LOG_INFO("SD-CAM: Cap %d us, To MCU %d us, Enc %d us", timeCap, timeConvMCU, timeEncJpeg);	// SD-CAM: Cap 42998 us, To MCU 84620 us, Enc 5596 us
-
 					if(status == Status::Ok) {
 						// USB UVC Stuff
-						status = usbUVC.SubmitFrame(&rawFrameBuffer);
+						status = usbUVC.SubmitFrame(&jpegBuf);
 						if(status == Status::Ok) {
-							tx_thread_sleep(50);
+							// tx_thread_sleep(50);
+							jpegBufIx = 1 - jpegBufIx;	// Ping-pong buffer indexing
 						}
 						else {
 							uvcDropedCount += 1;
@@ -173,19 +221,22 @@ void VisionThread::Run(ULONG input) {
 								char fileName[16];
 								snprintf(fileName, sizeof(fileName), "snap%04lu.bin", snapCounter++);
 								// ImageWriter::SaveBMP(rawFrameBuffer, *StorageThread::GetMedia(), fileName);
-								ImageWriter::SaveBinary(jpegFrameBuffer, *StorageThread::GetMedia(), fileName);
+								ImageWriter::SaveBinary(rawFrameBuffer, *StorageThread::GetMedia(), fileName);
+								snprintf(fileName, sizeof(fileName), "snap%04lu.jpeg", snapCounter++);
+								ImageWriter::SaveBinary(jpegBuf, *StorageThread::GetMedia(), fileName);
 							}
 							saveSnapshot = false;
 						}
 
 						frameCount += 1;
-						deltaTime = Time::GetMs() - timestamp;
-						if(deltaTime > 1000) {
+						if(deltaTime < Time::GetMs()) {
 							// Only calculate and report FPS every 1s
-							// LOG_INFO("SD-CAM: %d FPS (UVC Dropped %d)", frameCount, uvcDropedCount);
+							float fps = frameCount / 5.0f;
+							// LOG_INFO("SD-CAM: %.1f FPS (UVC Drop %d/%d)", fps, uvcDropedCount, frameCount);
+							// LOG_INFO("SD-CAM: DCMI %d us, MCU Blk %d us, JPEG %d us", timeCap, timeConvMCU, timeEncJpeg);	// SD-CAM: Cap 32228 us, To MCU 86573 us, Enc 6525 us
 							frameCount = 0;
 							uvcDropedCount = 0;
-							timestamp = Time::GetMs();
+							deltaTime = Time::GetMs() + 5000;
 						}
 					}
 				}

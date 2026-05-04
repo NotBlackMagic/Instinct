@@ -3,21 +3,23 @@
 #include <cstring>
 #include <stdio.h>
 
-#include "auxiliaryThread.hpp"
 #include "i3c.hpp"
-#include "inertialThread.hpp"
 #include "status.hpp"
+
 #include "stm32n6xx_ll_dma.h"
-#include "visionThread.hpp"
-#include "monitorThread.hpp"
-#include "storageThread.hpp"
+
+#include "auxiliaryThread.hpp"
+#include "estimatorThread.hpp"
+#include "inertialThread.hpp"
 #include "loggerThread.hpp"
+#include "monitorThread.hpp"
+#include "sensorHubThread.hpp"
+#include "storageThread.hpp"
+#include "visionThread.hpp"
 
 #include "usbClassCDC.hpp"
 #include "usbClassUVC.hpp"
 #include "usbDevice.hpp"
-
-#include "tx_api.h"
 
 #include "console.hpp"
 #include "hardware.hpp"
@@ -26,22 +28,54 @@
 
 #include "logger.hpp"
 
-static Subscriber<ImuMsg> subIMU;
-static Subscriber<BaroMsg> subBaro;
-static Subscriber<MagMsg> subMag;
+#include "tx_api.h"
 
-#define THREADX_BUFFER_POOL_SIZE				10240
+#define THREADX_BUFFER_POOL_SIZE				12288
 alignas(32) static UCHAR tx_byte_pool_buffer[THREADX_BUFFER_POOL_SIZE];
 static TX_BYTE_POOL threadBytePool;
 static TX_THREAD testThread;
-static TX_THREAD i2cThread;
-static TX_THREAD usbThread;
+
+// extern void InitZenohSerialTransport(z_owned_session_t* session);
+
+// extern "C" {
+//     // This gives the Zenoh C-library access to your ThreadX byte pool
+//     TX_BYTE_POOL* pthreadx_byte_pool = &threadBytePool;
+// }
 
 const uint32_t buffLen = 32 * 1024;
 alignas(32) uint8_t dataW[buffLen];
 alignas(32) uint8_t dataR[buffLen];
 
 void TestThread(ULONG thread_input) {
+	// ZENOH-PICO STUFF!!!!!
+	// 1. Allocate the config struct and pass its pointer to be initialized
+	// z_owned_config_t config;
+	// z_result_t cfg_status = z_config_default(&config);
+
+	// if(cfg_status == 0) {
+	// 	// Tell Zenoh to establish a connection using the Serial subsystem.
+	// 	// This command natively triggers our _z_open_serial_from_dev function.
+	// 	zp_config_insert(z_loan_mut(config), Z_CONFIG_CONNECT_KEY, "serial/any#baudrate=115200");
+
+	// 	z_owned_session_t session;
+	// 	z_result_t open_status = z_open(&session, z_move(config), nullptr);
+
+	// 	if(open_status == 0) {
+	// 		LOG_INFO("Zenoh Session Opened on UART7!");
+	// 	}
+	// 	else {
+	// 		LOG_ERR("Zenoh Session Open Failed!");
+	// 	}
+	// }
+	// else {
+	// 	LOG_ERR("Zenoh Config Init Failed!");
+	// }
+
+	// while(1) {
+	// 	ledBlue.Toggle();
+	// 	tx_thread_sleep(100);
+	// }
+
 	uint32_t i;
 	volatile uint32_t errCnt = 0;
 	volatile uint64_t timestamp = Time::GetUs();
@@ -312,130 +346,6 @@ void TestThread(ULONG thread_input) {
 	}
 }
 
-void I2CThread(ULONG thread_input) {
-	ImuMsg imuLocal;
-	Topic<ImuMsg>* topicImu = Broker::GetTopicByName<ImuMsg>("imu");
-	if(topicImu != nullptr) {
-		topicImu->Subscribe(&subIMU);
-	}
-
-	BaroMsg baroLocal;
-	Topic<BaroMsg>* topicBaro = Broker::GetTopicByName<BaroMsg>("baro");
-	if(topicBaro != nullptr) {
-		topicBaro->Subscribe(&subBaro);
-	}
-
-	MagMsg magLocal;
-	Topic<MagMsg>* topicMag = Broker::GetTopicByName<MagMsg>("mag");
-	if(topicMag != nullptr) {
-		topicMag->Subscribe(&subMag);
-	}
-
-	// uint8_t i3cTxBuf[8];
-	// uint8_t i3cRxBuf[8];
-	// i3cTxBuf[0] = 0x0F;
-	// i3c1.TransferAsync(0x0C, I3C::TargetType::I2C, i3cTxBuf, 1, i3cRxBuf, 1);
-	// i3c1.TransferWait(1000);
-
-	while(1) {
-		if(topicMag->Take(&subMag, magLocal, TX_NO_WAIT) == true) {
-			// LOG_INFO("MAG: x: %d y: %d z: %d %dC", (int)(magLocal.values[0]), (int)(magLocal.values[1]), (int)(magLocal.values[2]), (int)(magLocal.temperature));
-		}
-
-		if(topicImu->Take(&subIMU, imuLocal, TX_NO_WAIT) == true) {
-			// LOG_INFO("ACCEL: x: %d y: %d z: %d %dC", (int)(imuLocal.accel[0]), (int)(imuLocal.accel[1]), (int)(imuLocal.accel[2]), (int)(imuLocal.temperature));
-		}
-
-		if(topicBaro->Take(&subBaro, baroLocal, TX_NO_WAIT) == true) {
-			// LOG_INFO("BARO: %d Pa %dC", (int)(baroLocal.pressure), (int)(baroLocal.temperature));
-		}
-
-		tx_thread_sleep(5000);
-	}
-}
-
-void USBThread(ULONG thread_input) {
-	// // Define your test configuration
-	// USBDevice::Config usbCfg;
-	// usbCfg.vid = 0x1234;					// Dummy VID for testing
-	// usbCfg.pid = 0x5555;					// Dummy PID for testing
-	// usbCfg.version = 0x0100;				// v1.00
-	// usbCfg.manufacturer = "PlumaLabs";
-	// usbCfg.product = "PlumaN6 HD";
-	// usbCfg.serialNumber = "00000003";
-	// usbCfg.maxPower = 50;					// 100mA (value * 2mA)
-	// usbCfg.selfPowered = false;
-
-	// // Define UVC Capabilties/formats
-	// static const FrameFormat formats[] = {
-	// 	// {
-	// 	// 	.width = 640,
-	// 	// 	.height = 480,
-	// 	// 	.frameInterval = 2000000, // 5 FPS in 100ns units
-	// 	// 	.format = PixelFormat::YUV422_YVYU,
-	// 	// 	.codec = VisionCodec::None
-	// 	// }
-	// 	{
-	// 		.width = 640,
-	// 		.height = 480,
-	// 		.frameInterval = 2000000, // 5 FPS in 100ns units
-	// 		.format = PixelFormat::Unknown,
-	// 		.codec = VisionCodec::Jpeg
-	// 	}
-	// };
-
-	// // Initialize and Connect
-	// if(usbDevice.Init(usbCfg) == Status::Ok) {
-	// 	LOG_INFO("USB Init OK");
-
-	// 	// Register the CDC Class before starting the bus
-	// 	if(usbDevice.RegisterClass(&usbCDC) == Status::Ok) {
-	// 		LOG_INFO("USB CDC Registered OK");
-	// 	}
-	// 	else {
-	// 		LOG_INFO("USB CDC Registration Failed!");
-	// 	}
-
-	// 	// Register the UVC Class
-	// 	usbUVC.RegisterFormats(formats, 1);
-	// 	if(usbDevice.RegisterClass(&usbUVC) == Status::Ok) {
-	// 		LOG_INFO("USB UVC Registered OK");
-	// 	}
-	// 	else {
-	// 		LOG_INFO("USB UVC Registration Failed!");
-	// 	}
-
-	// 	if(usbDevice.Start() == Status::Ok) {
-	// 		LOG_INFO("USB Start OK");
-	// 	}
-	// 	else {
-	// 		LOG_INFO("USB Start Failed!");
-	// 	}
-	// }
-	// else {
-	// 	LOG_INFO("USB Init Failed!");
-	// }	
-
-	uint8_t rxBuffer[64];
-	while(1) {
-		// Check for incoming data
-		uint32_t bytesAvailable = usbCDC.Available();
-		if(bytesAvailable > 0) {
-			// Read data out of the ring buffer
-			uint32_t bytesToRead = (bytesAvailable > sizeof(rxBuffer)) ? sizeof(rxBuffer) : bytesAvailable;
-			uint32_t bytesRead = usbCDC.Read(rxBuffer, bytesToRead);
-
-			// Echo the received data back to the host
-			if(bytesRead > 0) {
-				usbCDC.Write(rxBuffer, bytesRead);
-			}
-		}
-
-		// Sleep for 10 ticks (~10ms) to keep the echo responsive without pegging the CPU
-		tx_thread_sleep(10);
-	}
-}
-
 void tx_application_define(void *first_unused_memory) {
 	uint32_t status = TX_SUCCESS;
 	char *pointer;
@@ -458,32 +368,32 @@ void tx_application_define(void *first_unused_memory) {
 	usbCfg.version = 0x0100;				// v1.00
 	usbCfg.manufacturer = "PlumaLabs";
 	usbCfg.product = "PlumaN6 HD";
-	usbCfg.serialNumber = "00000003";
+	usbCfg.serialNumber = "00000001";
 	usbCfg.maxPower = 50;					// 100mA (value * 2mA)
 	usbCfg.selfPowered = false;
 
 	// Define UVC Capabilties/formats
 	static const FrameFormat formats[] = {
-		{
-			.width = 640,
-			.height = 480,
-			.frameInterval = 2000000, // 5 FPS in 100ns units
-			.format = PixelFormat::YUV422_YVYU,
-			.codec = VisionCodec::None
-		}
 		// {
 		// 	.width = 640,
 		// 	.height = 480,
 		// 	.frameInterval = 2000000, // 5 FPS in 100ns units
-		// 	.format = PixelFormat::Unknown,
-		// 	.codec = VisionCodec::Jpeg
+		// 	.format = PixelFormat::YUV422_YVYU,
+		// 	.codec = VisionCodec::None
 		// }
+		{
+			.width = 640,
+			.height = 480,
+			.frameInterval = 2000000, // 5 FPS in 100ns units
+			.format = PixelFormat::Unknown,
+			.codec = VisionCodec::Jpeg
+		}
 	};
 
 	// Register UVC Controls (camera controls over the UVC protocol)
 	USBClassUVC::ControlConfig uvcCtrlConfig;
-	uvcCtrlConfig.puControls = USBClassUVC::PUControl::Brightness;	// Add brightness, more can be added by ORing
-	uvcCtrlConfig.itControls = 0;
+	uvcCtrlConfig.puControls = USBClassUVC::PUControl::Brightness | USBClassUVC::PUControl::WhiteBalanceTempAuto | USBClassUVC::PUControl::WhiteBalanceTemp;	// Add brightness, more can be added by ORing
+	uvcCtrlConfig.itControls = USBClassUVC::ITControl::ExposureTimeAbsolute;
 	uvcCtrlConfig.puControlRegistry = VisionThread::puControlRegistry;
 	uvcCtrlConfig.numPUControls = VisionThread::numPUControls;
 	uvcCtrlConfig.itControlRegistry = VisionThread::itControlRegistry;
@@ -522,16 +432,37 @@ void tx_application_define(void *first_unused_memory) {
 		LOG_INFO("USB Init Failed!");
 	}
 
+	// uint8_t rxBuffer[64];
+	// while(1) {
+	// 	// Check for incoming data
+	// 	uint32_t bytesAvailable = usbCDC.Available();
+	// 	if(bytesAvailable > 0) {
+	// 		// Read data out of the ring buffer
+	// 		uint32_t bytesToRead = (bytesAvailable > sizeof(rxBuffer)) ? sizeof(rxBuffer) : bytesAvailable;
+	// 		uint32_t bytesRead = usbCDC.Read(rxBuffer, bytesToRead);
+
+	// 		// Echo the received data back to the host
+	// 		if(bytesRead > 0) {
+	// 			usbCDC.Write(rxBuffer, bytesRead);
+	// 		}
+	// 	}
+
+	// 	// Sleep for 10 ticks (~10ms) to keep the echo responsive without pegging the CPU
+	// 	tx_thread_sleep(10);
+	// }
+
 	// Start system threads
 	Console::Init(&uart4);
 
 	// Start application threads
 	MonitorThread::Init();
 	StorageThread::Init();
-	VisionThread::Init();
-	// InertialThread::Init();
+	// VisionThread::Init();
+	InertialThread::Init();
 	AuxiliaryThread::Init();
 	LoggerThread::Init();
+	// SensorHubThread::Init();
+	// EstimatorThread::Init();
 
 	// Create a byte memory pool from which to allocate the thread stacks
 	status = tx_byte_pool_create(&threadBytePool, const_cast<char*>("Static Thread Byte Pool"), tx_byte_pool_buffer, THREADX_BUFFER_POOL_SIZE);
@@ -541,49 +472,19 @@ void tx_application_define(void *first_unused_memory) {
 
 	// Create the TestThread
 	// Allocate the stack
-	status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
+	status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 8192, TX_NO_WAIT);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Stack 0 Allocate Failed.");
 	}
 	// Create thread
 	status = tx_thread_create(&testThread, const_cast<char*>("Test Thread"),
 											TestThread, 0,
-											pointer, 2048,
+											pointer, 8192,
 											0, 0,
 											TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Test Thread Create Failed.");
 	}
-	
-	// // Allocate the stack
-	// status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
-	// if(status != TX_SUCCESS) {
-	// 	LOG_ERR("ThreadX Stack 2 Allocate Failed.");
-	// }
-	// // Create thread
-	// status = tx_thread_create(&i2cThread, const_cast<char*>("I2C Thread"),
-	// 										I2CThread, 0,
-	// 										pointer, 2048,
-	// 										3, 0,
-	// 										TX_NO_TIME_SLICE, TX_AUTO_START);
-	// if(status != TX_SUCCESS) {
-	// 	LOG_ERR("ThreadX I2C Thread Create Failed.");
-	// }
-
-	// Allocate the stack
-	// status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 2048, TX_NO_WAIT);
-	// if(status != TX_SUCCESS) {
-	// 	LOG_ERR("ThreadX Stack 3 Allocate Failed.");
-	// }
-	// // Create USB thread
-	// status = tx_thread_create(&usbThread, const_cast<char*>("USB Thread"),
-	// 										USBThread, 0,
-	// 										pointer, 2048,
-	// 										0, 0,
-	// 										TX_NO_TIME_SLICE, TX_AUTO_START);
-	// if(status != TX_SUCCESS) {
-	// 	LOG_ERR("ThreadX USB Thread Create Failed.");
-	// }
 }
 
 int main(void) {

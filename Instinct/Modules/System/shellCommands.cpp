@@ -156,9 +156,9 @@ extern ULONG64 _tx_execution_isr_time_total;
 
 static bool CommandRTOS(const char* args) {
 	(void)args;
-	Logger::Instance().Write("--------------------------------------------------------------------------------\r\n");
-	Logger::Instance().Write("NAME         STATE   PRIO   STACK (Used/Max)   RUN COUNT   CPU %\r\n");
-	Logger::Instance().Write("--------------------------------------------------------------------------------\r\n");
+	Logger::Instance().Write("--------------------------------------------------------------------\r\n");
+	Logger::Instance().Write("NAME         STATE   PRIO     STACK (Used/Max)   RUN COUNT   CPU %\r\n");
+	Logger::Instance().Write("--------------------------------------------------------------------\r\n");
 
 	UINT state = tx_interrupt_control(TX_INT_DISABLE);
 	TX_THREAD* thread = _tx_thread_created_ptr;
@@ -194,9 +194,10 @@ static bool CommandRTOS(const char* args) {
 		uint32_t stackSize = thread->tx_thread_stack_size;
 		uint8_t* deepPtr = (uint8_t*)thread->tx_thread_stack_highest_ptr;	//'highest_ptr' is the lowest address the stack pointer has ever reached (High Watermark).
 		uint8_t* startPtr = (uint8_t*)thread->tx_thread_stack_start;		//'start' is the lowest address (limit). 
+		uint8_t* endPtr = (uint8_t*)thread->tx_thread_stack_end;			//'end' is the XXX address (limit).
 		
-		//Bytes used is the distance from the bottom of the stack to the deepest point
-		uint32_t used = (uint32_t)(deepPtr - startPtr);
+		// Bytes used is the distance from the absolute top down to the deepest point reached
+		uint32_t used = (uint32_t)(endPtr - deepPtr);
 		
 		uint32_t usagePercent = 0;
 		if (stackSize > 0) {
@@ -213,7 +214,7 @@ static bool CommandRTOS(const char* args) {
 #endif
 
 		// Format the line
-		snprintf(buffer, sizeof(buffer), "%-12.12s %-7s %2d     %4lu / %4lu (%2lu%%)   %-9lu   %2lu.%01lu%%\r\n",
+		snprintf(buffer, sizeof(buffer), "%-12.12s %-7s %2d     %5lu / %5lu (%2lu%%)   %-9lu   %2lu.%01lu%%\r\n",
 			thread->tx_thread_name ? thread->tx_thread_name : "???",
 			GetThreadState(thread->tx_thread_state),
 			thread->tx_thread_priority,
@@ -237,14 +238,14 @@ static bool CommandRTOS(const char* args) {
 	uint32_t idlePercent = (totalSystemTime > 0) ? (uint32_t)((totalIdle * 1000) / totalSystemTime) : 0;
 	uint32_t isrPercent = (totalSystemTime > 0) ? (uint32_t)((totalIsr * 1000) / totalSystemTime) : 0;
 
-	Logger::Instance().Write("--------------------------------------------------------------------------------\r\n");
+	Logger::Instance().Write("--------------------------------------------------------------------\r\n");
 	snprintf(buffer, sizeof(buffer), "System Idle: %2lu.%01lu%%  |  Hardware ISRs: %2lu.%01lu%%\r\n", 
 			(unsigned long)(idlePercent / 10), (unsigned long)(idlePercent % 10),
 			(unsigned long)(isrPercent / 10), (unsigned long)(isrPercent % 10));
 	Logger::Instance().Write(buffer);
 #endif
 
-	Logger::Instance().Write("------------------------------------------------------------\r\n");
+	Logger::Instance().Write("--------------------------------------------------------------------\r\n");
 	return true;
 }
 

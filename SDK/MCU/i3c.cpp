@@ -8,7 +8,7 @@
 #include "i3c.hpp"
 
 // Enable Interrupt-based Logic
-#define I2C_USE_IRQ
+// #define I3C_USE_IRQ
 
 I3C::I3C(I3C_TypeDef *instance) {
 	this->instance = instance;
@@ -49,28 +49,28 @@ Status I3C::Init(const Config &config) {
 			//Only legacy I2C Fast Mode (400kHz)
 			//I2C DC: 30%, I3C DC: 50%, SCL OD Freq: 559 KHz, SCL PP Freq: 12500 KHz
 			LL_I3C_ConfigClockWaveForm(this->instance, 0x4AAE0303);
-			//Bus Free (ns): 2115, Bus Idle (ns): 200'000
+			//SDA Hold Time (cycles): 0.5, Bus Free (ns): 2115, Bus Idle (ns): 200'000
 			LL_I3C_SetCtrlBusCharacteristic(this->instance, 0x00690062);
 			break;
 		case I3C::Mode::Mixed_Fast:
 			//Mixed legacy I2C Fast Mode (400kHz) and I3C SDR at 12.5MHz
 			//I2C DC: 30%, I3C DC: 50%, SCL OD Freq: 559 KHz, SCL PP Freq: 12500 KHz
 			LL_I3C_ConfigClockWaveForm(this->instance, 0x4AAE0303);
-			//Bus Free (ns): 2115, Bus Idle (ns): 200'000
+			//SDA Hold Time (cycles): 0.5, Bus Free (ns): 2115, Bus Idle (ns): 200'000
 			LL_I3C_SetCtrlBusCharacteristic(this->instance, 0x00690062);
 			break;
 		case I3C::Mode::Mixed_FastPlus:
 			//Mixed legacy I2C Fast Mode Plus (1MHz) and I3C SDR at 12.5MHz
 			//I2C DC: 30%, I3C DC: 50%, SCL OD Freq: 1351 KHz, SCL PP Freq: 12500 KHz
 			LL_I3C_ConfigClockWaveForm(this->instance, 0x1D450303);
-			//Bus Free (ns): 1055, Bus Idle (ns): 200'000
+			//SDA Hold Time (cycles): 0.5, Bus Free (ns): 1055, Bus Idle (ns): 200'000
 			LL_I3C_SetCtrlBusCharacteristic(this->instance, 0x00340062);
 			break;
 		case I3C::Mode::Pure_I3C_SDR:
 			//No legacy I2C, only I3C SDR at 12.5MHz
 			//I3C DC: 50%, SCL OD Freq: 2439 KHz, SCL PP Freq: 12500 KHz
 			LL_I3C_ConfigClockWaveForm(this->instance, 0x00240303);
-			//Bus Free (ns): 415, Bus Idle (ns): 200'000
+			//SDA Hold Time (cycles): 0.5, Bus Free (ns): 415, Bus Idle (ns): 200'000
 			LL_I3C_SetCtrlBusCharacteristic(this->instance, 0x00140062);
 			break;
 	}
@@ -310,22 +310,16 @@ Status I3C::TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_
 		}
 
 		// Fill FIFO until full or no more data
-        while (this->txLength > 0 && LL_I3C_IsActiveFlag_TXFNF(this->instance)) {
-            LL_I3C_TransmitData8(this->instance, *this->txBuffer);
-            this->txBuffer = this->txBuffer + 1;
-            this->txLength = this->txLength - 1;
-        }
+		while (this->txLength > 0 && LL_I3C_IsActiveFlag_TXFNF(this->instance)) {
+			LL_I3C_TransmitData8(this->instance, *this->txBuffer);
+			this->txBuffer = this->txBuffer + 1;
+			this->txLength = this->txLength - 1;
+		}
 
 		LL_I3C_RequestTransfer(this->instance);
 
 		// LL_I3C_EnableIT_TXFNF(this->instance);
 		do {
-			if(LL_I3C_IsActiveFlag_ERR(this->instance) == 0x01) {
-				LL_I3C_ClearFlag_ERR(this->instance);
-				tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
-				return Status::Error;
-			}
-
 			if(this->txLength > 0 && LL_I3C_IsActiveFlag_TXFNF(this->instance) == 0x01) {
 				LL_I3C_TransmitData8(this->instance, *this->txBuffer);
 				this->txBuffer = this->txBuffer + 1;
@@ -333,15 +327,27 @@ Status I3C::TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_
 			}
 		} while((READ_REG(this->instance->EVR) & (I3C_EVR_FCF | I3C_EVR_ERRF)) == 0U);
 
+		if(LL_I3C_IsActiveFlag_ERR(this->instance) == 0x01) {
+			volatile uint32_t errorStatus = READ_REG(this->instance->SER);
+			LL_I3C_ClearFlag_ERR(this->instance);
+
+			// Flush FIFO
+			LL_I3C_RequestTxFIFOFlush(this->instance);
+			LL_I3C_RequestRxFIFOFlush(this->instance);
+
+			tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
+			return Status::Error;
+		}
+
 		// Clear flags
-        LL_I3C_ClearFlag_FC(this->instance);
+		LL_I3C_ClearFlag_FC(this->instance);
 	}
 
 	if(this->rxLength > 0) {
 		direction = LL_I3C_DIRECTION_READ;
 
 		// Read phase always ends with STOP in this logic
-        endMode = LL_I3C_GENERATE_STOP;
+		endMode = LL_I3C_GENERATE_STOP;
 
 		if(type == I3C::TargetType::I2C) {
 			LL_I3C_ControllerHandleMessage(this->instance, this->address, this->rxLength, direction, LL_I3C_CONTROLLER_MTYPE_LEGACY_I2C, endMode);
@@ -353,12 +359,6 @@ Status I3C::TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_
 		LL_I3C_RequestTransfer(this->instance);
 
 		do {
-			if(LL_I3C_IsActiveFlag_ERR(this->instance) == 0x01) {
-				LL_I3C_ClearFlag_ERR(this->instance);
-				tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
-				return Status::Error;
-			}
-
 			if(LL_I3C_IsActiveFlag_RXFNE(this->instance) == 0x01) {
 				*this->rxBuffer = LL_I3C_ReceiveData8(this->instance);
 				this->rxBuffer = this->rxBuffer + 1;
@@ -366,8 +366,20 @@ Status I3C::TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_
 			}
 		} while((READ_REG(this->instance->EVR) & (I3C_EVR_FCF | I3C_EVR_ERRF)) == 0U);
 
+		if(LL_I3C_IsActiveFlag_ERR(this->instance) == 0x01) {
+			volatile uint32_t errorStatus = READ_REG(this->instance->SER);
+			LL_I3C_ClearFlag_ERR(this->instance);
+
+			// Flush FIFO
+			LL_I3C_RequestTxFIFOFlush(this->instance);
+			LL_I3C_RequestRxFIFOFlush(this->instance);
+
+			tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
+			return Status::Error;
+		}
+
 		// Clear flags
-        LL_I3C_ClearFlag_FC(this->instance);
+		LL_I3C_ClearFlag_FC(this->instance);
 	}
 
 	tx_event_flags_set(&this->event, EVT_TRANS_CPLT, TX_OR);
@@ -379,17 +391,17 @@ Status I3C::TransferWait(uint32_t timeoutTicks) {
 	// Wait for event
 	ULONG events;
 	UINT status = tx_event_flags_get(&this->event, EVT_TRANS_CPLT | EVT_ERR, TX_OR_CLEAR, &events, timeoutTicks);
-	status = TX_SUCCESS;
 
 	// Release I2C device
 	tx_mutex_put(&this->mutex);
 
-	if(status == TX_SUCCESS) {
-		return Status::Ok;
-	}
-	else {
+	if(status != TX_SUCCESS) {
 		return Status::Timeout;
 	}
+	if((events & EVT_ERR) != 0) {
+		return Status::Error;
+	}
+	return Status::Ok;
 }
 
 // ---------------------------------------------------------

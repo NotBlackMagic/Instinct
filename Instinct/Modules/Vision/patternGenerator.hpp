@@ -18,4 +18,9 @@ class PatternGenerator {
 		/// @param frame The frame buffer to populate. Metadata (width, height, format) must be pre-configured.
 		/// @return Status::Ok on success, Status::Error if the pixel format is unsupported.
 		static Status ColorBar(VisionFrame& frame);
+
+		/// @brief Fills the provided VisionFrame with a BW checkerboard pattern.
+		/// @param frame The frame buffer to populate. Metadata (width, height, format) must be pre-configured.
+		/// @return Status::Ok on success, Status::Error if the pixel format is unsupported.
+		static Status Checkerboard(VisionFrame& frame);
 };

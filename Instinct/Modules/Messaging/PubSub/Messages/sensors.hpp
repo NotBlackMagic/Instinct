@@ -35,7 +35,7 @@ struct BaroMsg {
 	float temperature;		// Degrees Celsius
 };
 
-struct ImuMsg {
+struct IMUMsg {
 	Timestamp timestamp;	// Microseconds
 	float accel[3];			// m/s^2
 	float gyro[3];			// rad/s
