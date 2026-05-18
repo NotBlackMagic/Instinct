@@ -28,10 +28,10 @@ include("../cmake/gcc-arm-none-eabi.cmake")
 # Defines
 add_compile_definitions(
 	USE_HAL_DRIVER
-    STM32N657xx
-    USE_FULL_LL_DRIVER
-    TX_INCLUDE_USER_DEFINE_FILE
-    TX_SINGLE_MODE_SECURE=1
+	STM32N657xx
+	USE_FULL_LL_DRIVER
+	TX_INCLUDE_USER_DEFINE_FILE
+	TX_SINGLE_MODE_SECURE=1
 	FX_INCLUDE_USER_DEFINE_FILE
 
 	ZENOH_THREADX_STM32=1        # Use the built-in ThreadX memory/time hooks
@@ -44,14 +44,14 @@ string(TIMESTAMP BUILD_TIME "%H:%M:%S")
 
 find_package(Git)
 if(GIT_FOUND)
-    execute_process(
-        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-        OUTPUT_VARIABLE GIT_HASH
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
+	execute_process(
+		COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+		WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+		OUTPUT_VARIABLE GIT_HASH
+		OUTPUT_STRIP_TRAILING_WHITESPACE
+	)
 else()
-    set(GIT_HASH "Unknown")
+	set(GIT_HASH "Unknown")
 endif()
 
 set(CMAKE_PROJECT_VERSION "0.1.0")
@@ -74,6 +74,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Acquisition
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Control
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Estimator
+	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging/PubSub
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging/PubSub/Messages
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/System
@@ -85,10 +86,14 @@ include_directories(
 	# SDK Includes
 	${PLUMA_SDK_PATH}/MCU
 	${PLUMA_SDK_PATH}/Drivers
+	${PLUMA_SDK_PATH}/Drivers/Radio
 	${PLUMA_SDK_PATH}/Drivers/Sensors
 	${PLUMA_SDK_PATH}/Drivers/Storage
 	${PLUMA_SDK_PATH}/Drivers/USB
 	${PLUMA_SDK_PATH}/Drivers/Video
+
+	# Third Party Libraries
+	${PLUMA_SDK_PATH}/Middleware/MAVLink
 
 	# Middleware Includes (ThreadX & CMSIS)
 	${PLUMA_SDK_PATH}/Middleware/ThreadX/common/inc
@@ -111,7 +116,7 @@ include_directories(
 file(GLOB_RECURSE APP_SOURCES 
 	"Source/*.cpp" 
 	"Source/*.c" 
-	"Source/*.S"  # Gets startup.s and tx_initialize_low_level.S
+	"Source/*.S"	# Gets startup.s and tx_initialize_low_level.S
 	"Modules/*.cpp"
 )
 
@@ -122,6 +127,7 @@ set(BOARD_SOURCES
 file(GLOB SDK_SOURCES
 	"${PLUMA_SDK_PATH}/MCU/*.cpp"
 	"${PLUMA_SDK_PATH}/Drivers/*.cpp"
+	"${PLUMA_SDK_PATH}/Drivers/Radio/*.cpp"
 	"${PLUMA_SDK_PATH}/Drivers/Sensors/*.cpp"
 	"${PLUMA_SDK_PATH}/Drivers/Storage/*.cpp"
 	"${PLUMA_SDK_PATH}/Drivers/USB/*.cpp"
@@ -178,8 +184,8 @@ file(GLOB VENC_SOURCES
 set(ZENOH_ROOT "${PLUMA_SDK_PATH}/Middleware/ZenohPico")
 file(GLOB_RECURSE ZENOH_CORE_SOURCES "${ZENOH_ROOT}/src/*.c")
 file(GLOB ZENOH_PLATFORM_SOURCES
-    "${ZENOH_ROOT}/platforms/common/*.c"
-    "${ZENOH_ROOT}/platforms/threadx/stm32/*.c"
+	"${ZENOH_ROOT}/platforms/common/*.c"
+	"${ZENOH_ROOT}/platforms/threadx/stm32/*.c"
 )
 file(GLOB ZENOH_PORT_SOURCES "${ZENOH_ROOT}/ports/*.cpp")
 set(ZENOH_SOURCES ${ZENOH_CORE_SOURCES} ${ZENOH_PLATFORM_SOURCES} ${ZENOH_PORT_SOURCES})
@@ -188,11 +194,11 @@ set(ZENOH_SOURCES ${ZENOH_CORE_SOURCES} ${ZENOH_PLATFORM_SOURCES} ${ZENOH_PORT_S
 enable_language(ASM)
 
 add_executable(${CMAKE_PROJECT_NAME}
-    ${APP_SOURCES}
-    ${BOARD_SOURCES}
-    ${SDK_SOURCES}
-    ${ST_DRIVER_SOURCES}
-    ${THREADX_SOURCES}
+	${APP_SOURCES}
+	${BOARD_SOURCES}
+	${SDK_SOURCES}
+	${ST_DRIVER_SOURCES}
+	${THREADX_SOURCES}
 	${FILEX_SOURCES}
 	${VENC_SOURCES}
 	${ZENOH_SOURCES}
@@ -201,16 +207,16 @@ add_executable(${CMAKE_PROJECT_NAME}
 # Linker script
 set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32N657XX_AXISRAM2_fsbl.ld")
 target_link_options(${CMAKE_PROJECT_NAME} PRIVATE 
-    -T${LINKER_SCRIPT}
+	-T${LINKER_SCRIPT}
 )
 
 # Signing & Header Generation
 # Following code from: https://community.st.com/t5/stm32-mcus/how-to-add-post-build-commands-in-vs-code/ta-p/827930
 if(EXISTS "${SIGNING_TOOL_EXE}")
-	set(TARGET_ELF      "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.elf")
-	set(TARGET_BIN      "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin")
-	set(TARGET_SIGNED   "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}_Signed.bin")
-	set(TARGET_FINAL    "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.stldr")
+	set(TARGET_ELF		"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.elf")
+	set(TARGET_BIN		"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin")
+	set(TARGET_SIGNED	"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}_Signed.bin")
+	set(TARGET_FINAL	"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.stldr")
 
 	add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
 		COMMAND ${CMAKE_OBJCOPY} -O binary ${TARGET_ELF} ${TARGET_BIN}
@@ -222,9 +228,9 @@ if(EXISTS "${SIGNING_TOOL_EXE}")
 
 	# Convert the signed ExtLoader .bin back to .elf
 	# add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-	#     COMMAND ${CMAKE_OBJCOPY} -I binary -O elf32-littlearm -B arm --change-addresses=0x80000000 "${TARGET_SIGNED}" "${TARGET_FINAL}"
-	#     COMMENT "Wrapping signed binary into ELF format"
+	# COMMAND ${CMAKE_OBJCOPY} -I binary -O elf32-littlearm -B arm --change-addresses=0x80000000 "${TARGET_SIGNED}" "${TARGET_FINAL}"
+	# COMMENT "Wrapping signed binary into ELF format"
 	# )
 else()
-    message(WARNING "Signing tool not found at ${SIGNING_TOOL_EXE}. Skipping signature generation.")
+	message(WARNING "Signing tool not found at ${SIGNING_TOOL_EXE}. Skipping signature generation.")
 endif()

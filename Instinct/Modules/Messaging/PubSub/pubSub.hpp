@@ -17,6 +17,7 @@
 
 // Messaging headers/defines
 #include "common.hpp"
+#include "inputs.hpp"
 #include "power.hpp"
 #include "sensors.hpp"
 #include "state.hpp"

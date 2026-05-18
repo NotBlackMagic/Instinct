@@ -1,7 +1,7 @@
 #include "visionThread.hpp"
 
 TX_THREAD VisionThread::threadPtr;
-uint8_t VisionThread::threadStack[4096];
+uint8_t VisionThread::threadStack[8196];
 
 static VisionFrame rawFrameBuffer;
 static VisionFrame processedFrameBuffer;
@@ -39,10 +39,8 @@ USBClassUVC::UVCControlState VisionThread::puControlRegistry[] = {
 	// Selector | Len | Min | Max | Res | Def | Cur | Tgt | Dirty | Callback
 	// Brightness
 	{ USBClassUVC::PUSelector::Brightness, 2, -127, 127, 1, 0, 0, 0, false, BrightnessControl },
-
 	// Auto White Balance (1 Byte, Boolean)
 	{ USBClassUVC::PUSelector::WhiteBalanceTempAuto, 1, 0, 1, 1, 1, 1, 1, false, AutoWhiteBalanceControl },
-
 	// Manual White Balance Temperature (2 Bytes, Kelvin)
 	{ USBClassUVC::PUSelector::WhiteBalanceTemp, 2, 2800, 6500, 10, 4600, 4600, 4600, false, WhiteBalanceTemperatureControl }
 };
@@ -66,15 +64,18 @@ void VisionThread::Init() {
 }
 
 void VisionThread::Run(ULONG input) {
+	(void)input;
+	
 	LOG_INFO("Vision Thread Initialized.");
 
 	// Initialize
-	CameraDCMI::Config config;
-	config.width = 640;
-	config.height = 480;
-	config.fps = 30;
-	config.format = PixelFormat::YUV422_YVYU;
-	Status status = cameraSD.Init(config);
+	// SD-CAM Initialization
+	CameraDCMI::Config configSD;
+	configSD.width = 640;
+	configSD.height = 480;
+	configSD.fps = 30;
+	configSD.format = PixelFormat::YUV422_YVYU;
+	Status status = cameraSD.Init(configSD);
 	if(status != Status::Ok) {
 		LOG_ERR("SD-CAM Init Failed.");
 		while(1) {
@@ -88,6 +89,24 @@ void VisionThread::Run(ULONG input) {
 	cameraSD.GetSensor().SetMaxGain(OV7670::GainCeiling::x4);
 	// cameraSD.GetSensor().SetTestPattern(true);
 
+	// HD-CAM Initialization
+	CameraMIPI::Config configHD;
+	configHD.width = 640;
+	configHD.height = 480;
+	configHD.fps = 30;
+	configHD.format = PixelFormat::YUV422_YVYU;
+	status = cameraHD.Init(configHD);
+	if(status != Status::Ok) {
+		LOG_ERR("HD-CAM Init Failed.");
+		while(1) {
+			tx_thread_sleep(1000);
+		}
+	}
+	LOG_INFO("HD-CAM Initialized.");
+	tx_thread_sleep(1000);
+
+	// cameraHD.GetSensor().SetTestPattern(true);
+
 	status = jpegEncoder.Init();
 	if(status != Status::Ok) {
 		LOG_ERR("JPEG Encoder Init Failed.");
@@ -98,31 +117,31 @@ void VisionThread::Run(ULONG input) {
 	// LOG_INFO("JPEG Encoder Initialized.");
 
 	// Setup frame buffer
-	rawFrameBuffer.startAddress = (uint8_t*)hyperBus1.GetBaseAddr();
+	rawFrameBuffer.startAddress = (uint8_t*)hyperBus1.GetBaseAddr();	// (uint8_t*)0x34200000
 	rawFrameBuffer.width = 640;
 	rawFrameBuffer.height = 480;
 	rawFrameBuffer.payloadSize = 640 * 480 * 2;
 	rawFrameBuffer.allocatedSize = 640 * 480 * 2;
 	rawFrameBuffer.format = PixelFormat::YUV422_YVYU;
 
-	processedFrameBuffer.startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x100000); // Offset past raw buffer
+	processedFrameBuffer.startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x450000); // Offset past raw buffer
 	processedFrameBuffer.width = 640;
 	processedFrameBuffer.height = 480;
 	processedFrameBuffer.payloadSize = 640 * 480 * 2;
 	processedFrameBuffer.allocatedSize = 640 * 480 * 2;
 	processedFrameBuffer.format = PixelFormat::Unknown;	// Handled by processor
 
-	jpegFrameBuffer[0].startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x200000); // Offset past raw buffer
+	jpegFrameBuffer[0].startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x900000); // Offset past raw buffer
 	jpegFrameBuffer[0].width = 640;
 	jpegFrameBuffer[0].height = 480;
-	jpegFrameBuffer[0].allocatedSize = 640 * 480 * 2;		// 200 KB worst-case
+	jpegFrameBuffer[0].allocatedSize = 640 * 480 * 2;	// 200 KB worst-case
 	jpegFrameBuffer[0].format = PixelFormat::Unknown;	// Handled by codec
 	jpegFrameBuffer[0].codec = VisionCodec::Jpeg;
 
-	jpegFrameBuffer[1].startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x300000); // Offset past raw buffer
+	jpegFrameBuffer[1].startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0xA00000); // Offset past raw buffer
 	jpegFrameBuffer[1].width = 640;
 	jpegFrameBuffer[1].height = 480;
-	jpegFrameBuffer[1].allocatedSize = 640 * 480 * 2;		// 200 KB worst-case
+	jpegFrameBuffer[1].allocatedSize = 640 * 480 * 2;	// 200 KB worst-case
 	jpegFrameBuffer[1].format = PixelFormat::Unknown;	// Handled by codec
 	jpegFrameBuffer[1].codec = VisionCodec::Jpeg;
 
@@ -178,9 +197,13 @@ void VisionThread::Run(ULONG input) {
 		VisionFrame& jpegBuf = jpegFrameBuffer[jpegBufIx];
 
 		timestamp = Time::GetUs();
-		status = cameraSD.CaptureAsync(rawFrameBuffer);
+		
+		// status = cameraSD.CaptureAsync(rawFrameBuffer);
+		status = cameraHD.CaptureAsync(rawFrameBuffer);
 		if(status == Status::Ok) {
-			status = cameraSD.CaptureWait(1000);	// Capture takes about 43ms
+			// status = cameraSD.CaptureWait(1000);	// Capture takes about 43ms
+			status = cameraHD.CaptureWait(1000);
+
 			rawFrameBuffer.timestampUs = Time::GetUs();
 
 			timeCap = Time::GetUs() - timestamp;

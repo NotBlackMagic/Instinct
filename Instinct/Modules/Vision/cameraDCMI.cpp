@@ -24,7 +24,7 @@ Status CameraDCMI::Init(const Config &config) {
 	ov7670Cnfg.powerDownPin = nullptr;
 
 	// Initialize Sensor (OV7670)
-	status = sensor.Init(ov7670Cnfg);
+	status = this->sensor.Init(ov7670Cnfg);
 	if (status != Status::Ok) {
 		return status;
 	}
@@ -37,7 +37,7 @@ Status CameraDCMI::Init(const Config &config) {
 	dcmiCfg.embeddedSync = false;
 
 	// Initialize the Interface Hardware
-	status = dcmiInterface.Init(dcmiCfg);
+	status = this->dcmiInterface.Init(dcmiCfg);
 	if (status != Status::Ok) {
 		return status;
 	}
@@ -104,6 +104,8 @@ Status CameraDCMI::CaptureAbort() {
 	// Abort the ongoing DMA transfer
 	this->dmaChannel.TransferStop();
 
+	// Clear capture context
 	this->frame = nullptr;
+	
 	return Status::Ok;
 }

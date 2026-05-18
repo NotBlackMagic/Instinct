@@ -36,6 +36,7 @@ struct CoreClocks {
 	uint32_t ic15;
 	uint32_t ic16;
 	uint32_t ic17;
+	uint32_t ic18;
 };
 
 static CoreClocks nodeFrequencies = {0};
@@ -185,10 +186,14 @@ void System::InitClock(void) {
 	LL_RCC_IC11_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
 	LL_RCC_IC11_SetDivider(4);
 	nodeFrequencies.ic11 = 800000000;
-	//Set IC17 output to PLL1 / 4 = 3200 MHz / 16 = 200 MHz
+	//Set IC17 output to PLL1 / 4 = 3200 MHz / 10 = 320 MHz
 	LL_RCC_IC17_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
-	LL_RCC_IC17_SetDivider(16);
-	nodeFrequencies.ic17 = 200000000;
+	LL_RCC_IC17_SetDivider(10);
+	nodeFrequencies.ic17 = 320000000;
+	//Set IC18 output to PLL1 / 160 = 3200 MHz / 160 = 20 MHz (This is clock to CSI-PHY!! Max is 27MHz). See chapter 14.6.8 pg. 442 in reference manual
+	LL_RCC_IC18_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
+	LL_RCC_IC18_SetDivider(160);
+	nodeFrequencies.ic18 = 20000000;
 
 	LL_RCC_IC2_Enable();
 	LL_RCC_IC3_Enable();
@@ -199,6 +204,7 @@ void System::InitClock(void) {
 	LL_RCC_IC11_Enable();
 	LL_RCC_IC15_Enable();
 	LL_RCC_IC17_Enable();
+	LL_RCC_IC18_Enable();
 
 	// AXI Clock -> IC2 (AHB IC2/2), NPU Clock -> IC6, AXISRAM3/4/5/6 -> IC11
 	LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_IC2_IC6_IC11);
@@ -217,7 +223,7 @@ void System::InitClock(void) {
 
 	// Set peripheral clock sources
 	// DCMI peripheral
-	LL_RCC_SetDCMIPPClockSource(LL_RCC_DCMIPP_CLKSOURCE_IC17);
+	LL_RCC_SetDCMIPPClockSource(LL_RCC_DCMIPP_CLKSOURCE_IC17);	//Max: 333MHz
 	// I2C peripheral
 	LL_RCC_SetI2CClockSource(LL_RCC_I2C1_CLKSOURCE_IC10);
 	LL_RCC_SetI2CClockSource(LL_RCC_I2C2_CLKSOURCE_IC10);
@@ -231,6 +237,7 @@ void System::InitClock(void) {
 	LL_RCC_SetSPIClockSource(LL_RCC_SPI4_CLKSOURCE_IC9);
 	// UART peripheral
 	LL_RCC_SetUARTClockSource(LL_RCC_UART4_CLKSOURCE_IC9);
+	LL_RCC_SetUARTClockSource(LL_RCC_USART6_CLKSOURCE_IC9);
 	LL_RCC_SetUARTClockSource(LL_RCC_UART7_CLKSOURCE_IC9);
 	// USB peripheral~
 	LL_RCC_SetUSBClockSource(LL_RCC_OTGPHY1_CLKSOURCE_HSE_DIV_2_OSC);

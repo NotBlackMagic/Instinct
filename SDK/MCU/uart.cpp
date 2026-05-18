@@ -221,7 +221,23 @@ void UART::StartTX() {
 // ---------------------------------------------------------
 
 void UART::InterruptHandler() {
-	// TX Handling
+	// Handle ORE
+	if(LL_USART_IsActiveFlag_ORE(instance) == 0x01) {
+		// Clear ORE flag
+		LL_USART_ClearFlag_ORE(instance);
+	}
+	// Handle FE
+	if(LL_USART_IsActiveFlag_FE(instance) == 0x01) {
+		// Clear FE flag
+		LL_USART_ClearFlag_FE(instance);
+	}
+	// Handle NE
+	if(LL_USART_IsActiveFlag_NE(instance) == 0x01) {
+		// Clear NE flag
+		LL_USART_ClearFlag_NE(instance);
+	}
+
+	// Handle TXE TXFNF
 	if(LL_USART_IsEnabledIT_TXE_TXFNF(instance) == 0x01 && LL_USART_IsActiveFlag_TXE_TXFNF(instance) == 0x01) {
 		if(txBufHead != txBufTail) {
 			// Have bytes in buffer, write/send
@@ -235,7 +251,7 @@ void UART::InterruptHandler() {
 		}
 	}
 
-	// RX Handling
+	// Handle RXNE RXFNE
 	if(LL_USART_IsActiveFlag_RXNE_RXFNE(instance) == 0x01) {
 		uint8_t byte = LL_USART_ReceiveData8(instance);
 
@@ -261,7 +277,7 @@ void UART::InterruptHandler() {
 		// }
 	}
 
-	//
+	// Handle IDLE
 	if(LL_USART_IsActiveFlag_IDLE(instance) == 0x01) {
 		// End of frame transmission, detected by receiver timeout
 		// rxLength = rxIndex;

@@ -51,7 +51,6 @@ void Logger::RegisterConsole(UART* uart) {
 
 void Logger::Log(Logger::LogLevel level, const char* file, int line, const char* fmt, ...) {
 	// Check used/set log levels
-	return;
 	if(level < consoleMinLevel && level < sdMinLevel) {
 		return;
 	}

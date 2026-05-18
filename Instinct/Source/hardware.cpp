@@ -37,6 +37,12 @@ GPIO sdVioSel(GPIOQ, LL_GPIO_PIN_4);
 
 GPIO hdRadioEn(GPIOQ, LL_GPIO_PIN_0);
 
+Csi csi(CSI);
+extern "C" void CSI_IRQHandler(void) { csi.InterruptHandler(); }
+
+Dcmipp dcmipp(DCMIPP);
+extern "C" void DCMIPP_IRQHandler(void) { dcmipp.InterruptHandler(); }
+
 Dcmi dcmi(DCMI);
 extern "C" void DCMI_PSSI_IRQHandler(void) { dcmi.InterruptHandler(); }
 
@@ -50,7 +56,7 @@ HyperRAM::Config extRAMConfig = {
 	.sizeBytes = 32768 * 1024,	// 32 MByte
 	.pageSize = 32 * 8 * 4,		// 1 kByte
 	.sourceClockHz = 0,
-	.frequencyHz = 100000000,	// 100 MHz
+	.frequencyHz = 50000000,	// 100 MHz
 	.initialLatency = 7,		// 7 Cycles
 	.fixedLatency = true,
 	.rwRecoveryTime = 7,		// 7 Cycles @ 200MHz
@@ -136,6 +142,9 @@ PWM pwm2Ch4(timer8, PWM::Channel::Ch4);
 UART uart4(UART4);
 extern "C" void UART4_IRQHandler(void) { uart4.InterruptHandler(); }
 
+UART ldrUART(USART6);
+extern "C" void USART6_IRQHandler(void) { ldrUART.InterruptHandler(); }
+
 UART hdrUART(UART7);
 extern "C" void UART7_IRQHandler(void) { hdrUART.InterruptHandler(); }
 
@@ -144,6 +153,9 @@ extern "C" void USB1_OTG_HS_IRQHandler(void) { usbHardware.InterruptHandler(); }
 USBDevice usbDevice(usbHardware);
 USBClassCDC usbCDC;
 USBClassUVC usbUVC;
+
+DMAChannel csiDMAChannel(HPDMA1, LL_DMA_CHANNEL_3);
+extern "C" void HPDMA1_Channel3_IRQHandler(void) { csiDMAChannel.InterruptHandler(); }
 
 DMAChannel dcmiDMAChannel(HPDMA1, LL_DMA_CHANNEL_2);
 extern "C" void HPDMA1_Channel2_IRQHandler(void) { dcmiDMAChannel.InterruptHandler(); }
@@ -374,9 +386,15 @@ ICM45686 ext2IMU(spi2);
 BMM350 extMag(i2c4, 0x14);
 BMP581 extBaro(i2c4, 0x47);
 
+OV5645 ov5645(i3c1, 0x3C);
 OV7670 ov7670(i3c1, 0x21);
+OV9281 ov9281(i3c1, 0x00);
+
+// Radio Links
+RCReceiver mainRC(ldrUART);
 
 CameraDCMI cameraSD(dcmi, ov7670, dcmiDMAChannel);
+CameraMIPI cameraHD(csi, dcmipp, ov5645, csiDMAChannel);
 
 JPEGEncoder jpegEncoder(jpeg, jpegEncInDMAChannel, jpegEncOutDMAChannel);
 
@@ -415,7 +433,7 @@ void HardwareInit() {
 	// UART peripherals
 	// BoardUART3Init();
 	BoardUART4Init();
-	// BoardUART6Init();
+	BoardUART6Init();
 	BoardUART7Init();
 	// BoardUART8Init();
 	// XPSI/HyperBus peripherals
@@ -459,6 +477,7 @@ void HardwareInit() {
 
 	// Initialize UARTs
 	uart4.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 115200, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
+	ldrUART.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 115200, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
 	hdrUART.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 115200, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
 	LOG_INFO("UARTs Init OK.");
 

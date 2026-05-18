@@ -33,6 +33,7 @@ enum class TopicID : uint8_t {
 
 	// Inputs
 	RC = 40,
+	ManualControl = 41,
 
 	// Estimation / State
 	State = 50

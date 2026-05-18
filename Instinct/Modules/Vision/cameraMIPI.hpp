@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/Vision/cameraDCMI.hpp
+ * File:    Instinct/Modules/Vision/cameraMIPI.hpp
  * Author:  NotBlackMagic
  * Brief:   
  */
@@ -15,19 +15,19 @@
 
 #include "logger.hpp"
 
+#include "csi.hpp"
+#include "dcmipp.hpp"
 #include "dmaChannel.hpp"
-#include "dcmi.hpp"
 
-#include "ov7670.hpp"
-#include "ov9281.hpp"
+#include "ov5645.hpp"
 
 #include "visionTypes.hpp"
 
 #include "status.hpp"
 
-class CameraDCMI {
+class CameraMIPI {
 	public:
-		/// @brief Configuration structure for the SD/DCMI Camera Pipeline.
+		/// @brief Configuration structure for the HD/MIPI-CSI Camera Pipeline.
 		struct Config {
 			uint16_t width;			///< Image width in pixels.
 			uint16_t height;		///< Image height in pixels.
@@ -36,15 +36,15 @@ class CameraDCMI {
 		};
 
 		// Delete copy constructors
-		CameraDCMI(const CameraDCMI&) = delete;
-		CameraDCMI& operator=(const CameraDCMI&) = delete;
+		CameraMIPI(const CameraMIPI&) = delete;
+		CameraMIPI& operator=(const CameraMIPI&) = delete;
 
 		/// @brief Constructor.
-		/// @param dcmi Reference to the low-level bus driver.
-		/// @param sensor Reference to camera sensor driver. 
-		CameraDCMI(Dcmi &dcmi, OV7670 &sensor, DMAChannel &dma) : dcmiInterface(dcmi), sensor(sensor), dmaChannel(dma) {};
+		/// @param csi		Reference to the low-level bus driver.
+		/// @param sensor	Reference to camera sensor driver. 
+		CameraMIPI(Csi &csi, Dcmipp &dcmipp, OV5645 &sensor, DMAChannel &dma) : csiInterface(csi), dcmiPPInterface(dcmipp), sensor(sensor), dmaChannel(dma) {};
 
-		/// @brief Initializes the sensor, DCMI peripheral, and DMA pipelines.
+		/// @brief Initializes the sensor, CSI peripheral, DCMI-PP peripheral, and DMA pipelines.
 		/// @param config The requested resolution and format settings.
 		/// @return Status::Ok if initialization succeeded, or Status::Error if the config was invalid or failed.
 		Status Init(const Config &config);
@@ -65,11 +65,12 @@ class CameraDCMI {
 
 		/// @brief Expose a reference to the sensor
 		/// @return Camera instance.
-		OV7670& GetSensor() { return sensor; }
+		OV5645& GetSensor() { return sensor; }
 
 	private:
-		Dcmi& dcmiInterface;
-		OV7670& sensor;
+		Csi& csiInterface;
+		Dcmipp& dcmiPPInterface;
+		OV5645& sensor;
 		DMAChannel& dmaChannel;
 
 		// Capture context

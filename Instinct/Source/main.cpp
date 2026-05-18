@@ -13,8 +13,10 @@
 #include "inertialThread.hpp"
 #include "loggerThread.hpp"
 #include "monitorThread.hpp"
+#include "radioThread.hpp"
 #include "sensorHubThread.hpp"
 #include "storageThread.hpp"
+#include "telemetryThread.hpp"
 #include "visionThread.hpp"
 
 #include "usbClassCDC.hpp"
@@ -30,28 +32,30 @@
 
 #include "tx_api.h"
 
-#define THREADX_BUFFER_POOL_SIZE				12288
+#include "zenoh-pico.h"
+
+#define THREADX_BUFFER_POOL_SIZE				65536
 alignas(32) static UCHAR tx_byte_pool_buffer[THREADX_BUFFER_POOL_SIZE];
 static TX_BYTE_POOL threadBytePool;
 static TX_THREAD testThread;
 
-// extern void InitZenohSerialTransport(z_owned_session_t* session);
+extern void InitZenohSerialTransport(z_owned_session_t* session);
 
-// extern "C" {
-//     // This gives the Zenoh C-library access to your ThreadX byte pool
-//     TX_BYTE_POOL* pthreadx_byte_pool = &threadBytePool;
-// }
+extern "C" {
+	// This gives the Zenoh C-library access to your ThreadX byte pool
+	TX_BYTE_POOL* pthreadx_byte_pool = &threadBytePool;
+}
 
-const uint32_t buffLen = 32 * 1024;
+const uint32_t buffLen = 16 * 1024;
 alignas(32) uint8_t dataW[buffLen];
 alignas(32) uint8_t dataR[buffLen];
 
 void TestThread(ULONG thread_input) {
 	// ZENOH-PICO STUFF!!!!!
 	// 1. Allocate the config struct and pass its pointer to be initialized
+
 	// z_owned_config_t config;
 	// z_result_t cfg_status = z_config_default(&config);
-
 	// if(cfg_status == 0) {
 	// 	// Tell Zenoh to establish a connection using the Serial subsystem.
 	// 	// This command natively triggers our _z_open_serial_from_dev function.
@@ -74,6 +78,26 @@ void TestThread(ULONG thread_input) {
 	// while(1) {
 	// 	ledBlue.Toggle();
 	// 	tx_thread_sleep(100);
+	// }
+
+	// USB-CDC STUFF!!!!!
+	// uint8_t rxBuffer[64];
+	// while(1) {
+	// 	// Check for incoming data
+	// 	uint32_t bytesAvailable = usbCDC.Available();
+	// 	if(bytesAvailable > 0) {
+	// 		// Read data out of the ring buffer
+	// 		uint32_t bytesToRead = (bytesAvailable > sizeof(rxBuffer)) ? sizeof(rxBuffer) : bytesAvailable;
+	// 		uint32_t bytesRead = usbCDC.Read(rxBuffer, bytesToRead);
+
+	// 		// Echo the received data back to the host
+	// 		if(bytesRead > 0) {
+	// 			usbCDC.Write(rxBuffer, bytesRead);
+	// 		}
+	// 	}
+
+	// 	// Sleep for 10 ticks (~10ms) to keep the echo responsive without pegging the CPU
+	// 	tx_thread_sleep(10);
 	// }
 
 	uint32_t i;
@@ -432,35 +456,18 @@ void tx_application_define(void *first_unused_memory) {
 		LOG_INFO("USB Init Failed!");
 	}
 
-	// uint8_t rxBuffer[64];
-	// while(1) {
-	// 	// Check for incoming data
-	// 	uint32_t bytesAvailable = usbCDC.Available();
-	// 	if(bytesAvailable > 0) {
-	// 		// Read data out of the ring buffer
-	// 		uint32_t bytesToRead = (bytesAvailable > sizeof(rxBuffer)) ? sizeof(rxBuffer) : bytesAvailable;
-	// 		uint32_t bytesRead = usbCDC.Read(rxBuffer, bytesToRead);
-
-	// 		// Echo the received data back to the host
-	// 		if(bytesRead > 0) {
-	// 			usbCDC.Write(rxBuffer, bytesRead);
-	// 		}
-	// 	}
-
-	// 	// Sleep for 10 ticks (~10ms) to keep the echo responsive without pegging the CPU
-	// 	tx_thread_sleep(10);
-	// }
-
 	// Start system threads
 	Console::Init(&uart4);
 
 	// Start application threads
 	MonitorThread::Init();
 	StorageThread::Init();
-	// VisionThread::Init();
+	VisionThread::Init();
 	InertialThread::Init();
 	AuxiliaryThread::Init();
 	LoggerThread::Init();
+	// RadioThread::Init();
+	// TelemetryThread::Init();
 	// SensorHubThread::Init();
 	// EstimatorThread::Init();
 
@@ -470,8 +477,8 @@ void tx_application_define(void *first_unused_memory) {
 		LOG_ERR("ThreadX Create Byte Pool Failed.");
 	}
 
-	// Create the TestThread
-	// Allocate the stack
+	// // Create the TestThread
+	// // Allocate the stack
 	status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 8192, TX_NO_WAIT);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Stack 0 Allocate Failed.");
@@ -500,6 +507,12 @@ int main(void) {
 	System::InitClock();
 	System::InitSysTick();
 	Time::Init();
+
+	// Init AXISRAM3 and 4
+	LL_MEM_EnableClock(LL_MEM_AXISRAM3);
+	LL_MEM_EnableClock(LL_MEM_AXISRAM4);
+	CLEAR_BIT(RAMCFG_SRAM3_AXI->CR, RAMCFG_CR_SRAMSD);
+	CLEAR_BIT(RAMCFG_SRAM4_AXI->CR, RAMCFG_CR_SRAMSD);
 
 	// Enable debugger in flash run mode
 	System::EnableDebug();

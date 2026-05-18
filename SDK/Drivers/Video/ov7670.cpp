@@ -125,7 +125,8 @@ Status OV7670::Start() {
 		config.powerDownPin->Write(0);
 		tx_thread_sleep(5);
 		return Status::Ok;
-	} else {
+	}
+	else {
 		// Fallback to Clear Software Sleep
 		return ModifyRegister(OV7670::Register::COM2, 0x10, 0x00);
 	}
@@ -200,7 +201,7 @@ Status OV7670::SetFormat(PixelFormat format) {
 	Status status = Status::Ok;
 	switch(format) {
 		case PixelFormat::BayerRaw8: {
-			//Raw Bayer RGB
+			// Raw Bayer RGB
 			status = this->ModifyRegister(OV7670::Register::COM7, 0x05, 0x01);
 			if(status != Status::Ok) {
 				return status;
@@ -209,7 +210,7 @@ Status OV7670::SetFormat(PixelFormat format) {
 			break;
 		}
 		// case ColorFormat_ProcBayer: {
-		// 	//Processed Bayer RGB
+		// 	// Processed Bayer RGB
 		// 	status = this->ModifyRegister(OV7670::Register::COM7, 0x05, 0x05);
 		// 	status = this->ModifyRegister(OV7670::Register::COM15, 0x30, 0x00);
 		// 	break;
@@ -241,7 +242,7 @@ Status OV7670::SetFormat(PixelFormat format) {
 			break;
 		}
 		case PixelFormat::YUV422_YVYU: {
-			//YUV/YCbCr 4:2:2 (Default)
+			// YUV/YCbCr 4:2:2 (Default)
 			status = this->ModifyRegister(OV7670::Register::COM7, 0x05, 0x00);
 			if(status != Status::Ok) {
 				return status;
@@ -266,13 +267,13 @@ Status OV7670::SetFormat(PixelFormat format) {
 			break;
 		}
 		// case ColorFormat_GRB422: {
-		// 	//GRB 4:2:2
+		// 	// GRB 4:2:2
 		// 	status = this->ModifyRegister(OV7670::Register::COM7, 0x05, 0x04);
 		// 	status = this->ModifyRegister(OV7670::Register::COM15, 0x30, 0x00);
 		// 	break;
 		// }
 		case PixelFormat::RGB565: {
-			//RGB565
+			// RGB565
 			status = this->ModifyRegister(OV7670::Register::COM7, 0x05, 0x04);
 			if(status != Status::Ok) {
 				return status;
@@ -285,13 +286,13 @@ Status OV7670::SetFormat(PixelFormat format) {
 			break;
 		}
 		// case ColorFormat_RGB555: {
-		// 	//RGB555
+		// 	// RGB555
 		// 	status = this->ModifyRegister(OV7670::Register::COM7, 0x05, 0x04);
 		// 	status = this->ModifyRegister(OV7670::Register::COM15, 0x30, 0x30);
 		// 	break;
 		// }
 		default: {
-			//YUV/YCbCr 4:2:2 (Default)
+			// YUV/YCbCr 4:2:2 (Default)
 			status = this->ModifyRegister(OV7670::Register::COM7, 0x05, 0x00);
 			if(status != Status::Ok) {
 				return status;
@@ -507,7 +508,7 @@ Status OV7670::ApplyResolution(InternalResolution resolution) {
 
 	switch(resolution) {
 		case OV7670::InternalResolution::VGA:
-			// VGA (640x320)
+			// VGA (640x480)
 			// Resolution is set by Down-Sampling and then Scaling (Zoom-Out)
 			com3 = 0x00;	// Disable Down-Sampling; Disable Scaling (Zoom-Out)
 			com14 = 0x00;	// Normal PCLK; Fixed Scaling Parameters; PCLK Div: by 1
@@ -709,9 +710,9 @@ Status OV7670::ApplyAWBTuning() {
 	};
 
 	uint8_t arraySize = sizeof(awbConfig) / sizeof(awbConfig[0]);
-	for (uint8_t i = 0; i < arraySize; i++) {
+	for(uint8_t i = 0; i < arraySize; i++) {
 		Status status = this->WriteRegister(awbConfig[i].reg, awbConfig[i].value);
-		if (status != Status::Ok) {
+		if(status != Status::Ok) {
 			return status;
 		}
 	}

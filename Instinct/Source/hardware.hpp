@@ -1,6 +1,8 @@
 #pragma once
 
+#include "csi.hpp"
 #include "dcmi.hpp"
+#include "dcmipp.hpp"
 #include "dmaChannel.hpp"
 #include "exti.hpp"
 #include "gpio.hpp"
@@ -28,8 +30,12 @@
 #include "icp20100.hpp"
 #include "lis2mdl.hpp"
 #include "lsm6dso.hpp"
+#include "rcReceiver.hpp"
 
+#include "ov5645.hpp"
 #include "ov7670.hpp"
+#include "ov9281.hpp"
+#include "cameraMIPI.hpp"
 #include "cameraDCMI.hpp"
 #include "jpegEncoder.hpp"
 
@@ -77,7 +83,9 @@ extern GPIO sdVioSel;
 
 extern GPIO hdRadioEn;
 
+extern Csi csi;
 extern Dcmi dcmi;
+extern Dcmipp dcmipp;
 extern Jpeg jpeg;
 
 extern HyperRAM::Config extRAMConfig;
@@ -119,8 +127,10 @@ extern PWM pwm2Ch3;
 extern PWM pwm2Ch4;
 
 extern UART uart4;
+extern UART ldrUART;
 extern UART hdrUART;
 
+extern DMAChannel csiDMAChannel;
 extern DMAChannel dcmiDMAChannel;
 extern DMAChannel jpegEncInDMAChannel;
 extern DMAChannel jpegEncOutDMAChannel;
@@ -135,10 +145,17 @@ extern ICM45686 ext2IMU;
 extern BMM350 extMag;
 extern BMP581 extBaro;
 
+extern RCReceiver mainRC;
+
 extern OV7670 ov7670;
+extern OV9281 ov9281;
+extern OV5645 ov5645;
 
 class CameraDCMI;
 extern CameraDCMI cameraSD;
+
+class CameraMIPI;
+extern CameraMIPI cameraHD;
 
 class JPEGEncoder;
 extern JPEGEncoder jpegEncoder;

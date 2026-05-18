@@ -1002,11 +1002,11 @@ void USB::ConfigureRIF(void) {
 	uint32_t masterID = 0;
 	uint32_t periphID = 0;
 	if(this->instance == USB1_OTG_HS) {
-		masterID = 4U;
+		masterID = 4U;		// RIMU (Refernce Manual 6.3.4 Table 22 pg. 248)
 		periphID = (RIF_PERIPH_REG1 | RIFSC_RISC_SECCFGRx_SEC24_Pos);
 	}
 	else if(this->instance == USB2_OTG_HS) {
-		masterID = 5U;
+		masterID = 5U;		// RIMU (Refernce Manual 6.3.4 Table 22 pg. 248)
 		periphID = (RIF_PERIPH_REG1 | RIFSC_RISC_SECCFGRx_SEC25_Pos);
 	}
 	else {

@@ -14,6 +14,7 @@
 #include "hardware.hpp"
 
 #include "cameraDCMI.hpp"
+#include "cameraMIPI.hpp"
 #include "imageProcessor.hpp"
 #include "imageWriter.hpp"
 #include "jpegEncoder.hpp"
@@ -38,7 +39,7 @@ class VisionThread {
 		static const uint8_t numITControls;
 	private:
 		static TX_THREAD threadPtr;
-		static uint8_t threadStack[4096];
+		static uint8_t threadStack[8196];
 
 		static void Run(ULONG input);
 

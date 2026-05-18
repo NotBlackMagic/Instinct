@@ -156,8 +156,8 @@ class OV7670 {
 		Status ReadID(uint16_t *id);
 
 		/// @brief Sets the desired frame resolution, approximated to closed (lower) valid resolution.
-		/// @param width  Target frame width.
-		/// @param height Target frame height.
+		/// @param width	Target frame width.
+		/// @param height	Target frame height.
 		/// @return Status::Ok if set succeeded, or Status::Error if failed.
 		Status SetResolution(uint16_t width, uint16_t height);
 
@@ -217,8 +217,8 @@ class OV7670 {
 		Status SetBandingFilter(BandingFilter filter);
 
 		/// @brief Sets frame orientation/mirroring.
-		/// @param mirrorH If truer mirror frame along the horizontal axis.
-		/// @param flipV   If truer mirror frame along the vertical axis.
+		/// @param mirrorH	If truer mirror frame along the horizontal axis.
+		/// @param flipV	If truer mirror frame along the vertical axis.
 		/// @return Status::Ok if set succeeded, or Status::Error if failed.
 		Status SetOrientation(bool mirrorH, bool flipV);
 
@@ -249,7 +249,7 @@ class OV7670 {
 
 		InternalResolution FindNearestResolution(uint16_t w, uint16_t h);
 		Status ApplyResolution(InternalResolution resolution);
-        Status ApplyWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+		Status ApplyWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 		Status ApplyAWBTuning();
 
 		Status WriteRegister(Register reg, uint8_t value);
