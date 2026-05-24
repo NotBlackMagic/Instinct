@@ -51,6 +51,7 @@ alignas(32) uint8_t dataW[buffLen];
 alignas(32) uint8_t dataR[buffLen];
 
 void TestThread(ULONG thread_input) {
+	Status status = Status::Ok;
 	// ZENOH-PICO STUFF!!!!!
 	// 1. Allocate the config struct and pass its pointer to be initialized
 
@@ -116,14 +117,14 @@ void TestThread(ULONG thread_input) {
 		while(1);
 	}
 
-	// Init External Flash
-	if(externalFlash.Init(extFlashConfig) == Status::Ok) {
-		LOG_INFO("HyperFlash Init OK: %s.", extFlashConfig.deviceName);
-	}
-	else {
-		LOG_ERR("HyperFlash Init Failed!");
-		while(1);
-	}
+	// // Init External Flash
+	// if(externalFlash.Init(extFlashConfig) == Status::Ok) {
+	// 	LOG_INFO("HyperFlash Init OK: %s.", extFlashConfig.deviceName);
+	// }
+	// else {
+	// 	LOG_ERR("HyperFlash Init Failed!");
+	// 	while(1);
+	// }
 
 	// RAM Test
 	for(i = 0; i < buffLen; i++) {
@@ -196,10 +197,19 @@ void TestThread(ULONG thread_input) {
 	// NVIC_SetPriority(HPDMA1_Channel0_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),0, 0));
 	// NVIC_EnableIRQ(HPDMA1_Channel0_IRQn);
 
-	// RIF configuration (AXISRAM2)
+	// RIF configuration
 	const uint32_t RIF_CID = 0x0F;	// Allow ALL i.e RW for everyone
 	const uint32_t RIF_ATTRIBUTE_SEC = 0x00000001U;
 	const uint32_t RIF_CID_NONE = 0x00000000U;
+
+	// RIF configuration (CPUAXI RAM0: AXISRAM1 without FLEXMEM part)
+	RISAF2->REG[0].STARTR = 0x0;
+	RISAF2->REG[0].ENDR = 0xFFFFFFFFU;		// Full region
+	RISAF2->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
+	RISAF2->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos)
+							| (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
+
+	// RIF configuration (CPUAXI RAM1: AXISRAM2)
 	RISAF3->REG[0].STARTR = 0x0;
 	RISAF3->REG[0].ENDR = 0xFFFFFFFFU;		// Full region
 	RISAF3->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
@@ -213,12 +223,19 @@ void TestThread(ULONG thread_input) {
 	RISAF11->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos)
 							| (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
 
+	// RIF configuration (XSPI2)
+	// RISAF12->REG[0].STARTR = 0x0;
+	// RISAF12->REG[0].ENDR = 0xFFFFFFFFU;		// Full region
+	// RISAF12->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
+	// RISAF12->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos)
+	// 						| (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
+
 	// Access configuration
 	LL_DMA_EnableChannelSecure(HPDMA1, LL_DMA_CHANNEL_12);
 	LL_DMA_EnableChannelPrivilege(HPDMA1, LL_DMA_CHANNEL_12);
 	LL_DMA_EnableChannelSrcSecure(HPDMA1, LL_DMA_CHANNEL_12);
 	LL_DMA_EnableChannelDestSecure(HPDMA1, LL_DMA_CHANNEL_12);
-	LL_DMA_SetStaticIsolation(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_CHANNEL_STATIC_CID_2);
+	LL_DMA_SetStaticIsolation(HPDMA1, LL_DMA_CHANNEL_12, LL_DMA_CHANNEL_STATIC_CID_0);
 
 	LL_DMA_SetSrcAddress(HPDMA1, LL_DMA_CHANNEL_12, (uint32_t)hyperBus1.GetBaseAddr());
 	LL_DMA_SetDestAddress(HPDMA1, LL_DMA_CHANNEL_12, (uint32_t)dataR);
@@ -277,17 +294,17 @@ void TestThread(ULONG thread_input) {
 	// for(i = 0; i < buffLen; i++) {
 	// 	dataW[i] = (uint8_t)i;
 	// }
-	// externalFlash.SectorErase(flashAddr);
+	// status = externalFlash.SectorErase(flashAddr);
 
 	// timestamp = Time::GetUs();
-	// externalFlash.Program(flashAddr, dataW, buffLen);
+	// status = externalFlash.Program(flashAddr, dataW, buffLen);
 	// deltaTime = Time::GetUs() - timestamp;
 	// speed = (buffLen) * (1.0f/1024.f * 1.0f/1024.f) * (1.0f/(deltaTime * 0.001f * 0.001f));
 	// LOG_INFO("Flash Write: %d Bytes in %d us (%.2f MByte/s)", buffLen, deltaTime, speed);
 
 	// memset(dataR, 0x55, buffLen);
 	// timestamp = Time::GetUs();
-	// externalFlash.Read(flashAddr, dataR, buffLen);
+	// status = externalFlash.Read(flashAddr, dataR, buffLen);
 	// deltaTime = Time::GetUs() - timestamp;
 
 	// errCnt = 0;
@@ -301,7 +318,7 @@ void TestThread(ULONG thread_input) {
 	// LOG_INFO("Flash Read: %d Bytes in %d us (%.2f MByte/s), Err %d", buffLen, deltaTime, speed, errCnt);
 
 	// // Flash Memory Mapped Test
-	// externalFlash.EnterMemoryMappedMode();
+	// status = externalFlash.EnterMemoryMappedMode();
 	// void *extFlashPtr = (void*)hyperBus2.GetBaseAddr();
 
 	// memset(dataR, 0x55, buffLen);
@@ -384,6 +401,7 @@ void tx_application_define(void *first_unused_memory) {
 	// Start Hardware stuff here, uses RTOS objects
 	HardwareInit();
 	LOG_INFO("Peripherals Initialized.");
+	ledGreen.Write(0);
 
 	// Define your test configuration
 	USBDevice::Config usbCfg;
@@ -416,8 +434,8 @@ void tx_application_define(void *first_unused_memory) {
 
 	// Register UVC Controls (camera controls over the UVC protocol)
 	USBClassUVC::ControlConfig uvcCtrlConfig;
-	uvcCtrlConfig.puControls = USBClassUVC::PUControl::Brightness | USBClassUVC::PUControl::WhiteBalanceTempAuto | USBClassUVC::PUControl::WhiteBalanceTemp;	// Add brightness, more can be added by ORing
-	uvcCtrlConfig.itControls = USBClassUVC::ITControl::ExposureTimeAbsolute;
+	uvcCtrlConfig.puControls = 0;	//USBClassUVC::PUControl::Brightness | USBClassUVC::PUControl::WhiteBalanceTempAuto | USBClassUVC::PUControl::WhiteBalanceTemp;	// Add brightness, more can be added by ORing
+	uvcCtrlConfig.itControls = 0;	//USBClassUVC::ITControl::ExposureTimeAbsolute;
 	uvcCtrlConfig.puControlRegistry = VisionThread::puControlRegistry;
 	uvcCtrlConfig.numPUControls = VisionThread::numPUControls;
 	uvcCtrlConfig.itControlRegistry = VisionThread::itControlRegistry;
@@ -495,18 +513,35 @@ void tx_application_define(void *first_unused_memory) {
 }
 
 int main(void) {
+	// Debug Blue LED to see Application loaded
+	LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_ALL);
+	ledBlue.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
+	ledBlue.Write(0);
+	for(volatile uint32_t i = 0; i < 100000; i++) { __NOP(); }
+	ledBlue.Write(1);
+	for(volatile uint32_t i = 0; i < 100000; i++) { __NOP(); }
+	ledBlue.Write(0);
+	for(volatile uint32_t i = 0; i < 100000; i++) { __NOP(); }
+	ledBlue.Write(1);
+	for(volatile uint32_t i = 0; i < 100000; i++) { __NOP(); }
+	ledBlue.Write(0);
+	for(volatile uint32_t i = 0; i < 100000; i++) { __NOP(); }
+
 	// MCU Configuration
-	HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
+	NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
 	// HAL_Init();
 	LL_AHB3_GRP1_EnableClock(LL_AHB3_GRP1_PERIPH_RIFSC);
 	System::EnableCache();
 
 	SystemCoreClockUpdate();
-	System::InitSysTick();
-
+	// For when running in Dev mode from internal SRAM use:
 	System::InitClock();
-	System::InitSysTick();
+	// For when running in XIP mode from external HyperFlash/XSPI2 use:
+	// Note: This becase clock must be initiazlied in the Boot/FSBL (calling System::InitClock() there) to have the HyperFlash/XSPI2 already correcly running and can't be changed!
+	// System::InitFWClock();
 	Time::Init();
+
+	ledBlue.Write(1);
 
 	// Init AXISRAM3 and 4
 	LL_MEM_EnableClock(LL_MEM_AXISRAM3);
@@ -517,6 +552,7 @@ int main(void) {
 	// Enable debugger in flash run mode
 	System::EnableDebug();
 
+	System::InitSysTick();
 	tx_kernel_enter();
 
 	// We should never get here as control is now taken by the scheduler

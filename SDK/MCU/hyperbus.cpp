@@ -17,6 +17,7 @@ Status HyperBus::Init(const Config &config) {
 		return Status::Error;
 	}
 
+#if defined (USE_RTOS)
 	// Create RTOS objects
 	if(tx_mutex_create(&this->mutex, const_cast<char*>("hyperbus mutex"), TX_INHERIT) != TX_SUCCESS) {
 		return Status::Error;
@@ -25,6 +26,9 @@ Status HyperBus::Init(const Config &config) {
 		tx_mutex_delete(&this->mutex);
 		return Status::Error;
 	}
+#else
+	this->eventFlags = 0;
+#endif
 
 	// Enable bus clocks
 	if(this->instance == XSPI1) {
@@ -131,7 +135,7 @@ Status HyperBus::Init(const Config &config) {
 									static_cast<uint32_t>(writeZeroLatencyVal) | 
 									static_cast<uint32_t>(config.latencyMode)));
 
-	// Configure SDMMC Interrupts
+	// Configure x-SPI Interrupts
 	NVIC_SetPriority(this->irqCall, this->irqPriority);
 	NVIC_EnableIRQ(this->irqCall);
 
@@ -179,6 +183,7 @@ Status HyperBus::DeInit(void) {
 		LL_AHB5_GRP1_DisableClock(LL_AHB5_GRP1_PERIPH_XSPI3);
 	}
 
+#if defined (USE_RTOS)
 	// Abort RTOS waits/blocks and clean up RTOS Resources
 	if (tx_event_flags_delete(&this->event) != TX_SUCCESS) {
 		// Something went wrong...
@@ -187,24 +192,29 @@ Status HyperBus::DeInit(void) {
 	if (tx_mutex_delete(&this->mutex) != TX_SUCCESS) {
 		// Something went wrong...
 	}
+#endif
 
 	this->isInitialized = false;
 	return Status::Ok;
 }
 
 Status HyperBus::LockBus(uint32_t timeoutTicks) {
+#if defined (USE_RTOS)
 	// Try lock HyperBus device
 	if(tx_mutex_get(&this->mutex, timeoutTicks) != TX_SUCCESS) {
 		return Status::Timeout;
 	}
+#endif
 	return Status::Ok;
 }
 
 Status HyperBus::UnlockBus() {
+#if defined (USE_RTOS)
 	// Release HyperBus device
 	if(tx_mutex_put(&this->mutex) != TX_SUCCESS) {
 		return Status::Error;
 	}
+#endif
 	return Status::Ok;
 }
 
@@ -219,7 +229,11 @@ Status HyperBus::TransferAsync(AddressSpace space, uint32_t addr, AddrSize addrS
 	}
 	
 	// Clear event flags
+#if defined (USE_RTOS)
 	tx_event_flags_set(&this->event, 0, TX_AND);
+#else
+	this->eventFlags = 0;
+#endif
 
 	// Prepare internal transfer variables
 	this->buffer = (uint16_t*)buf;
@@ -261,6 +275,7 @@ Status HyperBus::TransferAsync(AddressSpace space, uint32_t addr, AddrSize addrS
 
 Status HyperBus::TransferWait(uint32_t timeoutTicks) {
 	// Wait for event
+#if defined (USE_RTOS)
 	ULONG events;
 	UINT status = tx_event_flags_get(&this->event, EVT_TRANS_CPLT | EVT_ERR, TX_OR_CLEAR, &events, timeoutTicks);
 
@@ -271,9 +286,28 @@ Status HyperBus::TransferWait(uint32_t timeoutTicks) {
 	if((events & EVT_ERR) == EVT_ERR) {
 		return Status::Error;
 	}
-	else {
-		return Status::Ok;
+#else
+	uint32_t startMs = Time::GetMs();
+
+	while(1) {
+		InterruptHandler();
+		if(this->eventFlags != 0) {
+			break;
+		}
+
+		if(timeoutTicks != TIMEOUT_MUTEX) { 
+			if ((Time::GetMs() - startMs) >= timeoutTicks) {
+				return Status::Timeout;
+			}
+		}
 	}
+
+	if((this->eventFlags & EVT_ERR) == EVT_ERR) {
+		return Status::Error;
+	}
+#endif
+
+	return Status::Ok;
 }
 
 Status HyperBus::Command(AddressSpace space, uint32_t addr, AddrSize addrSize, BusWidth width, uint32_t dataLen) {
@@ -292,14 +326,25 @@ Status HyperBus::Command(AddressSpace space, uint32_t addr, AddrSize addrSize, B
 	//15-3         | Reserved          | Reserved for future column address expansion. Set to 0
 	//2-0          | Lower Column Addr | Lower Column component of the target address: System word address bits A2–0 selecting the starting word within a half-page.
 
+	// Flush FIFO and clear all flags (start clean)
+	uint32_t timeoutMs = 5;
+	uint32_t timestamp = Time::GetMs();
+	SET_BIT(this->instance->CR, XSPI_CR_ABORT);
+	while((this->instance->CR & XSPI_CR_ABORT) == XSPI_CR_ABORT) {
+		if((Time::GetMs() - timestamp) > timeoutMs) {
+			// Timeout
+			return Status::Error;
+		}
+	}
+	WRITE_REG(this->instance->FCR, XSPI_FCR_CTCF | XSPI_FCR_CTEF | XSPI_FCR_CSMF | XSPI_FCR_CTOF);
+
 	uint32_t dqsMode = ((uint32_t)XSPI_CCR_DQSE);
 
 	// Wait for busy flag to clear
-	uint32_t timeoutMs = 5;
-	uint32_t timestamp = Time::GetMs();
+	timestamp = Time::GetMs();
 	while((this->instance->SR & XSPI_SR_BUSY_Msk) == XSPI_SR_BUSY) {
 		if((Time::GetMs() - timestamp) > timeoutMs) {
-			// Clock stop timeout
+			// Timeout
 			SET_BIT(this->instance->CR, XSPI_CR_ABORT); // Force hardware abort
 			return Status::Error;
 		}
@@ -420,7 +465,11 @@ void HyperBus::InterruptHandler() {
 		WRITE_REG(this->instance->FCR, XSPI_FCR_CTEF);
 		// Disable interrupts
 		CLEAR_BIT(this->instance->CR, XSPI_CR_TCIE | XSPI_CR_TEIE | XSPI_CR_FTIE);
+#if defined (USE_RTOS)
 		tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
+#else
+		this->eventFlags |= EVT_ERR;
+#endif
 	}
 
 	// Handle FIFO (FTF)
@@ -464,7 +513,10 @@ void HyperBus::InterruptHandler() {
 		WRITE_REG(this->instance->FCR, XSPI_FCR_CTCF);
 		// Disable interrupts
 		CLEAR_BIT(this->instance->CR, XSPI_CR_TCIE | XSPI_CR_TEIE | XSPI_CR_FTIE);
-
+#if defined (USE_RTOS)
 		tx_event_flags_set(&this->event, EVT_TRANS_CPLT, TX_OR);
+#else
+		this->eventFlags |= EVT_TRANS_CPLT;
+#endif
 	}
 }

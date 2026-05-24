@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 # Project Name
-set(CMAKE_PROJECT_NAME Loader)
+set(CMAKE_PROJECT_NAME Boot)
 project(${CMAKE_PROJECT_NAME} LANGUAGES C CXX ASM)
 
 # Setup compiler settings
@@ -62,9 +62,10 @@ include_directories(
 )
 
 # Sources
-file(GLOB LOADER_SOURCES
+file(GLOB BOOT_SOURCES
 	"Source/*.cpp"
 	"Source/*.c"
+	"Source/*.S"	# Gets startup.s and tx_initialize_low_level.S
 )
 
 set(BOARD_SOURCES 
@@ -89,48 +90,40 @@ set(ST_LL_SOURCES
 
 # Create executable
 add_executable(${CMAKE_PROJECT_NAME} 
-	${LOADER_SOURCES} 
+	${BOOT_SOURCES} 
 	${BOARD_SOURCES} 
 	${SDK_SOURCES}
 	${ST_LL_SOURCES}
 )
 
 # Linker script
-set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/stm32n6xx_extmemloader_stm32cube.ld")
+set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32N657XX_AXISRAM2_fsbl.ld")
 	target_link_options(${CMAKE_PROJECT_NAME} PRIVATE 
 	-T${LINKER_SCRIPT}
-	-Wl,--undefined=Init   # KEEP the Init symbol even if main doesn't call it
-	-Wl,--undefined=Write
-	-Wl,--undefined=SectorErase
-	-Wl,--undefined=Verify
-	-Wl,--undefined=MassErase
 )
 
 # Signing & Header Generation
 # Following code from: https://community.st.com/t5/stm32-mcus/how-to-add-post-build-commands-in-vs-code/ta-p/827930
-set(SIGNING_TOOL "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_SigningTool_CLI.exe")
-# set(SIGNING_TOOL "C:/ST/STM32CubeProgrammer/bin/STM32_SigningTool_CLI.exe")
+if(EXISTS "${SIGNING_TOOL_EXE}")
+	set(TARGET_ELF			"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.elf")
+	set(TARGET_ELF_SIGNED	"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}_Signed.elf")
+	set(TARGET_BIN			"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin")
+	set(TARGET_SIGNED		"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}_Signed.bin")
+	set(TARGET_FINAL		"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.stldr")
 
-set(TARGET_ELF      "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.elf")
-set(TARGET_BIN      "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin")
-set(TARGET_SIGNED   "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}_Signed.bin")
-set(TARGET_FINAL    "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.stldr")
+	add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_OBJCOPY} -O binary ${TARGET_ELF} ${TARGET_BIN}
+		COMMAND ${CMAKE_COMMAND} -E echo y > input.txt
+		COMMAND "${SIGNING_TOOL_EXE}" -bin "${TARGET_BIN}" -nk -of 0x80000000 -t fsbl -o "${TARGET_SIGNED}" -hv 2.3 -align -dump "${TARGET_SIGNED}" < input.txt
+		COMMAND ${CMAKE_COMMAND} -E copy "${TARGET_SIGNED}" "${TARGET_FINAL}"
+		COMMENT "Signing Boot binary and generating ${CMAKE_PROJECT_NAME}.stldr"
+	)
 
-add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy "${TARGET_ELF}" "${TARGET_FINAL}"
-    COMMENT "Generating External Loader ${CMAKE_PROJECT_NAME}.stldr from ELF"
-)
-
-# add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-# 	COMMAND ${CMAKE_OBJCOPY} -O binary ${TARGET_ELF} ${TARGET_BIN}
-# 	COMMAND ${CMAKE_COMMAND} -E echo y > input.txt
-# 	COMMAND "${SIGNING_TOOL}" -bin "${TARGET_BIN}" -nk -of 0x80000000 -t fsbl -o "${TARGET_SIGNED}" -hv 2.3 -dump "${TARGET_SIGNED}" < input.txt
-# 	COMMAND ${CMAKE_COMMAND} -E copy "${TARGET_SIGNED}" "${TARGET_FINAL}"
-# 	COMMENT "Signing Loader binary and generating ${CMAKE_PROJECT_NAME}.stldr"
-# )
-
-# Convert the signed ExtLoader .bin back to .elf
-# add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-#     COMMAND ${CMAKE_OBJCOPY} -I binary -O elf32-littlearm -B arm --change-addresses=0x80000000 "${TARGET_SIGNED}" "${TARGET_FINAL}"
-#     COMMENT "Wrapping signed binary into ELF format"
-# )
+	# Convert the signed Boot .bin back to .elf
+	add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_OBJCOPY} -I binary -O elf32-littlearm -B arm --change-addresses=0x70000000 "${TARGET_SIGNED}" "${TARGET_ELF_SIGNED}"
+		COMMENT "Converting signed FSBL .bin back to .elf in address [0x70000000]"
+	)
+else()
+	message(WARNING "Signing tool not found at ${SIGNING_TOOL_EXE}. Skipping signature generation.")
+endif()

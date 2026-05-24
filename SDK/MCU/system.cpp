@@ -123,14 +123,14 @@ void System::InitClock(void) {
 	while(LL_RCC_PLL1_IsReady() != 1);
 	nodeFrequencies.pll1 = 3200000000;
 
-	//Set PLL2 output frequency to 2000 MHz
+	//Set PLL2 output frequency to 3000 MHz
 	LL_RCC_PLL2_Disable();
 	while(LL_RCC_PLL2_IsReady() == 1);
 	LL_RCC_PLL2_DisableModulationSpreadSpectrum();
 	LL_RCC_PLL2_DisableBypass();
 	LL_RCC_PLL2_SetSource(LL_RCC_PLLSOURCE_HSE);
 	LL_RCC_PLL2_SetM(4);
-	LL_RCC_PLL2_SetN(400);
+	LL_RCC_PLL2_SetN(600);
 	LL_RCC_PLL2_SetP1(1);
 	LL_RCC_PLL2_SetP2(1);
 	LL_RCC_PLL2_SetFRACN(0);
@@ -139,7 +139,25 @@ void System::InitClock(void) {
 	LL_RCC_PLL2P_Enable();
 	LL_RCC_PLL2_Enable();
 	while(LL_RCC_PLL2_IsReady() != 1);
-	nodeFrequencies.pll2 = 2000000000;
+	nodeFrequencies.pll2 = 3000000000;
+
+	//Set PLL3 output frequency to 2700 MHz
+	LL_RCC_PLL3_Disable();
+	while(LL_RCC_PLL3_IsReady() == 1);
+	LL_RCC_PLL3_DisableModulationSpreadSpectrum();
+	LL_RCC_PLL3_DisableBypass();
+	LL_RCC_PLL3_SetSource(LL_RCC_PLLSOURCE_HSE);
+	LL_RCC_PLL3_SetM(4);
+	LL_RCC_PLL3_SetN(540);
+	LL_RCC_PLL3_SetP1(1);
+	LL_RCC_PLL3_SetP2(1);
+	LL_RCC_PLL3_SetFRACN(0);
+	LL_RCC_PLL3_AssertModulationSpreadSpectrumReset();
+	LL_RCC_PLL3_DisableFractionalModulationSpreadSpectrum();
+	LL_RCC_PLL3P_Enable();
+	LL_RCC_PLL3_Enable();
+	while(LL_RCC_PLL3_IsReady() != 1);
+	nodeFrequencies.pll3 = 2700000000;
 
 	// Set AHB clock, source is SYSB which source is IC2
 	LL_RCC_SetAHBPrescaler(LL_RCC_AHB_DIV_2);
@@ -157,44 +175,44 @@ void System::InitClock(void) {
 	while(LL_RCC_GetCpuClkSource() != LL_RCC_CPU_CLKSOURCE_STATUS_IC1);
 	nodeFrequencies.ic1 = 800000000;
 
-	//Set IC2 output to PLL1 / 8 = 3200 MHz / 8 = 400 MHz
+	//Set IC2 output to PLL1 / 8 = 3200 MHz / 8 = 400 MHz (Clock to AXI, AHB, and APBx buses)
 	LL_RCC_IC2_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
 	LL_RCC_IC2_SetDivider(8);
 	nodeFrequencies.ic2 = 400000000;
-	
-	//Set IC3 output to PLL1 / 8 = 3200 MHz / 8 = 400 MHz
+	//Set IC3 output to PLL1 / 8 = 3200 MHz / 8 = 400 MHz (Clock to XSPI/HyperBus)
 	LL_RCC_IC3_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
 	LL_RCC_IC3_SetDivider(8);
 	nodeFrequencies.ic3 = 400000000;
-	//Set IC4 output to PLL2 / 20 = 2000 MHz / 20 = 100 MHz
-	LL_RCC_IC4_SetSource(LL_RCC_ICCLKSOURCE_PLL2);
-	LL_RCC_IC4_SetDivider(20);
+	//Set IC4 output to PLL1 / 32 = 3200 MHz / 32 = 100 MHz (Clock to SDMMC)
+	LL_RCC_IC4_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
+	LL_RCC_IC4_SetDivider(32);
 	nodeFrequencies.ic4 = 100000000;
-	//Set IC6 output to PLL1 / 4 = 3200 MHz / 4 = 800 MHz
-	LL_RCC_IC6_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
-	LL_RCC_IC6_SetDivider(4);
-	nodeFrequencies.ic6 = 800000000;
-	//Set IC9 output to PLL2 / 20 = 2000 MHz / 20 = 100 MHz
-	LL_RCC_IC9_SetSource(LL_RCC_ICCLKSOURCE_PLL2);
-	LL_RCC_IC9_SetDivider(20);
+	//Set IC6 output to PLL2 / 3 = 3000 MHz / 3 = 1000 MHz (Clock to NPU Core)
+	LL_RCC_IC6_SetSource(LL_RCC_ICCLKSOURCE_PLL2);
+	LL_RCC_IC6_SetDivider(3);
+	nodeFrequencies.ic6 = 1000000000;
+	//Set IC9 output to PLL1 / 32 = 3200 MHz / 32 = 100 MHz (Clock to SPI and UART)
+	LL_RCC_IC9_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
+	LL_RCC_IC9_SetDivider(32);
 	nodeFrequencies.ic9 = 100000000;
-	//Set IC10 output to PLL1 / 32 = 3200 MHz / 32 = 100 MHz
+	//Set IC10 output to PLL1 / 32 = 3200 MHz / 32 = 100 MHz (Clock to I2C and I3C)
 	LL_RCC_IC10_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
 	LL_RCC_IC10_SetDivider(32);
 	nodeFrequencies.ic10 = 100000000;
-	//Set IC11 output to PLL1 / 4 = 3200 MHz / 4 = 800 MHz
-	LL_RCC_IC11_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
+	//Set IC11 output to PLL3 / 3 = 2700 MHz / 3 = 900 MHz (Clock to NPU SRAM: AXISRAM3/4/5/6)
+	LL_RCC_IC11_SetSource(LL_RCC_ICCLKSOURCE_PLL3);
 	LL_RCC_IC11_SetDivider(4);
-	nodeFrequencies.ic11 = 800000000;
-	//Set IC17 output to PLL1 / 4 = 3200 MHz / 10 = 320 MHz
-	LL_RCC_IC17_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
+	nodeFrequencies.ic11 = 900000000;
+	//Set IC17 output to PLL1 / 4 = 3200 MHz / 10 = 320 MHz (Clock to DCMIPP)
+	LL_RCC_IC17_SetSource(LL_RCC_ICCLKSOURCE_PLL1); 
 	LL_RCC_IC17_SetDivider(10);
 	nodeFrequencies.ic17 = 320000000;
-	//Set IC18 output to PLL1 / 160 = 3200 MHz / 160 = 20 MHz (This is clock to CSI-PHY!! Max is 27MHz). See chapter 14.6.8 pg. 442 in reference manual
-	LL_RCC_IC18_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
+	//Set IC18 output to PLL1 / 160 = 3200 MHz / 160 = 20 MHz (This is clock to CSI-PHY!! Max is 27MHz). See chapter 14.6.8 pg. 442 in reference manual (Clock to CSI-PHY)
+	LL_RCC_IC18_SetSource(LL_RCC_ICCLKSOURCE_PLL1); 
 	LL_RCC_IC18_SetDivider(160);
 	nodeFrequencies.ic18 = 20000000;
 
+	// Enable ICx clocks
 	LL_RCC_IC2_Enable();
 	LL_RCC_IC3_Enable();
 	LL_RCC_IC4_Enable();
@@ -239,7 +257,7 @@ void System::InitClock(void) {
 	LL_RCC_SetUARTClockSource(LL_RCC_UART4_CLKSOURCE_IC9);
 	LL_RCC_SetUARTClockSource(LL_RCC_USART6_CLKSOURCE_IC9);
 	LL_RCC_SetUARTClockSource(LL_RCC_UART7_CLKSOURCE_IC9);
-	// USB peripheral~
+	// USB peripheral
 	LL_RCC_SetUSBClockSource(LL_RCC_OTGPHY1_CLKSOURCE_HSE_DIV_2_OSC);
 	LL_RCC_SetUSBClockSource(LL_RCC_OTGPHY1CKREF_CLKSOURCE_OTGPHY1);
 	LL_RCC_SetUSBClockSource(LL_RCC_OTGPHY2_CLKSOURCE_HSE_DIV_2_OSC);
@@ -251,6 +269,36 @@ void System::InitClock(void) {
 	// Note: The XSPI AXI clock (xspi_aclk) has to be greater or equal than the XSPI kernel clock (xspi_ker_ck)
 	LL_RCC_SetXSPIClockSource(LL_RCC_XSPI1_CLKSOURCE_IC3);
 	LL_RCC_SetXSPIClockSource(LL_RCC_XSPI2_CLKSOURCE_IC3);
+}
+
+void System::InitFWClock(void) {
+	// Update internal tracking variables to match what FSBL configured
+	nodeFrequencies.pll1 = 3200000000;
+	nodeFrequencies.pll2 = 3000000000;
+	nodeFrequencies.pll3 = 2700000000;
+	nodeFrequencies.ic1 = 800000000;
+	nodeFrequencies.ic2 = 400000000;
+	nodeFrequencies.ic3 = 400000000;
+	nodeFrequencies.ic4 = 100000000;
+	nodeFrequencies.ic6 = 1000000000;
+	nodeFrequencies.ic9 = 100000000;
+	nodeFrequencies.ic10 = 100000000;
+	nodeFrequencies.ic11 = 900000000;
+	nodeFrequencies.ic17 = 320000000;
+	nodeFrequencies.ic18 = 20000000;
+	
+	// Save system and bus clock values
+	nodeFrequencies.sys = nodeFrequencies.ic1;
+	nodeFrequencies.axi = nodeFrequencies.ic2;
+	nodeFrequencies.ahb = nodeFrequencies.ic2 / 2;
+	nodeFrequencies.apb1 = nodeFrequencies.ahb;
+	nodeFrequencies.apb2 = nodeFrequencies.ahb;
+	nodeFrequencies.apb3 = nodeFrequencies.ahb;
+	nodeFrequencies.apb4 = nodeFrequencies.ahb;
+	nodeFrequencies.apb5 = nodeFrequencies.ahb;
+
+	// Update the CMSIS variable
+	LL_SetSystemCoreClock(800000000);
 }
 
 uint32_t System::GetNodeFrequency(ClockNode node) {
@@ -289,10 +337,15 @@ void System::InitSysTick(void) {
 	LL_SYSTICK_EnableIT();
 }
 
+void System::DisableSysTick(void) {
+	LL_SYSTICK_DisableIT();
+}
+
 void System::EnableDebug(void) {
 	LL_APB4_GRP2_EnableClock(LL_APB4_GRP2_PERIPH_BSEC);
 	BSEC->AP_UNLOCK = 0xB4;
-	BSEC->DBGCR = 0xB4B4B400;
+	BSEC->DBGCR = 0xB451B400;
+	// BSEC->DBGCR = 0xB4B4B400;
 }
 
 void System::EnableCache(void) {
@@ -353,6 +406,13 @@ void Time::Init() {
 	LL_TIM_EnableCounter(TIM5);
 }
 
+void Time::Disable(void) {
+	LL_TIM_DisableCounter(TIM5);
+	LL_TIM_DisableIT_UPDATE(TIM5);
+	NVIC_DisableIRQ(TIM5_IRQn);
+	NVIC_ClearPendingIRQ(TIM5_IRQn);
+}
+
 uint32_t Time::GetMs() {
 	return (uint32_t)(GetUs() / 1000);
 	// return timeMills;
@@ -365,10 +425,8 @@ uint64_t Time::GetUs() {
 }
 
 void Time::Delay(uint32_t ms) {
-	uint32_t start = GetUs();
+	uint64_t start = GetUs();
 	while ((GetUs() - start) < ((uint64_t)ms * 1000));
-	// uint32_t start = timeMills;
-	// while ((timeMills - start) < ms);
 }
 
 // ---------------------------------------------------------

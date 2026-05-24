@@ -8,13 +8,13 @@ static VisionFrame processedFrameBuffer;
 static VisionFrame jpegFrameBuffer[2];
 
 // Wrapper for Manual Exposure
-void VisionThread::ExposureTimeControl(int16_t value) { cameraSD.GetSensor().SetManualExposure(static_cast<uint16_t>(value)); }
+void VisionThread::ExposureTimeControl(int16_t value) { cameraHD.GetSensor().SetManualExposure(static_cast<uint16_t>(value)); }
 
 // Wrappers for camera controls
-void VisionThread::BrightnessControl(int16_t value) { cameraSD.GetSensor().SetBrightness(value); }
+void VisionThread::BrightnessControl(int16_t value) { cameraHD.GetSensor().SetBrightness(value); }
 
 // Wrapper for Auto White Balance (Boolean: 1 = Auto, 0 = Manual)
-void VisionThread::AutoWhiteBalanceControl(int16_t value) { cameraSD.GetSensor().SetAutoWhiteBalance(value != 0); }
+void VisionThread::AutoWhiteBalanceControl(int16_t value) { cameraHD.GetSensor().SetAutoWhiteBalance(value != 0); }
 
 // Wrapper for Manual White Balance (Temperature in Kelvin)
 void VisionThread::WhiteBalanceTemperatureControl(int16_t value) {
@@ -31,7 +31,7 @@ void VisionThread::WhiteBalanceTemperatureControl(int16_t value) {
 	// 4650K: Equilibrium/balanced
 	uint8_t redGain = 0x60 - ((value - 2800) * 0x30) / 3700;
 	uint8_t blueGain = 0x30 + ((value - 2800) * 0x30) / 3700;
-	cameraSD.GetSensor().SetWhiteBalance(redGain, blueGain);
+	cameraHD.GetSensor().SetWhiteBalance(redGain, blueGain);
 }
 
 // Register all camera controls to be exposed over UVC
@@ -124,24 +124,24 @@ void VisionThread::Run(ULONG input) {
 	rawFrameBuffer.allocatedSize = 640 * 480 * 2;
 	rawFrameBuffer.format = PixelFormat::YUV422_YVYU;
 
-	processedFrameBuffer.startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x450000); // Offset past raw buffer
+	processedFrameBuffer.startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x400000); // Offset past raw buffer
 	processedFrameBuffer.width = 640;
 	processedFrameBuffer.height = 480;
 	processedFrameBuffer.payloadSize = 640 * 480 * 2;
 	processedFrameBuffer.allocatedSize = 640 * 480 * 2;
 	processedFrameBuffer.format = PixelFormat::Unknown;	// Handled by processor
 
-	jpegFrameBuffer[0].startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x900000); // Offset past raw buffer
+	jpegFrameBuffer[0].startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x800000); // Offset past raw buffer
 	jpegFrameBuffer[0].width = 640;
 	jpegFrameBuffer[0].height = 480;
-	jpegFrameBuffer[0].allocatedSize = 640 * 480 * 2;	// 200 KB worst-case
+	jpegFrameBuffer[0].allocatedSize = 640 * 480 * 2;
 	jpegFrameBuffer[0].format = PixelFormat::Unknown;	// Handled by codec
 	jpegFrameBuffer[0].codec = VisionCodec::Jpeg;
 
-	jpegFrameBuffer[1].startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0xA00000); // Offset past raw buffer
+	jpegFrameBuffer[1].startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x1000000); // Offset past raw buffer
 	jpegFrameBuffer[1].width = 640;
 	jpegFrameBuffer[1].height = 480;
-	jpegFrameBuffer[1].allocatedSize = 640 * 480 * 2;	// 200 KB worst-case
+	jpegFrameBuffer[1].allocatedSize = 640 * 480 * 2;
 	jpegFrameBuffer[1].format = PixelFormat::Unknown;	// Handled by codec
 	jpegFrameBuffer[1].codec = VisionCodec::Jpeg;
 
@@ -255,8 +255,16 @@ void VisionThread::Run(ULONG input) {
 						if(deltaTime < Time::GetMs()) {
 							// Only calculate and report FPS every 1s
 							float fps = frameCount / 5.0f;
-							// LOG_INFO("SD-CAM: %.1f FPS (UVC Drop %d/%d)", fps, uvcDropedCount, frameCount);
-							// LOG_INFO("SD-CAM: DCMI %d us, MCU Blk %d us, JPEG %d us", timeCap, timeConvMCU, timeEncJpeg);	// SD-CAM: Cap 32228 us, To MCU 86573 us, Enc 6525 us
+							LOG_INFO("SD-CAM: %.1f FPS (UVC Drop %d/%d)", fps, uvcDropedCount, frameCount);
+							// SD-CAM & HyperRAM@100M & Code in SRAM:			Cap 32228 us, To MCU  86573 us, Enc 6525 us
+
+							// HD-CAM & HyperRAM@50M & Code in SRAM:			Cap 61834 us, To MCU 166303 us, Enc 9266 us
+							// HD-CAM & HyperRAM@100M & Code in SRAM:			Cap 40924 us, To MCU  85077 us, Enc 7130 us
+							// HD-CAM & HyperRAM@200M & Code in SRAM:			Cap 44978 us, To MCU  48642 us, Enc 6347 us
+
+							// HD-CAM & HyperRAM@50M & Code in HyperFlash/XIP:	Cap 61809 us, To MCU 159115 us, Enc 9392 us
+							// HD-CAM & HyperRAM@200M & Code in HyperFlash/XIP:	Cap 44390 us, To MCU  49146 us, Enc 6441 us
+							LOG_INFO("SD-CAM: DCMI %d us, MCU Blk %d us, JPEG %d us", timeCap, timeConvMCU, timeEncJpeg);	
 							frameCount = 0;
 							uvcDropedCount = 0;
 							deltaTime = Time::GetMs() + 5000;

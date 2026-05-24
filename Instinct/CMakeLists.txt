@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 
 # Project Name
 set(CMAKE_PROJECT_NAME Instinct)
-project(${CMAKE_PROJECT_NAME})
+project(${CMAKE_PROJECT_NAME} LANGUAGES C CXX ASM)
 
 # Setup compiler settings
 set(CMAKE_CXX_STANDARD 20)
@@ -30,6 +30,7 @@ add_compile_definitions(
 	USE_HAL_DRIVER
 	STM32N657xx
 	USE_FULL_LL_DRIVER
+	USE_RTOS
 	TX_INCLUDE_USER_DEFINE_FILE
 	TX_SINGLE_MODE_SECURE=1
 	FX_INCLUDE_USER_DEFINE_FILE
@@ -190,9 +191,6 @@ file(GLOB ZENOH_PLATFORM_SOURCES
 file(GLOB ZENOH_PORT_SOURCES "${ZENOH_ROOT}/ports/*.cpp")
 set(ZENOH_SOURCES ${ZENOH_CORE_SOURCES} ${ZENOH_PLATFORM_SOURCES} ${ZENOH_PORT_SOURCES})
 
-# Create Executable
-enable_language(ASM)
-
 add_executable(${CMAKE_PROJECT_NAME}
 	${APP_SOURCES}
 	${BOARD_SOURCES}
@@ -206,6 +204,7 @@ add_executable(${CMAKE_PROJECT_NAME}
 
 # Linker script
 set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32N657XX_AXISRAM2_fsbl.ld")
+# set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32N657XX_ROMxspi2.ld")
 target_link_options(${CMAKE_PROJECT_NAME} PRIVATE 
 	-T${LINKER_SCRIPT}
 )
@@ -213,24 +212,25 @@ target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
 # Signing & Header Generation
 # Following code from: https://community.st.com/t5/stm32-mcus/how-to-add-post-build-commands-in-vs-code/ta-p/827930
 if(EXISTS "${SIGNING_TOOL_EXE}")
-	set(TARGET_ELF		"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.elf")
-	set(TARGET_BIN		"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin")
-	set(TARGET_SIGNED	"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}_Signed.bin")
-	set(TARGET_FINAL	"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.stldr")
+	set(TARGET_ELF			"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.elf")
+	set(TARGET_ELF_SIGNED	"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}_Signed.elf")
+	set(TARGET_BIN			"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin")
+	set(TARGET_SIGNED		"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}_Signed.bin")
+	set(TARGET_FINAL		"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.stldr")
 
 	add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
 		COMMAND ${CMAKE_OBJCOPY} -O binary ${TARGET_ELF} ${TARGET_BIN}
 		COMMAND ${CMAKE_COMMAND} -E echo y > input.txt
-		COMMAND "${SIGNING_TOOL_EXE}" -bin "${TARGET_BIN}" -nk -of 0x80000000 -t fsbl -o "${TARGET_SIGNED}" -hv 2.3 -dump "${TARGET_SIGNED}" < input.txt
+		COMMAND "${SIGNING_TOOL_EXE}" -bin "${TARGET_BIN}" -nk -of 0x80000000 -t fsbl -o "${TARGET_SIGNED}" -hv 2.3 -align -dump "${TARGET_SIGNED}" < input.txt
 		COMMAND ${CMAKE_COMMAND} -E copy "${TARGET_SIGNED}" "${TARGET_FINAL}"
-		COMMENT "Signing Loader binary and generating ${CMAKE_PROJECT_NAME}.stldr"
+		COMMENT "Signing Instinct Firmware binary and generating ${CMAKE_PROJECT_NAME}.stldr"
 	)
 
-	# Convert the signed ExtLoader .bin back to .elf
-	# add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-	# COMMAND ${CMAKE_OBJCOPY} -I binary -O elf32-littlearm -B arm --change-addresses=0x80000000 "${TARGET_SIGNED}" "${TARGET_FINAL}"
-	# COMMENT "Wrapping signed binary into ELF format"
-	# )
+	# Convert the signed Instinct Firmware .bin back to .elf
+	add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_OBJCOPY} -I binary -O elf32-littlearm -B arm --change-addresses=0x70100000 "${TARGET_SIGNED}" "${TARGET_ELF_SIGNED}"
+		COMMENT "Converting signed .bin back to .elf in address [0x70100000]"
+	)
 else()
 	message(WARNING "Signing tool not found at ${SIGNING_TOOL_EXE}. Skipping signature generation.")
 endif()

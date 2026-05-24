@@ -15,7 +15,9 @@
 #include "status.hpp"
 #include "system.hpp"
 
+#if defined (USE_RTOS)
 #include "tx_api.h"
+#endif
 
 class HyperFlash {
 	public:

@@ -55,6 +55,8 @@ struct System {
 	/// @brief Initializes the overall system clock tree.
 	static void InitClock(void);
 
+	static void InitFWClock(void);
+
 	/// @brief Retrieves the current frequency of a specific clock node.
 	/// @param node The clock node to query.
 	/// @return Frequency in Hz, or 0 if unknown/disabled.
@@ -63,6 +65,9 @@ struct System {
 	/// @brief Initializes the SysTick timer.
 	/// @note Typically used by the RTOS.
 	static void InitSysTick(void);
+
+	/// @brief Disables the SysTick timer.
+	static void DisableSysTick(void);
 
 	/// @brief Enables the debug interface in flash run mode.
 	static void EnableDebug(void);
@@ -95,6 +100,9 @@ struct Time {
 
 	/// @brief Initializes the basic system timer (TIM7).
 	static void Init();
+
+	/// @brief Disables the basic system timer (TIM7).
+	static void Disable(void);
 
 	/// @brief Gets the current time since boot in miliseconds.
 	static uint32_t GetMs();

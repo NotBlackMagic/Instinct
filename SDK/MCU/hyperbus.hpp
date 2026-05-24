@@ -18,7 +18,9 @@
 #include "status.hpp"
 #include "system.hpp"
 
+#if defined (USE_RTOS)
 #include "tx_api.h"
+#endif
 
 /// @brief Driver for the HyperBus peripheral supporting direct write and memory mapped modes
 class HyperBus {
@@ -142,17 +144,22 @@ class HyperBus {
 		uint32_t length;
 		bool dirRead;
 
-		// Synchronization
-		TX_MUTEX mutex;
-		TX_EVENT_FLAGS_GROUP event;
-
 		// Event Flags Definitions
 		static constexpr uint32_t EVT_TRANS_CPLT = 0x01;
 		static constexpr uint32_t EVT_ERR = 0x02;
 
+
+#if defined (USE_RTOS)
+		// Synchronization
+		TX_MUTEX mutex;
+		TX_EVENT_FLAGS_GROUP event;
 		// Timeout defines
 		static constexpr uint32_t TIMEOUT_MUTEX = TX_WAIT_FOREVER;
-
+#else
+		volatile uint32_t eventFlags;
+        static constexpr uint32_t TIMEOUT_MUTEX = 0xFFFFFFFF;
+#endif
+		
 		// Internal helpers
 		Status Command(AddressSpace space, uint32_t addr, AddrSize addrSize, BusWidth width, uint32_t dataLen);
 };

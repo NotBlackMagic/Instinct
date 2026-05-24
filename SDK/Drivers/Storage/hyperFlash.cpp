@@ -349,8 +349,8 @@ Status HyperFlash::ChipErase() {
 		return status;
 	}
 
-	//Wait for command complete (device not busy)
-	//Maximum chip erase time is 1381 s for 1Gb flash (Typical is 398 s)
+	// Wait for command complete (device not busy)
+	// Maximum chip erase time is 1381s for 1Gb flash (Typical is 398 s)
 	if(this->WaitForReady(1500000) == false) {
 		// Something went wrong, clean up
 		// this->ClearStatus();
@@ -634,7 +634,10 @@ bool HyperFlash::WaitForReady(uint32_t timeoutMs) {
 		if((Time::GetMs() - timestamp) > timeoutMs) {
 			return false;
 		}
-
+#if defined (USE_RTOS)
 		tx_thread_sleep(1);
+#else
+		Time::Delay(1);
+#endif
 	}
 }

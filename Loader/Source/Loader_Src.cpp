@@ -1,23 +1,9 @@
-/**
-  ******************************************************************************
-  * @file    Loader_Src.c
-  * @author  MCD Application Team
-  * @brief   This file defines the operations of the external loader for
-  *          mx25lm51245g OSPI memory of STM32H7B3I-EVAL.
-  *           
-  ******************************************************************************
-  * @attention
-  *
-  * <h2><center>&copy; Copyright (c) 2021 STMicroelectronics.
-  * All rights reserved.</center></h2>
-  *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
-  *
-  ******************************************************************************
-  */
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:    Loader/Loader_Src.cpp
+ */
 
 #include "Loader_Src.h"
 #include "system.hpp"
@@ -44,19 +30,21 @@ HyperFlash* pFlash = nullptr;
 // Prepare/allocate for the class objects
 uint8_t busBuffer[sizeof(HyperBus)];
 uint8_t flashBuffer[sizeof(HyperFlash)];
-// Placement New operator (needed if <new> is not included/supported)
-//void* operator new(size_t, void* ptr) { return ptr; }
 
-const HyperFlash::Config extFlashConfig = {	
+HyperFlash::Config extFlashConfig = {	
 	.deviceName = "Cypress S26HS512T",
 	.expectedID = 0x0034,
 	.expectedDeviceID = 0x0090,
 	.sizeBytes = 256 * 256 * 1024,	// 64 MByte
 	.sectorSize = 256 * 1024,		// 256 kByte
 	.pageSize = 256,				// 512 bytes or 256 bytes (default: 256)
-	.initalLatency = 16,			// 16 Cycles
+	.sourceClockHz = 0,
+	.frequencyHz = 100000000,		// 100 MHz
+	.initialLatency = 16,			// 16 Cycles
 	.fixedLatency = false,
-	.rwRecoveryTime = 0
+	.rwRecoveryTime = 0,
+	.configReg0 = 0x8EBF,			// CFG0: Set drive strength to 46 Ohm
+	.configReg1 = 0					// CFG1: Do not change
 };
 
 uint8_t memoryMappedMode;
@@ -71,16 +59,15 @@ uint32_t g_pfnVectors[] __attribute__((section(".isr_vector"))) = { 0
 };
 void __attribute__((used,optimize("Os"))) Reset_Handler(void)
 {
+	asm(
+		"ldr r0, =_estack\n"
+		"nop\n"
+		"mov     sp, r0\n");
 
-  asm(
-      "ldr r0, =_estack\n"
-      "nop\n"
-      "mov     sp, r0\n");
-
-  asm(
-      "ldr r0, =main\n"
-      "nop\n"
-      "mov     pc, r0\n");
+	asm(
+		"ldr r0, =main\n"
+		"nop\n"
+		"mov     pc, r0\n");
 }
 #elif defined(__ICCARM__)
 extern const uint32_t __ICFEDIT_region_RAM_end__;
@@ -88,15 +75,14 @@ extern const uint32_t __ICFEDIT_region_RAM_end__;
 void Reset_Handler(void);
 
 uint32_t __vector_table[] __attribute__((section(".vectors"))) = {
-    (uint32_t)(&__ICFEDIT_region_RAM_end__), /* Stack pointer */
-    (uint32_t)&Reset_Handler                 /* Reset handler */
+	(uint32_t)(&__ICFEDIT_region_RAM_end__), /* Stack pointer */
+	(uint32_t)&Reset_Handler                 /* Reset handler */
 };
 
-void Reset_Handler(void)
-{
-  main();
+void Reset_Handler(void) {
+	main();
 }
-#endif /* STM32_EXTFLASHLOADER_DEBUG_NA */
+#endif
 
 /**
  * @brief  main function used for debug purpose
@@ -107,30 +93,26 @@ int main(void) {
 }
 
 uint32_t HAL_GetTick(void) {
-  return 1;
+	return 1;
 }
 
 void HAL_Delay(uint32_t Delay) {
-  int i=0;
-  for (i=0; i<0x1000; i++);
+	int i=0;
+	for (i=0; i<0x1000; i++);
 }
 
-/** @defgroup STM32H7B3I_Eval_OSPI_Private_Functions Private Functions
-  * @{
-  */
 /**
   * @brief  System initialization.
   * @param  None
   * @retval  1      : Operation succeeded
   * @retval  0      : Operation failed
   */
-
 KeepInCompilation uint32_t Init() {
 	uint32_t retr = 1;
 	uint8_t *startadd;
 	uint32_t size;
 
-	/*  get ZI Init variables to zero */
+	// get ZI Init variables to zero
 #if defined(__ICCARM__)
 	startadd = __section_begin(".bss");
 	size = __section_size(".bss");
@@ -139,46 +121,47 @@ KeepInCompilation uint32_t Init() {
 	extern uint32_t Image$$PrgData$$ZI$$Limit;
 
 	startadd = (uint8_t *)&Image$$PrgData$$ZI$$Base;
-	size     = (uint32_t)&Image$$PrgData$$ZI$$Limit - (uint32_t)startadd;
+	size = (uint32_t)&Image$$PrgData$$ZI$$Limit - (uint32_t)startadd;
 #elif defined ( __GNUC__ )
 	startadd = (uint8_t*)& __bss_start__;
-	size     = (uint8_t*)& __bss_end__ - (uint8_t*)& __bss_start__;
+	size = (uint8_t*)& __bss_end__ - (uint8_t*)& __bss_start__;
 #else
-	#error "the compiler is not yet supported"
+	#error "the compiler is not supported"
 #endif /* __ICCARM__ */
 
-	/*  Init variables to zero */
+	// Init variables to zero
 	memset(startadd, 0, size * sizeof(uint8_t));
 
-	/*  Init system*/
+	// Init system
 	SystemInit();
-	// HAL_Init();
 
-	/* disable all the IRQ */
+	// disable all the IRQ
 	__disable_irq();
 
-	/* Enable I-Cache---------------------------------------------------------*/
-	SCB_EnableICache();
+	// Enable I-Cache
+	// SCB_EnableICache();
 
-	/* Enable D-Cache---------------------------------------------------------*/
-	SCB_EnableDCache();
+	// Enable D-Cache
+	// SCB_EnableDCache();
 
-	/* Configure the system clock  */
+	// Configure the system clock
 	System::InitClock();
+	Time::Init();
 
-	/*Initialaize OSPI*/
+	// Initialize GPIOs
 	BoardGPIOInit();
-	//RED LED
+	// RED LED
 	LL_GPIO_SetPinSpeed(GPIOB, LL_GPIO_PIN_13, LL_GPIO_SPEED_FREQ_LOW);
 	LL_GPIO_SetPinOutputType(GPIOB, LL_GPIO_PIN_13, LL_GPIO_OUTPUT_PUSHPULL);
 	LL_GPIO_SetPinPull(GPIOB, LL_GPIO_PIN_13, LL_GPIO_PULL_NO);
 	LL_GPIO_SetPinMode(GPIOB, LL_GPIO_PIN_13, LL_GPIO_MODE_OUTPUT);
-	//GREEN LED
+	// GREEN LED
 	LL_GPIO_SetPinSpeed(GPIOQ, LL_GPIO_PIN_1, LL_GPIO_SPEED_FREQ_LOW);
 	LL_GPIO_SetPinOutputType(GPIOQ, LL_GPIO_PIN_1, LL_GPIO_OUTPUT_PUSHPULL);
 	LL_GPIO_SetPinPull(GPIOQ, LL_GPIO_PIN_1, LL_GPIO_PULL_NO);
 	LL_GPIO_SetPinMode(GPIOQ, LL_GPIO_PIN_1, LL_GPIO_MODE_OUTPUT);
 
+	// Initialize HyperBus and HyperFlash
 	pBus = new (busBuffer) HyperBus(XSPI2);
 	pFlash = new (flashBuffer) HyperFlash(*pBus);
 
@@ -186,7 +169,9 @@ KeepInCompilation uint32_t Init() {
 	LL_GPIO_SetOutputPin(GPIOQ, LL_GPIO_PIN_1);
 
 	BoardXSPI2Init();
-	if(pFlash->Init(extFlashConfig) != true) {
+
+	extFlashConfig.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC3);	// From IC3
+	if(pFlash->Init(extFlashConfig) != Status::Ok) {
 		LL_GPIO_SetOutputPin(GPIOQ, LL_GPIO_PIN_1);
 		LL_GPIO_ResetOutputPin(GPIOB, LL_GPIO_PIN_13);
 		return 0;
@@ -196,13 +181,10 @@ KeepInCompilation uint32_t Init() {
 	pFlash->EnterMemoryMappedMode();
 	memoryMappedMode = 1;
 
-	// if(result!=0)
-	// 	return result;
-
 	LL_GPIO_ResetOutputPin(GPIOQ, LL_GPIO_PIN_1);
 
-	/*Enable Interrupts*/
-	__enable_irq();
+	// Enable Interrupts
+	// __enable_irq();
 
 	return retr;
 }
@@ -218,21 +200,22 @@ KeepInCompilation uint32_t Init() {
 KeepInCompilation uint32_t Write (uint32_t Address, uint32_t Size, uint8_t* buffer) {
 	LL_GPIO_SetOutputPin(GPIOQ, LL_GPIO_PIN_1);
 
-	//Disable memory mapped mode if enabled
+	// Convert absolute memory address to relative flash offset
+	Address &= 0x0FFFFFFF;
+
+	// Disable memory mapped mode if enabled
 	if(memoryMappedMode == 1) {
 		pFlash->ExitMemoryMappedMode();
 		memoryMappedMode = 0;
 	}
 
-	/*Initialize QSPI*/
-	// if(pFlash->Init(extFlashConfig) != true) {
-	// 	return 0;
-	// }
-
-	/*Writes an amount of data to the QSPI memory.*/
-	pFlash->Program(Address, buffer, Size);
-		
-	return 1;
+	// Writes an amount of data to the HyperFlash memory
+	if(pFlash->Program(Address, buffer, Size) != Status::Ok) {
+		return 0;
+	}
+	else {
+		return 1;
+	}	
 }
 
 /**
@@ -244,18 +227,19 @@ KeepInCompilation uint32_t Write (uint32_t Address, uint32_t Size, uint8_t* buff
 KeepInCompilation  uint32_t MassErase (uint32_t Parallelism) {
 	LL_GPIO_SetOutputPin(GPIOQ, LL_GPIO_PIN_1);
 
-	//Disable memory mapped mode if enabled
+	// Disable memory mapped mode if enabled
 	if(memoryMappedMode == 1) {
 		pFlash->ExitMemoryMappedMode();
 		memoryMappedMode = 0;
 	}
 
-	/*Erases the entire OSPI memory*/
-	pFlash->ChipErase();
-		
-	/*Reads current status of the OSPI memory*/
-	//  while (BSP_OSPI_NOR_GetStatus(0)!=0);
-	return 1;  
+	// Erases the entire HyperFlash memory
+	if(pFlash->ChipErase() != Status::Ok) {
+		return 0;
+	}
+	else {
+		return 1;
+	}	
 }
 
 /**
@@ -267,21 +251,21 @@ KeepInCompilation  uint32_t MassErase (uint32_t Parallelism) {
 KeepInCompilation uint32_t SectorErase (uint32_t EraseStartAddress ,uint32_t EraseEndAddress) {
 	LL_GPIO_SetOutputPin(GPIOQ, LL_GPIO_PIN_1);
 
-	//Disable memory mapped mode if enabled
+	// Disable memory mapped mode if enabled
 	if(memoryMappedMode == 1) {
 		pFlash->ExitMemoryMappedMode();
 		memoryMappedMode = 0;
 	}
 
 	uint32_t BlockAddr;
-	EraseStartAddress = EraseStartAddress & 0x0FFFFFFF;  
+	EraseStartAddress = EraseStartAddress & 0x0FFFFFFF;
 	EraseEndAddress &= 0x0FFFFFFF;
-	EraseStartAddress = EraseStartAddress -  EraseStartAddress % 0x00040000;
+	EraseStartAddress = EraseStartAddress - EraseStartAddress % 0x00040000;
 
 	while (EraseEndAddress>=EraseStartAddress) {
 		BlockAddr = EraseStartAddress;
 
-		/*Erases the specified block of the OSPI memory*/
+		// Erases the specified block of the HyperFlash memory
 		pFlash->SectorErase(BlockAddr);
 
 		EraseStartAddress+=0x00040000;
@@ -301,72 +285,65 @@ KeepInCompilation uint32_t SectorErase (uint32_t EraseStartAddress ,uint32_t Era
   *     R0             : Checksum value
   * Note: Optional for all types of device
   */
-uint32_t CheckSum(uint32_t StartAddress, uint32_t Size, uint32_t InitVal)
-{
-    uint8_t missalignementAddress = StartAddress%4;
-    uint8_t missalignementSize = Size ;
-    uint32_t cnt;
-    uint32_t Val;
-          
-    StartAddress-=StartAddress%4;
-    Size += (Size%4==0)?0:4-(Size%4);
-    
-    for(cnt=0; cnt<Size ; cnt+=4)
-    {
-      Val = *(uint32_t*)StartAddress;
-      if(missalignementAddress)
-      {
-        switch (missalignementAddress)
-        {
-          case 1:
-            InitVal += (uint8_t) (Val>>8 & 0xff);
-            InitVal += (uint8_t) (Val>>16 & 0xff);
-            InitVal += (uint8_t) (Val>>24 & 0xff);
-            missalignementAddress-=1;
-            break;
-          case 2:
-            InitVal += (uint8_t) (Val>>16 & 0xff);
-            InitVal += (uint8_t) (Val>>24 & 0xff);
-            missalignementAddress-=2;
-            break;
-          case 3:   
-            InitVal += (uint8_t) (Val>>24 & 0xff);
-            missalignementAddress-=3;
-            break;
-        }  
-      }
-      else if((Size-missalignementSize)%4 && (Size-cnt) <=4)
-      {
-        switch (Size-missalignementSize)
-        {
-          case 1:
-            InitVal += (uint8_t) Val;
-            InitVal += (uint8_t) (Val>>8 & 0xff);
-            InitVal += (uint8_t) (Val>>16 & 0xff);
-            missalignementSize-=1;
-            break;
-          case 2:
-            InitVal += (uint8_t) Val;
-            InitVal += (uint8_t) (Val>>8 & 0xff);
-            missalignementSize-=2;
-            break;
-          case 3:   
-            InitVal += (uint8_t) Val;
-            missalignementSize-=3;
-            break;
-        } 
-      }
-      else
-      {
-        InitVal += (uint8_t) Val;
-        InitVal += (uint8_t) (Val>>8 & 0xff);
-        InitVal += (uint8_t) (Val>>16 & 0xff);
-        InitVal += (uint8_t) (Val>>24 & 0xff);
-      }
-      StartAddress+=4;
-    }
-    
-    return (InitVal);
+uint32_t CheckSum(uint32_t StartAddress, uint32_t Size, uint32_t InitVal) {
+	uint8_t missalignementAddress = StartAddress%4;
+	uint8_t missalignementSize = Size ;
+	uint32_t cnt;
+	uint32_t Val;
+			
+	StartAddress-=StartAddress%4;
+	Size += (Size%4==0)?0:4-(Size%4);
+
+	for(cnt=0; cnt<Size ; cnt+=4) {
+		Val = *(uint32_t*)StartAddress;
+		if(missalignementAddress) {
+			switch (missalignementAddress) {
+				case 1:
+					InitVal += (uint8_t) (Val>>8 & 0xff);
+					InitVal += (uint8_t) (Val>>16 & 0xff);
+					InitVal += (uint8_t) (Val>>24 & 0xff);
+					missalignementAddress-=1;
+					break;
+				case 2:
+					InitVal += (uint8_t) (Val>>16 & 0xff);
+					InitVal += (uint8_t) (Val>>24 & 0xff);
+					missalignementAddress-=2;
+					break;
+				case 3:
+					InitVal += (uint8_t) (Val>>24 & 0xff);
+					missalignementAddress-=3;
+					break;
+			}
+		}
+		else if((Size-missalignementSize)%4 && (Size-cnt) <=4) {
+			switch (Size-missalignementSize) {
+				case 1:
+					InitVal += (uint8_t) Val;
+					InitVal += (uint8_t) (Val>>8 & 0xff);
+					InitVal += (uint8_t) (Val>>16 & 0xff);
+					missalignementSize-=1;
+					break;
+				case 2:
+					InitVal += (uint8_t) Val;
+					InitVal += (uint8_t) (Val>>8 & 0xff);
+					missalignementSize-=2;
+					break;
+				case 3:
+					InitVal += (uint8_t) Val;
+					missalignementSize-=3;
+					break;
+			} 
+		}
+		else{ 
+			InitVal += (uint8_t) Val;
+			InitVal += (uint8_t) (Val>>8 & 0xff);
+			InitVal += (uint8_t) (Val>>16 & 0xff);
+			InitVal += (uint8_t) (Val>>24 & 0xff);
+		}
+		StartAddress+=4;
+	}
+
+	return (InitVal);
 }
 
 /**
@@ -385,28 +362,27 @@ uint32_t CheckSum(uint32_t StartAddress, uint32_t Size, uint32_t InitVal)
   */
 
 KeepInCompilation uint64_t Verify (uint32_t MemoryAddr, uint32_t RAMBufferAddr, uint32_t Size, uint32_t missalignement) {
-    uint32_t VerifiedData = 0, InitVal = 0;
-    uint64_t checksum;
-    Size*=4;
+	uint32_t VerifiedData = 0, InitVal = 0;
+	uint64_t checksum;
+	Size*=4;
 
 	LL_GPIO_SetOutputPin(GPIOQ, LL_GPIO_PIN_1);
 
-	//Enable memory mapped mode if disabled
+	// Enable memory mapped mode if disabled
 	if(memoryMappedMode == 0) {
 		pFlash->EnterMemoryMappedMode();
 		memoryMappedMode = 1;
 	}
 
-    checksum = CheckSum((uint32_t)MemoryAddr + (missalignement & 0xf), Size - ((missalignement >> 16) & 0xF), InitVal);
-    while (Size>VerifiedData) {
-      if ( *(uint8_t*)MemoryAddr++ != *((uint8_t*)RAMBufferAddr + VerifiedData)) {
-        return ((checksum<<32) + (MemoryAddr + VerifiedData));
-	  }
-     
-      VerifiedData++;  
-    }
-          
-    return (checksum<<32);
+	checksum = CheckSum((uint32_t)MemoryAddr + (missalignement & 0xf), Size - ((missalignement >> 16) & 0xF), InitVal);
+	while(Size>VerifiedData) {
+		if(*(uint8_t*)MemoryAddr++ != *((uint8_t*)RAMBufferAddr + VerifiedData)) {
+			return ((checksum<<32) + (MemoryAddr + VerifiedData));
+		}
+		VerifiedData++;
+	}
+			
+	return (checksum<<32);
 }
 
 /**
@@ -414,7 +390,6 @@ KeepInCompilation uint64_t Verify (uint32_t MemoryAddr, uint32_t RAMBufferAddr, 
   * @retval None
   */
 void Error_Handler(void) {
-	/* User may add here some code to deal with this error */
 	LL_GPIO_SetOutputPin(GPIOQ, LL_GPIO_PIN_1);
 	LL_GPIO_ResetOutputPin(GPIOB, LL_GPIO_PIN_13);
 	while(1) {
@@ -427,5 +402,3 @@ void Error_Handler(void) {
 void HardFault_Handler(void) {
 	Error_Handler();
 }
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

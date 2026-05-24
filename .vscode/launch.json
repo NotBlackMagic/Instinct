@@ -5,26 +5,92 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Debug Instinct",
+			"name": "Debug Bootloader (FSBL)",
 			"type": "stlinkgdbtarget",
 			"request": "launch",
 			"origin": "snippet",
 			"device": "STM32N657",
 			"deviceCore": "Cortex-M55",
 			"cwd": "${workspaceFolder}",
-
 			"preBuild": "${command:st-stm32-ide-debug-launch.build}",
-
-			"runEntry": "main", // Set in BOOT_Application
-
+			"runEntry": "Reset_Handler",
 			// Replace with your .svd path
 			//"svdPath": "C:/ST/STM32CubeCLT_1.19.0/STMicroelectronics_CMSIS_SVD/STM32N657.svd",
 			"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
 			//"svdPath": "C:/ST/STM32CubeProgrammer/SVD/STM32N657.svd",
 
 			"serverArgs": [
-				"-m",
-				"1"
+				"-m", "1"
+				//"-el", "${workspaceFolder}/build/Debug/Loader/PlumaLoader.stldr"
+			],
+
+			"overrideLaunchCommands": [
+				"-target-download",
+				"monitor reset",
+				"continue"
+			],
+
+			"imagesAndSymbols": [
+				{
+					"symbolFileName": "${workspaceFolder}/build/Debug/Boot/Boot.elf",
+					"imageFileName": "${workspaceFolder}/build/Debug/Boot/Boot_Signed.elf",
+					"format": "elf"
+				}
+			]
+		},
+		{
+			"name": "Debug Instinct (SRAM)",
+			"type": "stlinkgdbtarget",
+			"request": "launch",
+			"origin": "snippet",
+			"device": "STM32N657",
+			"deviceCore": "Cortex-M55",
+			"cwd": "${workspaceFolder}",
+			"preBuild": "${command:st-stm32-ide-debug-launch.build}",
+			"runEntry": "main",
+			// Replace with your .svd path
+			//"svdPath": "C:/ST/STM32CubeCLT_1.19.0/STMicroelectronics_CMSIS_SVD/STM32N657.svd",
+			"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
+			//"svdPath": "C:/ST/STM32CubeProgrammer/SVD/STM32N657.svd",
+
+			"serverArgs": [
+				"-m", "1"
+				//"-el", "${workspaceFolder}/build/Debug/Loader/PlumaLoader.stldr"
+			],
+
+			"overrideLaunchCommands": [
+				"-target-download",
+				"monitor reset",
+				"continue"
+			],
+
+			"imagesAndSymbols": [
+				{
+					"symbolFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct.elf",
+					"imageFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct.elf",
+					// "imageFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct_Signed.elf",
+					"format": "elf"
+				}
+			]
+		},
+		{
+			"name": "Debug Instinct (XIP)",
+			"type": "stlinkgdbtarget",
+			"request": "launch",
+			"origin": "snippet",
+			"device": "STM32N657",
+			"deviceCore": "Cortex-M55",
+			"serverReset": "None",
+			"cwd": "${workspaceFolder}",
+			"preBuild": "${command:st-stm32-ide-debug-launch.build}",
+			"runEntry": "JumpToApplication",
+			// Replace with your .svd path
+			//"svdPath": "C:/ST/STM32CubeCLT_1.19.0/STMicroelectronics_CMSIS_SVD/STM32N657.svd",
+			"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
+			//"svdPath": "C:/ST/STM32CubeProgrammer/SVD/STM32N657.svd",
+
+			"serverArgs": [
+				"-m", "1"
 				//"-el", "${workspaceFolder}/build/Debug/Loader/PlumaLoader.stldr"
 			],
 
@@ -35,9 +101,22 @@
 
 			"imagesAndSymbols": [
 				{
-					"symbolFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct.elf",
-					"imageFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct.elf",
+					"symbolFileName": "${workspaceFolder}/build/Debug/Boot/Boot.elf",
+					//"imageFileName": "${workspaceFolder}/build/Debug/Boot/Boot_Signed.elf",
 					"format": "elf"
+				},
+				{
+					"symbolFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct.elf",
+					// "imageFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct.elf",
+					// "imageFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct_Signed.elf",
+					"format": "elf"
+				}
+			],
+
+			"serverExtLoader": [
+				{
+					"loader": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/ExternalLoader/PlumaN6_Base_ExtLoader.stldr",
+					"initialize": false
 				}
 			]
 		}

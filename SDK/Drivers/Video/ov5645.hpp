@@ -50,17 +50,6 @@ class OV5645 {
 			Auto
 		};
 
-		/// @brief Automatic Gain Control (AGC) maximum ceiling limits.
-		enum class GainCeiling : uint8_t {
-			x2 = 0x00,
-			x4 = 0x01,
-			x8 = 0x02,
-			x16 = 0x03,
-			x32 = 0x04,
-			x64 = 0x05,
-			x128 = 0x06
-		};
-
 		/// @brief OV5645 camera configuration structure.
 		struct Config {
 			const char* deviceName;		///< Free text name e.g. "OV5645".
@@ -133,6 +122,63 @@ class OV5645 {
 		/// @return Camera sensor information.
 		SensorInfo GetInfo() { return sensorInfo; }
 
+		/// @brief Sets the desired brightness level.
+		/// @param value Brightness level to use, signed value (default is 0x00).
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
+		Status SetBrightness(int8_t value);
+
+		/// @brief Sets the desired contrast level.
+		/// @param value Contrast level to use (default is 0x20).
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
+		Status SetContrast(uint8_t value);
+
+		/// @brief Sets the desired saturation level.
+		/// @param value Saturation level to use (default is 0x40).
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
+		Status SetSaturation(uint8_t value);
+
+		/// @brief Sets the desired white balance, when in manual mode.
+		/// @param redGain	Red channel gain.
+		/// @param blueGain	Blue channel gain.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
+		Status SetWhiteBalance(uint8_t redGain, uint8_t blueGain);
+
+		/// @brief Disables auto exposure and sets a manual exposure time.
+		/// @param exposure 20-bit exposure value (higher = longer exposure).
+		/// @return Status::Ok if set succeeded.
+		Status SetManualExposure(uint32_t exposure);
+
+		/// @brief Sets the maximum limit the Auto Gain Control (AGC) can reach.
+		/// @param ceiling The maximum AGC gain (1023).
+		/// @return Status::Ok if set succeeded.
+		Status SetMaxGain(uint16_t ceiling);
+
+		/// @brief Sets the auto exposure mode.
+		/// @param enable If true auto exposure is enabled.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
+		Status SetAutoExposure(bool enable);
+
+		/// @brief Sets the auto white balance mode.
+		/// @param enable If true white balance is enabled.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
+		Status SetAutoWhiteBalance(bool enable);
+
+		/// @brief Sets the anti-banding filter for indoor lighting.
+		/// @param filter The AC frequency of the environment.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
+		Status SetBandingFilter(BandingFilter filter);
+
+		/// @brief Sets frame orientation/mirroring.
+		/// @param mirrorH	If truer mirror frame along the horizontal axis.
+		/// @param flipV	If truer mirror frame along the vertical axis.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
+		Status SetOrientation(bool mirrorH, bool flipV);
+
+		/// @brief Sets the auto focus mode.
+		/// @param enable If true auto focus is enabled.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
+		Status SetAutoFocus(bool enable);
+
 		/// @brief Sets the test pattern mode.
 		/// @param enable If true test pattern is enabled.
 		/// @return Status::Ok if set succeeded, or Status::Error if failed.
@@ -155,7 +201,6 @@ class OV5645 {
 
 		InternalResolution FindNearestResolution(uint16_t w, uint16_t h);
 		Status ApplyResolution(InternalResolution resolution);
-		Status ApplyWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 
 		Status WriteRegisterArray(const RegisterValuePair* blob, uint16_t size);
 		Status WriteRegister(Register reg, uint8_t value);

@@ -1,28 +1,15 @@
-/**
-  ******************************************************************************
-  * @file    Loader_Src.h
-  * @author  MCD Application Team
-  * @brief   Header file of Loader_Src.c
-  *           
-  ******************************************************************************
-  * @attention
-  *
-  * <h2><center>&copy; Copyright (c) 2021 STMicroelectronics.
-  * All rights reserved.</center></h2>
-  *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
-  *
-  ******************************************************************************
-  */
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:    Loader/Loader_Src.h
+ * Author:  NotBlackMagic
+ * Brief:   Custom flash loader code for the PlumaN6 (STM32N6 + S26HS512T)
+ */
 
-/* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __LOADER_SRC_H
 #define __LOADER_SRC_H
 
-/* Includes ------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
 
@@ -55,7 +42,6 @@
 #define KeepInCompilation __attribute__((used))
 #endif /* __ICCARM__ */
 
-/* Private function prototypes -----------------------------------------------*/
 extern "C" {
 	KeepInCompilation uint32_t Init ();
 	KeepInCompilation uint32_t Write (uint32_t Address, uint32_t Size, uint8_t* buffer);
@@ -71,5 +57,3 @@ int main(void);
 #endif
 
 #endif /* __LOADER_SRC_H */
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
