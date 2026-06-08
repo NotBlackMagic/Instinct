@@ -69,6 +69,12 @@ struct System {
 	/// @brief Disables the SysTick timer.
 	static void DisableSysTick(void);
 
+	/// @brief Enables all AXISRAM blocks.
+	static void EnableAXISRAM(void);
+
+	/// @brief Enables all VENCSRAM blocks.
+	static void EnableVENCSRAM(void);
+
 	/// @brief Enables the debug interface in flash run mode.
 	static void EnableDebug(void);
 	
@@ -98,10 +104,10 @@ struct Time {
 	// Delete constructor.
 	Time() = delete;
 
-	/// @brief Initializes the basic system timer (TIM7).
+	/// @brief Initializes the basic system timer (TIM5).
 	static void Init();
 
-	/// @brief Disables the basic system timer (TIM7).
+	/// @brief Disables the basic system timer (TIM5).
 	static void Disable(void);
 
 	/// @brief Gets the current time since boot in miliseconds.

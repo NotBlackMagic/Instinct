@@ -13,17 +13,13 @@ set(CMAKE_C_EXTENSIONS ON)
 
 set(MCU_FLAGS  "-mcpu=cortex-m55 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -mcmse " )
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MCU_FLAGS} -ffunction-sections -fdata-sections")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MCU_FLAGS} -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MCU_FLAGS} -ffunction-sections -fdata-sections -flax-vector-conversions")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MCU_FLAGS} -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti -flax-vector-conversions")
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${MCU_FLAGS}") 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MCU_FLAGS} -Wl,--gc-sections -Wl,--print-memory-usage")
 
 # Include toolchain file
 include("../cmake/gcc-arm-none-eabi.cmake")
-
-# Force optimization options that the toolchain might miss
-# add_compile_options(${MCU_FLAGS} -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti)
-# add_link_options(${MCU_FLAGS} -Wl,--gc-sections -Wl,--print-memory-usage)
 
 # Defines
 add_compile_definitions(
@@ -34,6 +30,8 @@ add_compile_definitions(
 	TX_INCLUDE_USER_DEFINE_FILE
 	TX_SINGLE_MODE_SECURE=1
 	FX_INCLUDE_USER_DEFINE_FILE
+	ARM_MATH_DSP
+	DISABLEFLOAT16
 
 	ZENOH_THREADX_STM32=1        # Use the built-in ThreadX memory/time hooks
 	Z_FEATURE_NETWORK_CUSTOM=1   # Disable POSIX sockets, use your custom serial link
@@ -104,6 +102,8 @@ include_directories(
 	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Inc
 	${PLUMA_SDK_PATH}/Middleware/CMSIS/Include
 	${PLUMA_SDK_PATH}/Middleware/CMSIS/Device/ST/STM32N6xx/Include
+	${PLUMA_SDK_PATH}/Middleware/CMSIS/DSP/Include
+    ${PLUMA_SDK_PATH}/Middleware/CMSIS/DSP/PrivateInclude
 	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/inc
 	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/src/common
 	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/src/h264
@@ -173,6 +173,23 @@ file(GLOB FILEX_SOURCES
 	"${FILEX_ROOT}/ports/src/*.cpp"
 )
 
+# CMSIS-DSP Sources
+set(CMSIS_DSP_ROOT "${PLUMA_SDK_PATH}/Middleware/CMSIS/DSP")
+file(GLOB CMSIS_DSP_SOURCES
+	"${CMSIS_DSP_ROOT}/Source/BasicMathFunctions/*.c"
+	"${CMSIS_DSP_ROOT}/Source/FastMathFunctions/*.c"
+	"${CMSIS_DSP_ROOT}/Source/MatrixFunctions/*.c"
+	"${CMSIS_DSP_ROOT}/Source/StatisticsFunctions/*.c"
+	"${CMSIS_DSP_ROOT}/Source/QuaternionMathFunctions/*.c"
+)
+# Remove the CMSIS-DSP "Master" files to prevent multiple definition linker errors
+list(FILTER CMSIS_DSP_SOURCES EXCLUDE REGEX "BasicMathFunctions\\.c$")
+list(FILTER CMSIS_DSP_SOURCES EXCLUDE REGEX "FastMathFunctions\\.c$")
+list(FILTER CMSIS_DSP_SOURCES EXCLUDE REGEX "MatrixFunctions\\.c$")
+list(FILTER CMSIS_DSP_SOURCES EXCLUDE REGEX "StatisticsFunctions\\.c$")
+list(FILTER CMSIS_DSP_SOURCES EXCLUDE REGEX "QuaternionMathFunctions\\.c$")
+list(FILTER CMSIS_DSP_SOURCES EXCLUDE REGEX ".*FunctionsF16\\.c$")
+
 # VideoEncoder (VENC) Sources
 set(VENC_ROOT "${PLUMA_SDK_PATH}/Middleware/VideoEncoder")
 file(GLOB VENC_SOURCES
@@ -198,6 +215,7 @@ add_executable(${CMAKE_PROJECT_NAME}
 	${ST_DRIVER_SOURCES}
 	${THREADX_SOURCES}
 	${FILEX_SOURCES}
+	${CMSIS_DSP_SOURCES}
 	${VENC_SOURCES}
 	${ZENOH_SOURCES}
 )

@@ -21,10 +21,6 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MCU_FLAGS} -Wl,--gc-sect
 # Include toolchain file
 include("../cmake/gcc-arm-none-eabi.cmake")
 
-# Force optimization options that the toolchain might miss
-# add_compile_options(${MCU_FLAGS} -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti)
-# add_link_options(${MCU_FLAGS} -Wl,--gc-sections -Wl,--print-memory-usage)
-
 # Defines
 add_compile_definitions(
 	STM32N657xx

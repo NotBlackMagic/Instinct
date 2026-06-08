@@ -1,5 +1,10 @@
 #pragma once
 
+// Basic system includes
+#include "logger.hpp"
+#include "status.hpp"
+
+// Base MCU peripheral drivers
 #include "csi.hpp"
 #include "dcmi.hpp"
 #include "dcmipp.hpp"
@@ -12,17 +17,18 @@
 #include "jpeg.hpp"
 #include "pwm.hpp"
 #include "sdmmc.hpp"
-#include "status.hpp"
 #include "spi.hpp"
 #include "system.hpp"
 #include "timer.hpp"
 #include "uart.hpp"
 #include "usb.hpp"
 
+// Storage device drivers
 #include "hyperFlash.hpp"
 #include "hyperRAM.hpp"
 #include "sd.hpp"
 
+// Misc sensor drivers
 #include "bmm350.hpp"
 #include "bmp581.hpp"
 #include "ina700.hpp"
@@ -32,6 +38,7 @@
 #include "lsm6dso.hpp"
 #include "rcReceiver.hpp"
 
+// Vision sensor and device drivers
 #include "ov5645.hpp"
 #include "ov7670.hpp"
 #include "ov9281.hpp"
@@ -39,13 +46,12 @@
 #include "cameraDCMI.hpp"
 #include "jpegEncoder.hpp"
 
-#include "logger.hpp"
-
-#include "fx_api.h"
-
+// USB device and class drivers
 #include "usbClassCDC.hpp"
 #include "usbClassUVC.hpp"
 #include "usbDevice.hpp"
+
+#include "fx_api.h"
 
 extern GPIO ledRed;
 extern GPIO ledBlue;

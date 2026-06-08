@@ -1,12 +1,5 @@
-// #include "main.h"
-
 #include <cstring>
 #include <stdio.h>
-
-#include "i3c.hpp"
-#include "status.hpp"
-
-#include "stm32n6xx_ll_dma.h"
 
 #include "auxiliaryThread.hpp"
 #include "estimatorThread.hpp"
@@ -19,16 +12,9 @@
 #include "telemetryThread.hpp"
 #include "visionThread.hpp"
 
-#include "usbClassCDC.hpp"
-#include "usbClassUVC.hpp"
-#include "usbDevice.hpp"
-
 #include "console.hpp"
 #include "hardware.hpp"
 #include "pubSub.hpp"
-#include "system.hpp"
-
-#include "logger.hpp"
 
 #include "tx_api.h"
 
@@ -108,22 +94,19 @@ void TestThread(ULONG thread_input) {
 	float speed = 0;
 	uint8_t repeats = 1;
 
-	// Init External PSRAM
+	// Configure and initialize external PSRAM (and flash when NOT XIP)
 	if(externalPSRAM.Init(extRAMConfig) == Status::Ok) {
 		LOG_INFO("HyperRAM Init OK: %s.", extRAMConfig.deviceName);
 	}
 	else {
 		LOG_ERR("HyperRAM Init Failed!");
-		while(1);
 	}
 
-	// // Init External Flash
 	// if(externalFlash.Init(extFlashConfig) == Status::Ok) {
 	// 	LOG_INFO("HyperFlash Init OK: %s.", extFlashConfig.deviceName);
 	// }
 	// else {
 	// 	LOG_ERR("HyperFlash Init Failed!");
-	// 	while(1);
 	// }
 
 	// RAM Test
@@ -194,8 +177,6 @@ void TestThread(ULONG thread_input) {
 	LL_AHB5_GRP1_EnableClock(LL_AHB5_GRP1_PERIPH_HPDMA1);
 	LL_AHB3_GRP1_EnableClock(LL_AHB3_GRP1_PERIPH_RIFSC);
 	LL_AHB3_GRP1_EnableClock(LL_AHB3_GRP1_PERIPH_RISAF);
-	// NVIC_SetPriority(HPDMA1_Channel0_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),0, 0));
-	// NVIC_EnableIRQ(HPDMA1_Channel0_IRQn);
 
 	// RIF configuration
 	const uint32_t RIF_CID = 0x0F;	// Allow ALL i.e RW for everyone
@@ -215,20 +196,6 @@ void TestThread(ULONG thread_input) {
 	RISAF3->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
 	RISAF3->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos)
 							| (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
-
-	// RIF configuration (XSPI1)
-	RISAF11->REG[0].STARTR = 0x0;
-	RISAF11->REG[0].ENDR = 0xFFFFFFFFU;		// Full region
-	RISAF11->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
-	RISAF11->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos)
-							| (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
-
-	// RIF configuration (XSPI2)
-	// RISAF12->REG[0].STARTR = 0x0;
-	// RISAF12->REG[0].ENDR = 0xFFFFFFFFU;		// Full region
-	// RISAF12->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
-	// RISAF12->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos)
-	// 						| (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
 
 	// Access configuration
 	LL_DMA_EnableChannelSecure(HPDMA1, LL_DMA_CHANNEL_12);
@@ -343,13 +310,6 @@ void TestThread(ULONG thread_input) {
 	// System::CleanCache((uint32_t*)hyperBus2.GetBaseAddr(), buffLen);
 	// System::CleanCache((uint32_t*)dataR, buffLen);
 
-	// // RIF configuration (XSPI2)
-	// RISAF12->REG[0].STARTR = 0x0;
-	// RISAF12->REG[0].ENDR = 0x00FFFFFFU;		// 256 MByte area
-	// RISAF12->REG[0].CIDCFGR = (RIF_CID_2 | (RIF_CID_2 << RISAF_REGx_CIDCFGR_WRENC0_Pos));
-	// RISAF12->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos)
-	// 						| (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
-
 	// // Re-setup HPDMA
 	// LL_DMA_SetDestAddress(HPDMA1, LL_DMA_CHANNEL_12, (uint32_t)dataR);
 	// LL_DMA_SetSrcAddress(HPDMA1, LL_DMA_CHANNEL_12, (uint32_t)hyperBus2.GetBaseAddr());
@@ -403,7 +363,7 @@ void tx_application_define(void *first_unused_memory) {
 	LOG_INFO("Peripherals Initialized.");
 	ledGreen.Write(0);
 
-	// Define your test configuration
+	// Configure and initialize USB-HS peripheral
 	USBDevice::Config usbCfg;
 	usbCfg.vid = 0x1234;					// Dummy VID for testing
 	usbCfg.pid = 0x5678;					// Dummy PID for testing
@@ -480,14 +440,14 @@ void tx_application_define(void *first_unused_memory) {
 	// Start application threads
 	MonitorThread::Init();
 	StorageThread::Init();
-	VisionThread::Init();
+	// VisionThread::Init();
 	InertialThread::Init();
 	AuxiliaryThread::Init();
 	LoggerThread::Init();
 	// RadioThread::Init();
-	// TelemetryThread::Init();
-	// SensorHubThread::Init();
-	// EstimatorThread::Init();
+	TelemetryThread::Init();
+	SensorHubThread::Init();
+	EstimatorThread::Init();
 
 	// Create a byte memory pool from which to allocate the thread stacks
 	status = tx_byte_pool_create(&threadBytePool, const_cast<char*>("Static Thread Byte Pool"), tx_byte_pool_buffer, THREADX_BUFFER_POOL_SIZE);
@@ -513,6 +473,9 @@ void tx_application_define(void *first_unused_memory) {
 }
 
 int main(void) {
+	// Enable debugger in flash run mode
+	System::EnableDebug();
+	
 	// Debug Blue LED to see Application loaded
 	LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_ALL);
 	ledBlue.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
@@ -539,18 +502,12 @@ int main(void) {
 	// For when running in XIP mode from external HyperFlash/XSPI2 use:
 	// Note: This becase clock must be initiazlied in the Boot/FSBL (calling System::InitClock() there) to have the HyperFlash/XSPI2 already correcly running and can't be changed!
 	// System::InitFWClock();
+
+	System::EnableAXISRAM();
+	System::EnableVENCSRAM();
 	Time::Init();
 
 	ledBlue.Write(1);
-
-	// Init AXISRAM3 and 4
-	LL_MEM_EnableClock(LL_MEM_AXISRAM3);
-	LL_MEM_EnableClock(LL_MEM_AXISRAM4);
-	CLEAR_BIT(RAMCFG_SRAM3_AXI->CR, RAMCFG_CR_SRAMSD);
-	CLEAR_BIT(RAMCFG_SRAM4_AXI->CR, RAMCFG_CR_SRAMSD);
-
-	// Enable debugger in flash run mode
-	System::EnableDebug();
 
 	System::InitSysTick();
 	tx_kernel_enter();

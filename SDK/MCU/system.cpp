@@ -39,7 +39,7 @@ struct CoreClocks {
 	uint32_t ic18;
 };
 
-static CoreClocks nodeFrequencies = {0};
+static CoreClocks nodeFrequencies;
 
 // ============================================================================
 // System implementations
@@ -48,8 +48,12 @@ static CoreClocks nodeFrequencies = {0};
 void System::InitClock(void) {
 	// Configure the system/core power supply
 	LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_PWR);
+	// Set to use internal SMPS
 	LL_PWR_ConfigSupply(LL_PWR_SMPS_SUPPLY);
 	while (LL_PWR_IsActiveFlag_ACTVOSRDY() == 0U);
+	// Enable internal SMPS Overdrive votlage (scale 1/high)
+	LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1);
+	while(LL_PWR_IsActiveFlag_VOSRDY() == 0);
 
 	// Configure the IO power supply
 	LL_PWR_SetVddIOVoltageRange(LL_PWR_VDDIO_VOLTAGE_RANGE_3V3);		//Set the VDD IO voltage range: 3.3V
@@ -72,40 +76,31 @@ void System::InitClock(void) {
 
 	// Setup I/O compensation cells (see errata ES0620)
 	LL_APB4_GRP2_EnableClock(LL_APB4_GRP2_PERIPH_SYSCFG);
-	(void)RCC->APB4ENR2;
 	// Read/Write to there regsiters only works if VDDIOx is enabled
-	SYSCFG->VDDIO2CCCR = 0x00000278UL;
-	SYSCFG->VDDIO3CCCR = 0x00000278UL;
-	SYSCFG->VDDIO4CCCR = 0x00000278UL;
-	SYSCFG->VDDIO5CCCR = 0x00000278UL;
-	SYSCFG->VDDCCCR    = 0x00000278UL;
-	// MODIFY_REG(SYSCFG->VDDIO2CCCR, 0x10000, 0x10000);
-	// MODIFY_REG(SYSCFG->VDDIO3CCCR, 0x10000, 0x10000);
+	WRITE_REG(SYSCFG->VDDIO2CCCR, 0x00000278UL);
+	WRITE_REG(SYSCFG->VDDIO3CCCR, 0x00000278UL);
+	WRITE_REG(SYSCFG->VDDIO4CCCR, 0x00000278UL);
+	WRITE_REG(SYSCFG->VDDIO5CCCR, 0x00000278UL);
+	WRITE_REG(SYSCFG->VDDCCCR, 0x00000278UL);
 
 	LL_RCC_HSE_EnableBypass();
 	LL_RCC_HSE_Enable();
-
 	// Wait till HSE is ready
 	while(LL_RCC_HSE_IsReady() != 1);
 
-	// Wait HSE stabilization time before its selection as PLL source.
-	// LL_mDelay(HSE_STARTUP_TIMEOUT);
-	
 	LL_RCC_HSI_Enable();
-
-	//Wait till HSI is ready
+	// Wait till HSI is ready
 	while(LL_RCC_HSI_IsReady() == 0);
 
-	/** Get current CPU/System buses clocks configuration and
-	*if necessary switch to intermediate HSI clock to ensure target clock can be set
-	*/
-	if ((LL_RCC_GetCpuClkSource() == LL_RCC_CPU_CLKSOURCE_STATUS_IC1) || (LL_RCC_GetSysClkSource() == LL_RCC_SYS_CLKSOURCE_STATUS_IC2_IC6_IC11)) {
+	// Get current CPU/System buses clocks configuration and if necessary switch to intermediate HSI clock to ensure target clock can be set
+	if((LL_RCC_GetCpuClkSource() == LL_RCC_CPU_CLKSOURCE_STATUS_IC1) || (LL_RCC_GetSysClkSource() == LL_RCC_SYS_CLKSOURCE_STATUS_IC2_IC6_IC11)) {
 		LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_HSI);
 		while(LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_HSI);
 		LL_RCC_SetCpuClkSource(LL_RCC_CPU_CLKSOURCE_HSI);
 		while(LL_RCC_GetCpuClkSource() != LL_RCC_CPU_CLKSOURCE_STATUS_HSI);
 	}
-	//Set PLL1 output frequency to 3200 MHz
+
+	// Set PLL1 output frequency to 3200 MHz
 	LL_RCC_PLL1_Disable();
 	while(LL_RCC_PLL1_IsReady() == 1);
 	LL_RCC_PLL1_DisableModulationSpreadSpectrum();
@@ -123,7 +118,7 @@ void System::InitClock(void) {
 	while(LL_RCC_PLL1_IsReady() != 1);
 	nodeFrequencies.pll1 = 3200000000;
 
-	//Set PLL2 output frequency to 3000 MHz
+	// Set PLL2 output frequency to 3000 MHz
 	LL_RCC_PLL2_Disable();
 	while(LL_RCC_PLL2_IsReady() == 1);
 	LL_RCC_PLL2_DisableModulationSpreadSpectrum();
@@ -141,7 +136,7 @@ void System::InitClock(void) {
 	while(LL_RCC_PLL2_IsReady() != 1);
 	nodeFrequencies.pll2 = 3000000000;
 
-	//Set PLL3 output frequency to 2700 MHz
+	// Set PLL3 output frequency to 2700 MHz
 	LL_RCC_PLL3_Disable();
 	while(LL_RCC_PLL3_IsReady() == 1);
 	LL_RCC_PLL3_DisableModulationSpreadSpectrum();
@@ -167,7 +162,7 @@ void System::InitClock(void) {
 	LL_RCC_SetAPB4Prescaler(LL_RCC_APB4_DIV_1);
 	LL_RCC_SetAPB5Prescaler(LL_RCC_APB5_DIV_1);
 
-	//Set IC1 output to PLL1 / 4 = 3200 MHz / 4 = 800 MHz
+	// Set IC1 output to PLL1 / 4 = 3200 MHz / 4 = 800 MHz
 	LL_RCC_IC1_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
 	LL_RCC_IC1_SetDivider(4);
 	LL_RCC_IC1_Enable();
@@ -175,39 +170,39 @@ void System::InitClock(void) {
 	while(LL_RCC_GetCpuClkSource() != LL_RCC_CPU_CLKSOURCE_STATUS_IC1);
 	nodeFrequencies.ic1 = 800000000;
 
-	//Set IC2 output to PLL1 / 8 = 3200 MHz / 8 = 400 MHz (Clock to AXI, AHB, and APBx buses)
+	// Set IC2 output to PLL1 / 8 = 3200 MHz / 8 = 400 MHz (Clock to AXI, AHB, and APBx buses)
 	LL_RCC_IC2_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
 	LL_RCC_IC2_SetDivider(8);
 	nodeFrequencies.ic2 = 400000000;
-	//Set IC3 output to PLL1 / 8 = 3200 MHz / 8 = 400 MHz (Clock to XSPI/HyperBus)
+	// Set IC3 output to PLL1 / 8 = 3200 MHz / 8 = 400 MHz (Clock to XSPI/HyperBus)
 	LL_RCC_IC3_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
 	LL_RCC_IC3_SetDivider(8);
 	nodeFrequencies.ic3 = 400000000;
-	//Set IC4 output to PLL1 / 32 = 3200 MHz / 32 = 100 MHz (Clock to SDMMC)
+	// Set IC4 output to PLL1 / 32 = 3200 MHz / 32 = 100 MHz (Clock to SDMMC)
 	LL_RCC_IC4_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
 	LL_RCC_IC4_SetDivider(32);
 	nodeFrequencies.ic4 = 100000000;
-	//Set IC6 output to PLL2 / 3 = 3000 MHz / 3 = 1000 MHz (Clock to NPU Core)
+	// Set IC6 output to PLL2 / 3 = 3000 MHz / 3 = 1000 MHz (Clock to NPU Core)
 	LL_RCC_IC6_SetSource(LL_RCC_ICCLKSOURCE_PLL2);
 	LL_RCC_IC6_SetDivider(3);
 	nodeFrequencies.ic6 = 1000000000;
-	//Set IC9 output to PLL1 / 32 = 3200 MHz / 32 = 100 MHz (Clock to SPI and UART)
+	// Set IC9 output to PLL1 / 32 = 3200 MHz / 32 = 100 MHz (Clock to SPI and UART)
 	LL_RCC_IC9_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
 	LL_RCC_IC9_SetDivider(32);
 	nodeFrequencies.ic9 = 100000000;
-	//Set IC10 output to PLL1 / 32 = 3200 MHz / 32 = 100 MHz (Clock to I2C and I3C)
+	// Set IC10 output to PLL1 / 32 = 3200 MHz / 32 = 100 MHz (Clock to I2C and I3C)
 	LL_RCC_IC10_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
 	LL_RCC_IC10_SetDivider(32);
 	nodeFrequencies.ic10 = 100000000;
-	//Set IC11 output to PLL3 / 3 = 2700 MHz / 3 = 900 MHz (Clock to NPU SRAM: AXISRAM3/4/5/6)
+	// Set IC11 output to PLL3 / 3 = 2700 MHz / 3 = 900 MHz (Clock to NPU SRAM: AXISRAM3/4/5/6)
 	LL_RCC_IC11_SetSource(LL_RCC_ICCLKSOURCE_PLL3);
 	LL_RCC_IC11_SetDivider(4);
 	nodeFrequencies.ic11 = 900000000;
-	//Set IC17 output to PLL1 / 4 = 3200 MHz / 10 = 320 MHz (Clock to DCMIPP)
+	// Set IC17 output to PLL1 / 4 = 3200 MHz / 10 = 320 MHz (Clock to DCMIPP)
 	LL_RCC_IC17_SetSource(LL_RCC_ICCLKSOURCE_PLL1); 
 	LL_RCC_IC17_SetDivider(10);
 	nodeFrequencies.ic17 = 320000000;
-	//Set IC18 output to PLL1 / 160 = 3200 MHz / 160 = 20 MHz (This is clock to CSI-PHY!! Max is 27MHz). See chapter 14.6.8 pg. 442 in reference manual (Clock to CSI-PHY)
+	// Set IC18 output to PLL1 / 160 = 3200 MHz / 160 = 20 MHz (This is clock to CSI-PHY!! Max is 27MHz). See chapter 14.6.8 pg. 442 in reference manual (Clock to CSI-PHY)
 	LL_RCC_IC18_SetSource(LL_RCC_ICCLKSOURCE_PLL1); 
 	LL_RCC_IC18_SetDivider(160);
 	nodeFrequencies.ic18 = 20000000;
@@ -272,7 +267,7 @@ void System::InitClock(void) {
 }
 
 void System::InitFWClock(void) {
-	// Update internal tracking variables to match what FSBL configured
+	// Update internal tracking variables to match what FSBL configured. Same values as set in System::InitClock.
 	nodeFrequencies.pll1 = 3200000000;
 	nodeFrequencies.pll2 = 3000000000;
 	nodeFrequencies.pll3 = 2700000000;
@@ -341,6 +336,22 @@ void System::DisableSysTick(void) {
 	LL_SYSTICK_DisableIT();
 }
 
+void System::EnableAXISRAM(void) {
+	// By default enabled: FLEXRAM, AXISRAM1, AXISRAM2, BKPSRAM, AHBSRAM1, AHBSRAM2
+	// By default disabled: AXISRAM3, AXISRAM4, AXISRAM5, AXISRAM6, VENCRAM, CACHEAXIRAM
+	// Init AXISRAM3/4/5/6 (tightly coupled to NPU)
+	LL_MEM_EnableClock(LL_MEM_AXISRAM3 | LL_MEM_AXISRAM4 | LL_MEM_AXISRAM5 | LL_MEM_AXISRAM6 | LL_MEM_CACHEAXIRAM);
+	CLEAR_BIT(RAMCFG_SRAM3_AXI->CR, RAMCFG_CR_SRAMSD);
+	CLEAR_BIT(RAMCFG_SRAM4_AXI->CR, RAMCFG_CR_SRAMSD);
+	CLEAR_BIT(RAMCFG_SRAM5_AXI->CR, RAMCFG_CR_SRAMSD);
+	CLEAR_BIT(RAMCFG_SRAM6_AXI->CR, RAMCFG_CR_SRAMSD);
+}
+
+void System::EnableVENCSRAM(void) {
+	// Init VENCRAM
+	LL_MEM_EnableClock(LL_MEM_VENCRAM);
+}
+
 void System::EnableDebug(void) {
 	LL_APB4_GRP2_EnableClock(LL_APB4_GRP2_PERIPH_BSEC);
 	BSEC->AP_UNLOCK = 0xB4;
@@ -371,7 +382,7 @@ void System::Reset() {
 }
 
 // ============================================================================
-// Time implementations (using TIM7)
+// Time implementations (using TIM5)
 // ============================================================================
 
 static volatile uint32_t timeMills = 0;

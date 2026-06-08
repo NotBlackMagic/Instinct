@@ -15,8 +15,6 @@
 #include "status.hpp"
 #include "system.hpp"
 
-#include "tx_api.h"
-
 class HyperRAM {
 	public:
 		// Internal Register Addresses (Register Space)

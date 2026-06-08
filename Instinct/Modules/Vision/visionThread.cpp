@@ -117,7 +117,7 @@ void VisionThread::Run(ULONG input) {
 	// LOG_INFO("JPEG Encoder Initialized.");
 
 	// Setup frame buffer
-	rawFrameBuffer.startAddress = (uint8_t*)hyperBus1.GetBaseAddr();	// (uint8_t*)0x34200000
+	rawFrameBuffer.startAddress = (uint8_t*)hyperBus1.GetBaseAddr();
 	rawFrameBuffer.width = 640;
 	rawFrameBuffer.height = 480;
 	rawFrameBuffer.payloadSize = 640 * 480 * 2;
@@ -171,7 +171,7 @@ void VisionThread::Run(ULONG input) {
 				// Update the cache so GET_CUR is accurate
 				puControlRegistry[i].current = newTarget;
 				
-				LOG_INFO("SD-CAM PU Ctrl %d: %d", puControlRegistry[i].selector, newTarget);
+				LOG_INFO("HD-CAM PU Ctrl %d: %d", puControlRegistry[i].selector, newTarget);
 			}
 		}
 
@@ -189,7 +189,7 @@ void VisionThread::Run(ULONG input) {
 				// Update the cache so GET_CUR is accurate
 				itControlRegistry[i].current = newTarget;
 				
-				LOG_INFO("SD-CAM IT Ctrl %d: %d", itControlRegistry[i].selector, newTarget);
+				LOG_INFO("HD-CAM IT Ctrl %d: %d", itControlRegistry[i].selector, newTarget);
 			}
 		}
 
@@ -242,9 +242,9 @@ void VisionThread::Run(ULONG input) {
 								// Dynamic file name
 								static uint32_t snapCounter = 0;
 								char fileName[16];
-								snprintf(fileName, sizeof(fileName), "snap%04lu.bin", snapCounter++);
+								// snprintf(fileName, sizeof(fileName), "snap%04lu.bin", snapCounter++);
 								// ImageWriter::SaveBMP(rawFrameBuffer, *StorageThread::GetMedia(), fileName);
-								ImageWriter::SaveBinary(rawFrameBuffer, *StorageThread::GetMedia(), fileName);
+								// ImageWriter::SaveBinary(rawFrameBuffer, *StorageThread::GetMedia(), fileName);
 								snprintf(fileName, sizeof(fileName), "snap%04lu.jpeg", snapCounter++);
 								ImageWriter::SaveBinary(jpegBuf, *StorageThread::GetMedia(), fileName);
 							}
@@ -255,7 +255,10 @@ void VisionThread::Run(ULONG input) {
 						if(deltaTime < Time::GetMs()) {
 							// Only calculate and report FPS every 1s
 							float fps = frameCount / 5.0f;
-							LOG_INFO("SD-CAM: %.1f FPS (UVC Drop %d/%d)", fps, uvcDropedCount, frameCount);
+							LOG_INFO("HD-CAM: %.1f FPS (UVC Drop %d/%d)", fps, uvcDropedCount, frameCount);
+							// Performance values for VGA 640x480:
+							// From AN4996 (STM32H7+SDRAM@100M): To MCU 58 ms, Enc 4 ms, TOTAL 62 ms
+
 							// SD-CAM & HyperRAM@100M & Code in SRAM:			Cap 32228 us, To MCU  86573 us, Enc 6525 us
 
 							// HD-CAM & HyperRAM@50M & Code in SRAM:			Cap 61834 us, To MCU 166303 us, Enc 9266 us
@@ -264,7 +267,7 @@ void VisionThread::Run(ULONG input) {
 
 							// HD-CAM & HyperRAM@50M & Code in HyperFlash/XIP:	Cap 61809 us, To MCU 159115 us, Enc 9392 us
 							// HD-CAM & HyperRAM@200M & Code in HyperFlash/XIP:	Cap 44390 us, To MCU  49146 us, Enc 6441 us
-							LOG_INFO("SD-CAM: DCMI %d us, MCU Blk %d us, JPEG %d us", timeCap, timeConvMCU, timeEncJpeg);	
+							LOG_INFO("HD-CAM: DCMI %d us, MCU Blk %d us, JPEG %d us", timeCap, timeConvMCU, timeEncJpeg);	
 							frameCount = 0;
 							uvcDropedCount = 0;
 							deltaTime = Time::GetMs() + 5000;
@@ -273,11 +276,11 @@ void VisionThread::Run(ULONG input) {
 				}
 			}
 			else {
-				// LOG_WARN("SD-CAM Frame Drop.");
+				// LOG_WARN("HD-CAM Frame Drop.");
 			}
 		}
 		else {
-			// LOG_WARN("SD-CAM Frame Drop.");
+			// LOG_WARN("HD-CAM Frame Drop.");
 		}
 
 		uint8_t usrBut = userButton.Read();

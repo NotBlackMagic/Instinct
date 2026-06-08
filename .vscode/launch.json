@@ -33,7 +33,7 @@
 			"imagesAndSymbols": [
 				{
 					"symbolFileName": "${workspaceFolder}/build/Debug/Boot/Boot.elf",
-					"imageFileName": "${workspaceFolder}/build/Debug/Boot/Boot_Signed.elf",
+					"imageFileName": "${workspaceFolder}/build/Debug/Boot/Boot.elf",
 					"format": "elf"
 				}
 			]

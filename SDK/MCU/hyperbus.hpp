@@ -162,4 +162,7 @@ class HyperBus {
 		
 		// Internal helpers
 		Status Command(AddressSpace space, uint32_t addr, AddrSize addrSize, BusWidth width, uint32_t dataLen);
+
+		/// @brief Helper to configure Resource Isolation Framework (RIF)
+		void ConfigureRIF(void);
 };

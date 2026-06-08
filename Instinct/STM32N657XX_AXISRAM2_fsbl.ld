@@ -44,8 +44,8 @@ _Min_Stack_Size = 0x1000;	/* required amount of stack */
 /* Memories definition (Run in Dev mode from SRAM) */
 MEMORY
 {
-  ROM    (xrw)    : ORIGIN = 0x34180400,   LENGTH = 320K
-  RAM    (xrw)    : ORIGIN = 0x341D0400,   LENGTH = 191K
+  ROM    (xrw)    : ORIGIN = 0x34180400,   LENGTH = 255K
+  RAM    (xrw)    : ORIGIN = 0x341C0000,   LENGTH = 256K
 }
 
 /* Memories definition (Run in XIP mode from HyperFlash/XSPI2) */

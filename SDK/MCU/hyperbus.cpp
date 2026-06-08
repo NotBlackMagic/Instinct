@@ -50,6 +50,9 @@ Status HyperBus::Init(const Config &config) {
 		return Status::Error;
 	}
 
+	// Configure RIF (enable memory region access and required privileges)
+	this->ConfigureRIF();
+
 	// Save write latency mode (only for memory access)
 	useWriteZeroLatency = config.writeZeroLatency;
 
@@ -382,11 +385,9 @@ Status HyperBus::Command(AddressSpace space, uint32_t addr, AddrSize addrSize, B
 uint32_t HyperBus::GetBaseAddr() const {
 	if(this->instance == XSPI1) {
 		return 0x90000000UL;
-
 	}
 	if(this->instance == XSPI2) {
 		return 0x70000000UL;
-
 	}
 	if(this->instance == XSPI3) {
 		return 0x80000000UL;
@@ -449,6 +450,38 @@ Status HyperBus::ExitMemoryMappedMode() {
 	this->isMemoryMapped = false;
 
 	return status;
+}
+
+void HyperBus::ConfigureRIF(void) {
+	LL_AHB3_GRP1_EnableClock(LL_AHB3_GRP1_PERIPH_RIFSC);
+	LL_AHB3_GRP1_EnableClock(LL_AHB3_GRP1_PERIPH_RISAF);
+
+	// RIF configuration
+	const uint32_t RIF_CID = 0x0F;	// Allow ALL i.e RW for everyone
+	const uint32_t RIF_ATTRIBUTE_SEC = 0x00000001U;
+	const uint32_t RIF_CID_NONE = 0x00000000U;
+
+	if(this->instance == XSPI1) {
+		// RIF configuration (XSPI1)
+		RISAF11->REG[0].STARTR = 0x0;
+		RISAF11->REG[0].ENDR = 0xFFFFFFFFU;		// Full region
+		RISAF11->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
+		RISAF11->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos) | (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
+	}
+	else if(this->instance == XSPI2) {
+		// RIF configuration (XSPI2)
+		RISAF12->REG[0].STARTR = 0x0;
+		RISAF12->REG[0].ENDR = 0xFFFFFFFFU;		// Full region
+		RISAF12->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
+		RISAF12->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos) | (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
+	}
+	else if(this->instance == XSPI3) {
+		// RIF configuration (XSPI3)
+		RISAF13->REG[0].STARTR = 0x0;
+		RISAF13->REG[0].ENDR = 0xFFFFFFFFU;		// Full region
+		RISAF13->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
+		RISAF13->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos) | (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
+	}
 }
 
 // ---------------------------------------------------------

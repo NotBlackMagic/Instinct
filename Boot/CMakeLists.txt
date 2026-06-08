@@ -76,6 +76,7 @@ set(SDK_SOURCES
 	${PLUMA_SDK_PATH}/MCU/system.cpp
 	${PLUMA_SDK_PATH}/MCU/hyperbus.cpp
 	${PLUMA_SDK_PATH}/Drivers/Storage/hyperFlash.cpp
+	${PLUMA_SDK_PATH}/Drivers/Storage/hyperRAM.cpp
 )
 
 set(ST_LL_SOURCES

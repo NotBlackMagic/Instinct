@@ -205,7 +205,7 @@ Status I3C::SendCommandAsync(BroadcastCCC ccc, uint8_t *txBuf, uint16_t txLen) {
 		// Transmit Common Command Code Associated data if any
 		if((this->txLength > 0) && (LL_I3C_IsActiveFlag_TXFNF(this->instance) == 0x01)) {
 			LL_I3C_TransmitData8(this->instance, *this->txBuffer);
-			this->txBuffer++;
+			this->txBuffer += 1;
 			this->txLength -= 1;
 		}
 	} while((READ_REG(this->instance->EVR) & (I3C_EVR_FCF | I3C_EVR_ERRF)) == 0x00);
@@ -328,7 +328,7 @@ Status I3C::TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_
 		} while((READ_REG(this->instance->EVR) & (I3C_EVR_FCF | I3C_EVR_ERRF)) == 0U);
 
 		if(LL_I3C_IsActiveFlag_ERR(this->instance) == 0x01) {
-			volatile uint32_t errorStatus = READ_REG(this->instance->SER);
+			// volatile uint32_t errorStatus = READ_REG(this->instance->SER);
 			LL_I3C_ClearFlag_ERR(this->instance);
 
 			// Flush FIFO
@@ -367,7 +367,7 @@ Status I3C::TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_
 		} while((READ_REG(this->instance->EVR) & (I3C_EVR_FCF | I3C_EVR_ERRF)) == 0U);
 
 		if(LL_I3C_IsActiveFlag_ERR(this->instance) == 0x01) {
-			volatile uint32_t errorStatus = READ_REG(this->instance->SER);
+			// volatile uint32_t errorStatus = READ_REG(this->instance->SER);
 			LL_I3C_ClearFlag_ERR(this->instance);
 
 			// Flush FIFO
