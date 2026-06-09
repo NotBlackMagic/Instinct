@@ -23,6 +23,23 @@ Status ICM45686::Init(const Config& config) {
 		return status;
 	}
 
+	// Set data endianess: Big Endian to match datasheet register map (NOTE: Default is little endian)
+	status = this->WriteIREG(ICM45686::IREGBase::TOP1, static_cast<uint8_t>(ICM45686::IPREGTOP1::SREG_CTRL), 0x02);
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	// // IREG Write: 0x4200 + ICM45686::IPREGTOP1::xxx
+	// this->txBuffer[0] = static_cast<uint8_t>(ICM45686::Register::IREG_ADDR_15_8);
+	// this->txBuffer[1] = 0xA2;
+	// this->txBuffer[2] = static_cast<uint8_t>(ICM45686::IPREGTOP1::SREG_CTRL);
+	// this->txBuffer[3] = 0x02;
+	// status = this->bus.TransferAsync(this->txBuffer, this->rxBuffer, 4);
+	// if(status != Status::Ok) {
+	// 	return status;
+	// }
+	// status = this->bus.TransferWait(TX_WAIT_FOREVER);
+
 	// Turn on device in Low Noise Mode
 	status = this->WriteRegister(ICM45686::Register::PWR_MGMT0, 0x0F);
 	if(status != Status::Ok) {
@@ -116,6 +133,7 @@ Status ICM45686::RunHardwareSelfTest() {
 
 Status ICM45686::RequestData() {
 	this->txBuffer[0] = 0x80 | static_cast<uint8_t>(ICM45686::Register::ACCEL_DATA_X1_UI);
+	this->txBuffer[1] = 0x00;
 	return this->bus.TransferAsync(this->txBuffer, this->rxBuffer, 15);
 }
 
@@ -142,6 +160,40 @@ Status ICM45686::GetData(float* accel, float* gyro, float* temp) {
 float ICM45686::ParseAxis(uint8_t msb, uint8_t lsb, float scaleFactor, float offset) {
 	int16_t rawValue = static_cast<int16_t>((msb << 8) | lsb);
 	return (static_cast<float>(rawValue) * scaleFactor) + offset;
+}
+
+Status ICM45686::WriteIREG(IREGBase base, uint8_t reg, uint8_t value) {
+	// IREG Write: 0x4200 + ICM45686::IPREGTOP1::xxx
+	this->txBuffer[0] = static_cast<uint8_t>(ICM45686::Register::IREG_ADDR_15_8);
+	this->txBuffer[1] = static_cast<uint8_t>(base);
+	this->txBuffer[2] = reg;
+	this->txBuffer[3] = value;
+	Status status = this->bus.TransferAsync(this->txBuffer, this->rxBuffer, 4);
+	if(status != Status::Ok) {
+		return status;
+	}
+	return this->bus.TransferWait(TX_WAIT_FOREVER);
+}
+
+Status ICM45686::ReadIREG(IREGBase base, uint8_t reg, uint8_t& value) {
+	// Write which IREG register to be read
+	this->txBuffer[0] = static_cast<uint8_t>(ICM45686::Register::IREG_ADDR_15_8);
+	this->txBuffer[1] = static_cast<uint8_t>(base);
+	this->txBuffer[2] = reg;
+	Status status = this->bus.TransferAsync(this->txBuffer, this->rxBuffer, 3);
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->bus.TransferWait(TX_WAIT_FOREVER);
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	// Wait for read-pre-fetch operation (wait time gap is 4 us)
+	Time::Delay(2);
+
+	// Read value
+	return this->ReadRegister(ICM45686::Register::IREG_DATA, value);
 }
 
 Status ICM45686::WriteRegister(Register reg, uint8_t value) {

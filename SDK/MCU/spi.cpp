@@ -99,7 +99,7 @@ Status SPI::Init(const Config &config) {
 #endif
 
 	// Enable SPI
-	LL_SPI_Enable(this->instance);
+	// LL_SPI_Enable(this->instance);
 
 	this->isInitialized = true;
 	return Status::Ok;
@@ -159,6 +159,10 @@ Status SPI::TransferAsync(const uint8_t *txBuf, uint8_t *rxBuf, uint32_t len) {
 	this->rxBuffer = rxBuf;
 	this->rxLength = len;
 
+	// Clear flags
+	LL_SPI_ClearFlag_EOT(this->instance);
+	LL_SPI_ClearFlag_TXTF(this->instance);
+
 	// SPI Setup
 	LL_SPI_SetTransferSize(this->instance, this->txLength);
 	LL_SPI_Enable(this->instance);
@@ -210,9 +214,6 @@ Status SPI::TransferAbort() {
 	this->rxBuffer = nullptr;
 	this->rxLength = 0;
 
-	// Re-enable peripheral
-	LL_SPI_Enable(this->instance);
-
 	// Signal event flags and release mutex
 	tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
 	tx_mutex_put(&this->mutex);
@@ -225,8 +226,8 @@ Status SPI::TransferAbort() {
 // ---------------------------------------------------------
 
 void SPI::InterruptHandler() {
-	// Read data from RX FIFO until empty
-	while(LL_SPI_IsActiveFlag_RXP(this->instance) && this->rxLength > 0) {
+	// Read data from RX FIFO until empty: RXP means at least ONE packet (one FIFO Threshold) can be read
+	while(LL_SPI_IsActiveFlag_RXP(this->instance) == 0x01 && this->rxLength > 0) {
 		uint8_t rxByte = LL_SPI_ReceiveData8(this->instance);
 		if(this->rxBuffer != nullptr) {
 			*this->rxBuffer = rxByte;
@@ -235,8 +236,8 @@ void SPI::InterruptHandler() {
 		this->rxLength = this->rxLength - 1;
 	}
 
-	// Write data to TX FIFO until is full
-	while(LL_SPI_IsActiveFlag_TXP(this->instance) && this->txLength > 0) {
+	// Write data to TX FIFO until is full: TXP means at least ONE packet (one FIFO Threshold) can be written
+	while(LL_SPI_IsActiveFlag_TXP(this->instance) == 0x01 && this->txLength > 0) {
 		uint8_t txByte = (this->txBuffer != nullptr) ? *this->txBuffer : 0xFF;
 		LL_SPI_TransmitData8(this->instance, txByte);
 		if(this->txBuffer != nullptr) {
@@ -246,7 +247,7 @@ void SPI::InterruptHandler() {
 	}
 
 	// Check if all bytes are sent or in FIFO
-	if(this->txLength == 0 && LL_SPI_IsEnabledIT_TXP(this->instance)) {
+	if(this->txLength == 0 && LL_SPI_IsEnabledIT_TXP(this->instance) == 0x01) {
 		LL_SPI_DisableIT_TXP(this->instance);
 	}
 

@@ -2,12 +2,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/Vision/JPEGEncoder.cpp
+ * File:    Instinct/Modules/Vision/jpegEncoder.cpp
  */
 
  // NOTE ON DMA TRANSFERS: https://community.st.com/t5/stm32-mcus-embedded-software/struggle-using-gpdma-linkedlist-on-jpeg-gpdma-input-ll-stalls/td-p/842221
 
-#include "JPEGEncoder.hpp"
+#include "jpegEncoder.hpp"
 
 Status JPEGEncoder::Init() {
 	if(tx_event_flags_create(&this->syncEvent, const_cast<char*>("JpegSync")) != TX_SUCCESS) {

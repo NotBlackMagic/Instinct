@@ -39,7 +39,7 @@ alignas(32) uint8_t dataR[buffLen];
 void TestThread(ULONG thread_input) {
 	Status status = Status::Ok;
 	// ZENOH-PICO STUFF!!!!!
-	// 1. Allocate the config struct and pass its pointer to be initialized
+	// Allocate the config struct and pass its pointer to be initialized
 
 	// z_owned_config_t config;
 	// z_result_t cfg_status = z_config_default(&config);

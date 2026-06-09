@@ -13,6 +13,7 @@
 
 #include "spi.hpp"
 #include "status.hpp"
+#include "system.hpp"
 
 class ICM45686 {
 	public:
@@ -21,6 +22,7 @@ class ICM45686 {
 		static constexpr uint8_t i2cAddrSecondary = 0x69;
 		static constexpr uint8_t chipID = 0xE9;
 
+		/// @brief Device register map.
 		enum class Register : uint8_t {
 			ACCEL_DATA_X1_UI = 0x00,
 			ACCEL_DATA_X0_UI = 0x01,
@@ -107,6 +109,16 @@ class ICM45686 {
 			REG_MISC2 = 0x7F
 		};
 
+		/// @brief Indirect registers (IREG) address offsets.
+		enum class IREGBase : uint8_t {
+			SRAM = 0x00,
+			BAR = 0xA0,
+			SYS1 = 0xA4,
+			SYS2 = 0xA5,
+			TOP1 = 0xA2
+		};
+
+		/// @brief Device user bank IMEM register map.
 		enum class IMEMSRAM : uint16_t {
 			IMEM_SRAM_REG_0 = 0x00,
 			IMEM_SRAM_REG_1 = 0x01,
@@ -262,6 +274,7 @@ class ICM45686 {
 			IMEM_SRAM_REG_1203 = 0x4B3
 		};
 
+		/// @brief Device user bank IPREG_BAR register map.
 		enum class IPREGBAR : uint8_t {
 			IPREG_BAR_REG_57 = 0x39,
 			IPREG_BAR_REG_58 = 0x3A,
@@ -271,6 +284,7 @@ class ICM45686 {
 			IPREG_BAR_REG_62 = 0x3E
 		};
 
+		/// @brief Device user bank IPREG_TOP1 register map.
 		enum class IPREGTOP1 : uint8_t {
 			I2CM_COMMAND_0 = 0x06,
 			I2CM_COMMAND_1 = 0x07,
@@ -343,6 +357,7 @@ class ICM45686 {
 			FIFO_SRAM_SLEEP = 0xA7
 		};
 
+		/// @brief Device user bank IPREG_SYS1 register map.
 		enum class IPREGSYS1 : uint8_t {
 			IPREG_SYS1_REG_42 = 0x2A,
 			IPREG_SYS1_REG_43 = 0x2B,
@@ -357,6 +372,7 @@ class ICM45686 {
 			IPREG_SYS1_REG_172 = 0xAC
 		};
 
+		/// @brief Device user bank IPREG_SYS2 register map.
 		enum class IPREGSYS2 : uint8_t {
 			IPREG_SYS2_REG_24 = 0x18,
 			IPREG_SYS2_REG_25 = 0x19,
@@ -371,6 +387,7 @@ class ICM45686 {
 			IPREG_SYS2_REG_132 = 0x84,
 		};
 
+		/// @brief Supported output data rates (ODR).
 		enum class OutputDataRate : uint8_t {
 			Hz6400 = 0x03,
 			Hz3200 = 0x04,
@@ -387,6 +404,7 @@ class ICM45686 {
 			Hz1_5625 = 0x0F
 		};
 
+		/// @brief Supported accelerometer output full scale (FS).
 		enum class AccelScale : uint8_t {
 			G32 = 0x00,
 			G16 = 0x01,
@@ -395,6 +413,7 @@ class ICM45686 {
 			G2 = 0x04
 		};
 
+		/// @brief Supported gyroscope output full scale (FS).
 		enum class GyroScale : uint8_t {
 			DPS4000 = 0x00,
 			DPS2000 = 0x01,
@@ -407,6 +426,7 @@ class ICM45686 {
 			DPS15_625 = 0x08
 		};
 
+		/// @brief ICM-45686 sensor configuration structure.
 		struct Config {
 			AccelScale accelScale;
 			GyroScale gyroScale;
@@ -414,18 +434,58 @@ class ICM45686 {
 			OutputDataRate gyroOdr;
 		};
 
+		/// @brief Constructor.
+		/// @param spi	Reference to the low-level bus driver.
 		ICM45686(SPI& spi) : bus(spi) {};
 
+		/// @brief Initializes the ICM-45686 magnetometer.
+		/// @param config ICM-45686 magnetometer configuration.
+		/// @return Status::Ok if initialization succeeded, or Status::Error if the config was invalid or failed.
 		Status Init(const Config& config);
+
+		/// @brief Resets the sensor device, using software reset.
+		/// @return Status::Ok if reset succeeded cleanly.
 		Status Reset();
+
+		/// @brief Reads the Manufacturer and Device IDs.
+		/// @param id Device ID, or manufacturer ID.
+		/// @return Status::Ok if read succeeded, or Status::Error if failed.
 		Status ReadID(uint8_t& id);
 
+		/// @brief Sets the sensors data output full scale.
+		/// @param accelScale	Accelerometer output full scale.
+		/// @param gyroScale	Gyroscope output full scale.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
 		Status SetScales(AccelScale accelScale, GyroScale gyroScale);
+
+		/// @brief Sets the accelerometer offset value, to be added to the read value.
+		/// @param offsetX Offset for x-axis.
+		/// @param offsetY Offset for y-axis.
+		/// @param offsetZ Offset for z-axis.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
 		Status SetAccelOffsets(float offsetX, float offsetY, float offsetZ);
+
+		/// @brief Sets the gyroscope offset value, to be added to the read value.
+		/// @param offsetX Offset for x-axis.
+		/// @param offsetY Offset for y-axis.
+		/// @param offsetZ Offset for z-axis.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
 		Status SetGyroOffsets(float offsetX, float offsetY, float offsetZ);
+
+		/// @brief Performs a hardware self test.
+		/// @return Status::Ok if self test passed, Status::Error if failed.
 		Status RunHardwareSelfTest();
 
+		/// @brief Start a non-blocking data transfer request (calls TransferAsync of the underlying bus).
+		/// @details Returns immediately. Use TransferWait() to synchronize completion.
+		/// @return Status::Ok if the transfer started, or Status::Busy if the bus is locked by another thread.
 		Status RequestData();
+
+		/// @brief Blocks the current thread until data transfer completes.
+		/// @param accel	Pointer to array be filled with received accelerometer data (x, y, z).
+		/// @param gyro		Pointer to array be filled with received gyroscope data (x, y, z).
+		/// @param temp		Pointer to be filled with received temperature readings.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
 		Status GetData(float* accel, float* gyro, float* temp);
 
 	private:
@@ -461,6 +521,9 @@ class ICM45686 {
 		float accelOffset[3];
 		float gyroOffset[3];
 		static constexpr float tempOffset = 25.0f;
+
+		Status WriteIREG(IREGBase base, uint8_t reg, uint8_t value);
+		Status ReadIREG(IREGBase base, uint8_t reg, uint8_t& value);
 
 		Status WriteRegister(Register reg, uint8_t value);
 		Status ReadRegister(Register reg, uint8_t& value);
