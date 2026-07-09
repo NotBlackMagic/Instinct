@@ -15,5 +15,9 @@ class AuxiliaryThread {
 		static TX_THREAD threadPtr;
 		static uint8_t threadStack[4096];
 
+		// Sensor Publishers
+		static Topic<BaroMsg> topicBaro[2];
+		static Topic<MagMsg> topicMag[2];
+
 		static void Run(ULONG input);
 };

@@ -440,14 +440,14 @@ void tx_application_define(void *first_unused_memory) {
 	// Start application threads
 	MonitorThread::Init();
 	StorageThread::Init();
-	// VisionThread::Init();
+	VisionThread::Init();
 	InertialThread::Init();
 	AuxiliaryThread::Init();
 	LoggerThread::Init();
 	// RadioThread::Init();
-	TelemetryThread::Init();
-	SensorHubThread::Init();
-	EstimatorThread::Init();
+	// TelemetryThread::Init();
+	// SensorHubThread::Init();
+	// EstimatorThread::Init();
 
 	// Create a byte memory pool from which to allocate the thread stacks
 	status = tx_byte_pool_create(&threadBytePool, const_cast<char*>("Static Thread Byte Pool"), tx_byte_pool_buffer, THREADX_BUFFER_POOL_SIZE);

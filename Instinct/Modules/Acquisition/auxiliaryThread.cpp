@@ -3,10 +3,10 @@
 TX_THREAD AuxiliaryThread::threadPtr;
 uint8_t AuxiliaryThread::threadStack[4096];
 
-static Topic<BaroMsg> topicBaroInt("baroInt", static_cast<uint8_t>(TopicID::Baro), 0);
-static Topic<BaroMsg> topicBaroExt("baroExt", static_cast<uint8_t>(TopicID::Baro), 0);
-static Topic<MagMsg> topicMagInt("magInt", static_cast<uint8_t>(TopicID::Mag), 1);
-static Topic<MagMsg> topicMagExt("magExt", static_cast<uint8_t>(TopicID::Mag), 1);
+Topic<BaroMsg> AuxiliaryThread::topicBaro[2] = {Topic<BaroMsg>("baro", static_cast<uint8_t>(TopicID::Baro), 0),
+												Topic<BaroMsg>("baro", static_cast<uint8_t>(TopicID::Baro), 1)};
+Topic<MagMsg> AuxiliaryThread::topicMag[2] = {	Topic<MagMsg>("mag", static_cast<uint8_t>(TopicID::Mag), 0),
+												Topic<MagMsg>("mag", static_cast<uint8_t>(TopicID::Mag), 1)};
 
 void AuxiliaryThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("ACQ_Aux"),
@@ -18,10 +18,10 @@ void AuxiliaryThread::Init() {
 		LOG_ERR("ThreadX ACQ Aux Thread Create Failed.");
 	}
 
-	Broker::RegisterTopic(&topicBaroInt);
-	Broker::RegisterTopic(&topicBaroExt);
-	Broker::RegisterTopic(&topicMagInt);
-	Broker::RegisterTopic(&topicMagExt);
+	Broker::RegisterTopic(&topicBaro[0]);
+	Broker::RegisterTopic(&topicBaro[1]);
+	Broker::RegisterTopic(&topicMag[0]);
+	Broker::RegisterTopic(&topicMag[1]);
 }
 
 void AuxiliaryThread::Run(ULONG input) {
@@ -115,11 +115,21 @@ void AuxiliaryThread::Run(ULONG input) {
 		// Wait for all called/triggered requests
 		onboardMag.GetData(magInt.values, &magInt.temperature);
 		onboardMag.ReadTemperature(magInt.temperature);
-		topicMagInt.Publish(magInt);
+		// Convert from sensor coordinate frame to FRD/NED
+		// float tmp = magInt.values[0];
+		// magInt.values[0] = -magInt.values[1];
+		// magInt.values[1] = -tmp;
+		// magInt.values[2] = -magInt.values[2];
+		topicMag[0].Publish(magInt);
 
 		// Wait for all called/triggered requests
 		extMag.GetData(magExt.values, &magExt.temperature);
-		topicMagExt.Publish(magExt);
+		// Convert from sensor coordinate frame to FRD/NED
+		// tmp = extMag.values[0];
+		// extMag.values[0] = -extMag.values[1];
+		// extMag.values[1] = -tmp;
+		// extMag.values[2] = -extMag.values[2];
+		topicMag[1].Publish(magExt);
 
 		// Start request of sensors on shared buse from previous request
 		baroInt.timestamp = Time::GetUs();
@@ -129,10 +139,10 @@ void AuxiliaryThread::Run(ULONG input) {
 
 		// Wait for all called/triggered requests
 		onboardBaro.GetData(&baroInt.pressure, &baroInt.temperature);
-		topicBaroInt.Publish(baroInt);
+		topicBaro[0].Publish(baroInt);
 
 		extBaro.GetData(&baroExt.pressure, &baroExt.temperature);
-		topicBaroExt.Publish(baroExt);
+		topicBaro[1].Publish(baroExt);
 
 		// Match set ODR rates of 25Hz
 		tx_thread_sleep(40);

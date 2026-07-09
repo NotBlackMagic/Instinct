@@ -166,8 +166,6 @@ class BMM350 {
 		__attribute__((aligned(32))) uint8_t buffer[transferSize];
 
 		CompensationData compData;
-		uint16_t otpData[32];
-
 		float magOffset[3] = {0.0f, 0.0f, 0.0f};
 
 		Status WriteRegister(Register reg, uint8_t value);

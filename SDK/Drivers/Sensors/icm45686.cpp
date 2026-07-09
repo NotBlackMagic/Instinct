@@ -142,7 +142,7 @@ Status ICM45686::GetData(float* accel, float* gyro, float* temp) {
 		return Status::Error;
 	}
 
-	float sens = accelSens[static_cast<uint8_t>(this->config.accelScale)];
+	float sens = accelSens[static_cast<uint8_t>(this->config.accelScale)] * 9.80665f;	// Add in conversion from G to m/s2
 	accel[0] = this->ParseAxis(rxBuffer[1], rxBuffer[2], sens, accelOffset[0]);
 	accel[1] = this->ParseAxis(rxBuffer[3], rxBuffer[4], sens, accelOffset[1]);
 	accel[2] = this->ParseAxis(rxBuffer[5], rxBuffer[6], sens, accelOffset[2]);

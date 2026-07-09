@@ -126,6 +126,17 @@ void InertialThread::Run(ULONG input) {
 		if(reqICM == 0x01) {
 			imuInt.timestamp = imuTimestampUs;
 			ext2IMU.GetData(imuInt.accel, imuInt.gyro, &imuInt.temperature);
+
+			// Convert from sensor coordinate frame to FRD/NED
+			float tmp = imuInt.accel[0];
+			imuInt.accel[0] = -imuInt.accel[1];
+			imuInt.accel[1] = -tmp;
+			imuInt.accel[2] = -imuInt.accel[2];
+			tmp = imuInt.gyro[0];
+			imuInt.gyro[0] = -imuInt.gyro[1];
+			imuInt.gyro[1] = -tmp;
+			imuInt.gyro[2] = -imuInt.gyro[2];
+
 			topicIMU[0].Publish(imuInt);
 		}
 	}

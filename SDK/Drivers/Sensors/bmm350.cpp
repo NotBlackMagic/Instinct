@@ -28,11 +28,17 @@ Status BMM350::Init(const Config& config) {
 	if(status != Status::Ok) {
 		return status;
 	}
-	status = this->WriteRegister(BMM350::Register::PMU_CONFIG, 0x07);	// Enable all channels
+	status = this->WriteRegister(BMM350::Register::PMU_CMD, 0x02);		// Set PMU command configurations to update odr and average
 	if(status != Status::Ok) {
 		return status;
 	}
-	status = this->WriteRegister(BMM350::Register::PMU_CMD, 0x01);	// Enter normal mode
+	tx_thread_sleep(2);
+
+	status = this->WriteRegister(BMM350::Register::PMU_AXIS_EN, 0x07);	// Enable all channels
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->WriteRegister(BMM350::Register::PMU_CMD, 0x01);		// Enter normal mode
 	if(status != Status::Ok) {
 		return status;
 	}
@@ -69,7 +75,7 @@ Status BMM350::Reset() {
 	}
 	if((pmuStatus0 & 0x08) == 0x08) {
 		// Is PMU normal mode, enter suspend
-		status = this->WriteRegister(BMM350::Register::PMU_CMD, 0x00);	// Enter normal mode
+		status = this->WriteRegister(BMM350::Register::PMU_CMD, 0x00);	// Enter suspend mode
 		if(status != Status::Ok) {
 			return status;
 		}
@@ -160,14 +166,14 @@ Status BMM350::GetData(float* mag, float* temp) {
 	rawZ = rawZ / (1 + this->compData.tcsZ * (rawTemp - this->compData.t0));
 
 	// Apply cross-axis compensations
-	rawX = (rawX - this->compData.crossXY * rawY) / (1 - this->compData.crossYX * this->compData.crossXY);
-	rawY = (rawY - this->compData.crossYX * rawX) / (1 - this->compData.crossYX * this->compData.crossXY);
-	rawZ = (rawZ + (rawX * (this->compData.crossYX * this->compData.crossZY - this->compData.crossZX) - rawY * (this->compData.crossZY - this->compData.crossXY * this->compData.crossZX)) / (1 - this->compData.crossYX * this->compData.crossXY));
+	float compX = (rawX - this->compData.crossXY * rawY) / (1 - this->compData.crossYX * this->compData.crossXY);
+	float compY = (rawY - this->compData.crossYX * rawX) / (1 - this->compData.crossYX * this->compData.crossXY);
+	float compZ = (rawZ + (rawX * (this->compData.crossYX * this->compData.crossZY - this->compData.crossZX) - rawY * (this->compData.crossZY - this->compData.crossXY * this->compData.crossZX)) / (1 - this->compData.crossYX * this->compData.crossXY));
 
-	// Write to passed pointers
-	mag[0] = rawX;
-	mag[1] = rawY;
-	mag[2] = rawZ;
+	// Convert from uT to G and write to passed pointers
+	mag[0] = (compX * 0.01f) + this->magOffset[0];
+	mag[1] = (compY * 0.01f) + this->magOffset[0];
+	mag[2] = (compZ * 0.01f) + this->magOffset[0];
 	*temp = rawTemp;
 	
 	return Status::Ok;
@@ -185,6 +191,7 @@ inline int32_t SignExtend(uint32_t value, int bits) {
 Status BMM350::ReadOTPData() {
 	// Code from Bosch API: https://github.com/boschsensortec/BMM350_SensorAPI/blob/main/bmm350.c
 	// It is required to be in suspend/normal before reading OTP
+	uint16_t otpData[32];
 	for (uint8_t i = 0; i < 32; i++) {
 		Status status = this->WriteRegister(Register::OTP_CMD_REG, 0x20 | (i & 0x1F));
 		if(status != Status::Ok) {
@@ -217,52 +224,52 @@ Status BMM350::ReadOTPData() {
 			return status;
 		}
 
-		this->otpData[i] = (static_cast<uint16_t>(msb) << 8) | lsb;
+		otpData[i] = (static_cast<uint16_t>(msb) << 8) | lsb;
 	}
 
 	// Now parse raw OTP data to compensation struct
-	uint16_t offX_lsbMsb = this->otpData[0x0E] & 0x0FFF;
-	uint16_t offY_lsbMsb = ((this->otpData[0x0E] & 0xF000) >> 4) + (this->otpData[0x0F] & 0x00FF);
-	uint16_t offZ_lsbMsb = (this->otpData[0x0F] & 0x0F00) + (this->otpData[0x10] & 0x00FF);
-	uint16_t tOff = this->otpData[0x0D] & 0x00FF;
+	uint16_t offX_lsbMsb = otpData[0x0E] & 0x0FFF;
+	uint16_t offY_lsbMsb = ((otpData[0x0E] & 0xF000) >> 4) + (otpData[0x0F] & 0x00FF);
+	uint16_t offZ_lsbMsb = (otpData[0x0F] & 0x0F00) + (otpData[0x10] & 0x00FF);
+	uint16_t tOff = otpData[0x0D] & 0x00FF;
 
 	this->compData.offsetX = static_cast<float>(SignExtend(offX_lsbMsb, 12));
 	this->compData.offsetY = static_cast<float>(SignExtend(offY_lsbMsb, 12));
 	this->compData.offsetZ = static_cast<float>(SignExtend(offZ_lsbMsb, 12));
 	this->compData.tempOffset = static_cast<float>(SignExtend(tOff, 8)) / 5.0f;
 
-	uint8_t sensX = (this->otpData[0x10] & 0xFF00) >> 8;
-	uint8_t sensY = (this->otpData[0x11] & 0x00FF);
-	uint8_t sensZ = (this->otpData[0x11] & 0xFF00) >> 8;
-	uint8_t tSens = (this->otpData[0x0D] & 0xFF00) >> 8;
+	uint8_t sensX = (otpData[0x10] & 0xFF00) >> 8;
+	uint8_t sensY = (otpData[0x11] & 0x00FF);
+	uint8_t sensZ = (otpData[0x11] & 0xFF00) >> 8;
+	uint8_t tSens = (otpData[0x0D] & 0xFF00) >> 8;
 
 	this->compData.sensX = static_cast<float>(SignExtend(sensX, 8)) / 256.0f;
 	this->compData.sensY = static_cast<float>(SignExtend(sensY, 8)) / 256.0f;
 	this->compData.sensZ = static_cast<float>(SignExtend(sensZ, 8)) / 256.0f;
 	this->compData.tempSens = static_cast<float>(SignExtend(tSens, 8)) / 512.0f;
 
-	uint8_t tcoX = (this->otpData[0x12] & 0x00FF);
-	uint8_t tcoY = (this->otpData[0x13] & 0x00FF);
-	uint8_t tcoZ = (this->otpData[0x14] & 0x00FF);
+	uint8_t tcoX = (otpData[0x12] & 0x00FF);
+	uint8_t tcoY = (otpData[0x13] & 0x00FF);
+	uint8_t tcoZ = (otpData[0x14] & 0x00FF);
 
 	this->compData.tcoX = static_cast<float>(SignExtend(tcoX, 8)) / 32.0f;
 	this->compData.tcoY = static_cast<float>(SignExtend(tcoY, 8)) / 32.0f;
 	this->compData.tcoZ = static_cast<float>(SignExtend(tcoZ, 8)) / 32.0f;
 
-	uint8_t tcsX = (this->otpData[0x12] & 0xFF00) >> 8;
-	uint8_t tcsY = (this->otpData[0x13] & 0xFF00) >> 8;
-	uint8_t tcsZ = (this->otpData[0x14] & 0xFF00) >> 8;
+	uint8_t tcsX = (otpData[0x12] & 0xFF00) >> 8;
+	uint8_t tcsY = (otpData[0x13] & 0xFF00) >> 8;
+	uint8_t tcsZ = (otpData[0x14] & 0xFF00) >> 8;
 
 	this->compData.tcsX = static_cast<float>(SignExtend(tcsX, 8)) / 16384.0f;
 	this->compData.tcsY = static_cast<float>(SignExtend(tcsY, 8)) / 16384.0f;
 	this->compData.tcsZ = static_cast<float>(SignExtend(tcsZ, 8)) / 16384.0f;
 
-	this->compData.t0 = (static_cast<float>(SignExtend(this->otpData[0x18], 16)) / 512.0f) + 23.0f;
+	this->compData.t0 = (static_cast<float>(SignExtend(otpData[0x18], 16)) / 512.0f) + 23.0f;
 
-	uint8_t crossXY = (this->otpData[0x15] & 0x00FF);
-	uint8_t crossYX = (this->otpData[0x15] & 0xFF00) >> 8;
-	uint8_t crossZX = (this->otpData[0x16] & 0x00FF);
-	uint8_t crossZY = (this->otpData[0x16] & 0xFF00) >> 8;
+	uint8_t crossXY = (otpData[0x15] & 0x00FF);
+	uint8_t crossYX = (otpData[0x15] & 0xFF00) >> 8;
+	uint8_t crossZX = (otpData[0x16] & 0x00FF);
+	uint8_t crossZY = (otpData[0x16] & 0xFF00) >> 8;
 
 	this->compData.crossXY = static_cast<float>(SignExtend(crossXY, 8)) / 800.0f;
 	this->compData.crossYX = static_cast<float>(SignExtend(crossYX, 8)) / 800.0f;
