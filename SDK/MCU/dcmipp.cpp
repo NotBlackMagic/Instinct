@@ -453,7 +453,7 @@ void Dcmipp::ConfigureRIF(void) {
 	uint32_t wValue = ((masterCID << RIFSC_RIMC_ATTRx_MCID_Pos) | (0x03 << RIFSC_RIMC_ATTRx_MSEC_Pos));		//Bit 0: Master Secure; Bit 1: Master priviliged
 	MODIFY_REG(RIFSC->RIMC_ATTRx[masterID], wMask, wValue);
 
-	// Allows CPU to access SDMMC registers in Secure/Privileged mode.
+	// Allows CPU to access DCMIPP registers in Secure/Privileged mode.
 	// Slave security configuration register: 0: Secure and nonsecure data access are granted to the peripheral; 1: Secure data access only are granted to the peripheral
 	wMask = (1UL << (periphID & RIF_PERIPH_BIT_POSITION));
 	wValue = ((0x01) << (periphID & RIF_PERIPH_BIT_POSITION));		//0: Secure and nonsecure data access are granted; 1: Only secure access granted

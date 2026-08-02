@@ -43,6 +43,9 @@ class VisionThread {
 
 		static void Run(ULONG input);
 
+		// 
+		static void OnUVCStreamState(USBClassUVC::StreamEvent event);
+
 		// Static callbacks to wrap your I2C hardware calls
 		static void ExposureTimeControl(int16_t value);
 		

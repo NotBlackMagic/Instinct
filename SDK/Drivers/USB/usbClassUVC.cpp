@@ -103,7 +103,7 @@ const uint8_t* USBClassUVC::GetConfigDescriptor(USB::BusSpeed speed, uint16_t* l
 	}
 	else if(activeCodec == VisionCodec::H264) {
 		formatDescLength = 28;	// VS_FORMAT_FRAME_BASED
-		frameDescLength = 38;	// VS_FRAME_FRAME_BASED (Larger than standard frames)
+		frameDescLength = 30;	// VS_FRAME_FRAME_BASED (Larger than standard frames)
 	}
 	else {
 		formatDescLength = 27;	// VS_FORMAT_UNCOMPRESSED
@@ -268,7 +268,7 @@ const uint8_t* USBClassUVC::GetConfigDescriptor(USB::BusSpeed speed, uint16_t* l
 		this->activeUVCDescriptor[offset++] = 0x00;		// bAspectRatioY
 		this->activeUVCDescriptor[offset++] = 0x00;		// bmInterlaceFlags
 		this->activeUVCDescriptor[offset++] = 0x00;		// bCopyProtect
-		this->activeUVCDescriptor[offset++] = 0x00;		// bVariableSize (0 = fixed frame interval)
+		this->activeUVCDescriptor[offset++] = 0x01;		// bVariableSize (1 = True, variable payload size)
 	} 
 	else {
 		// Uncompressed Format (YUY2, NV12)
@@ -389,32 +389,50 @@ const uint8_t* USBClassUVC::GetConfigDescriptor(USB::BusSpeed speed, uint16_t* l
 			this->activeUVCDescriptor[offset++] = 0x00;
 			this->activeUVCDescriptor[offset++] = 0x94;
 			this->activeUVCDescriptor[offset++] = 0x11;
-			
-			// dwMaxVideoFrameBufferSize
-			this->activeUVCDescriptor[offset++] = static_cast<uint8_t>(maxFrameSize & 0xFF);
-			this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((maxFrameSize >> 8) & 0xFF);
-			this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((maxFrameSize >> 16) & 0xFF);
-			this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((maxFrameSize >> 24) & 0xFF);
-			
-			// dwDefaultFrameInterval
-			this->activeUVCDescriptor[offset++] = static_cast<uint8_t>(frame.frameInterval & 0xFF);
-			this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 8) & 0xFF);
-			this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 16) & 0xFF);
-			this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 24) & 0xFF);
-			
-			this->activeUVCDescriptor[offset++] = 0x01;	// bFrameIntervalType (1 discrete rate)
 
 			if(activeCodec == VisionCodec::H264) {
-				// Frame-Based requires dwBytesPerLine (dummy value for H264)
-				this->activeUVCDescriptor[offset++] = 0x00; this->activeUVCDescriptor[offset++] = 0x00;
-				this->activeUVCDescriptor[offset++] = 0x00; this->activeUVCDescriptor[offset++] = 0x00;
+				// dwDefaultFrameInterval
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>(frame.frameInterval & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 8) & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 16) & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 24) & 0xFF);
+				
+				// bFrameIntervalType (1 discrete rate)
+				this->activeUVCDescriptor[offset++] = 0x01; 
+
+				// dwBytesPerLine (0 for H264 bitstreams)
+				this->activeUVCDescriptor[offset++] = 0x00;
+				this->activeUVCDescriptor[offset++] = 0x00;
+				this->activeUVCDescriptor[offset++] = 0x00;
+				this->activeUVCDescriptor[offset++] = 0x00;
+				
+				// dwFrameInterval
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>(frame.frameInterval & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 8) & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 16) & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 24) & 0xFF);
 			}
-			
-			// dwFrameInterval
-			this->activeUVCDescriptor[offset++] = static_cast<uint8_t>(frame.frameInterval & 0xFF);
-			this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 8) & 0xFF);
-			this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 16) & 0xFF);
-			this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 24) & 0xFF);
+			else {
+				// dwMaxVideoFrameBufferSize
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>(maxFrameSize & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((maxFrameSize >> 8) & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((maxFrameSize >> 16) & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((maxFrameSize >> 24) & 0xFF);
+				
+				// dwDefaultFrameInterval
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>(frame.frameInterval & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 8) & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 16) & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 24) & 0xFF);
+				
+				this->activeUVCDescriptor[offset++] = 0x01;	// bFrameIntervalType (1 discrete rate)
+
+				// dwFrameInterval
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>(frame.frameInterval & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 8) & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 16) & 0xFF);
+				this->activeUVCDescriptor[offset++] = static_cast<uint8_t>((frame.frameInterval >> 24) & 0xFF);
+			}
 		}
 	}
 
@@ -479,6 +497,11 @@ Status USBClassUVC::OnSetup(USB& usb, const USB::SetupPacket& setup) {
 				this->frameIdToggle = 0;
 				this->bus->OpenEndpoint(this->videoInEp, USB::EndpointType::Isochronous, this->isoMaxPacketSize);
 
+				if(this->streamEventCb != nullptr) {
+					// Notify Application e.g, for inserting/sending first H264 SPS/PPS header
+					this->streamEventCb(StreamEvent::Start);
+				}
+
 				// Push the first empty header to start the interrupts
 				this->StartTX();
 			} 
@@ -490,6 +513,10 @@ Status USBClassUVC::OnSetup(USB& usb, const USB::SetupPacket& setup) {
 				this->frameBuffer = nullptr;
 				this->frameIdToggle = 0;
 				this->bus->CloseEndpoint(this->videoInEp);
+
+				if(this->streamEventCb != nullptr) {
+					this->streamEventCb(StreamEvent::Stop); // Notify Application
+				}
 			}
 			// Acknowledge with ZLP
 			return this->bus->Transmit(0x80, nullptr, 0);
@@ -535,9 +562,9 @@ Status USBClassUVC::OnSetup(USB& usb, const USB::SetupPacket& setup) {
 					case UVCRequest::GetMaximum:
 					case UVCRequest::GetDefault:
 						// Make sure the byte array is up-to-date with our struct, then send
-						this->PackProbeCommit(); 
+						this->PackProbeCommit();
 						this->bus->Receive(0x00, nullptr, 0); 
-						return this->bus->Transmit(0x80, this->probeCommitBytes, 34);
+						return this->bus->Transmit(0x80, this->probeCommitBytes, 26);
 					case UVCRequest::GetInformation:
 						// Bit 0 = Supports GET, Bit 1 = Supports SET. (0x03 means both).
 						this->probeCommitBytes[0] = 0x03;
@@ -545,7 +572,7 @@ Status USBClassUVC::OnSetup(USB& usb, const USB::SetupPacket& setup) {
 						return this->bus->Transmit(0x80, this->probeCommitBytes, 1);
 					case UVCRequest::GetLength:
 						// How many bytes are in the Probe/Commit structure
-						this->probeCommitBytes[0] = 34;		// 0x22
+						this->probeCommitBytes[0] = 36;		// 0x22
 						this->probeCommitBytes[1] = 0x00;	// 0x00
 						this->bus->Receive(0x00, nullptr, 0); 
 						return this->bus->Transmit(0x80, this->probeCommitBytes, 2);
@@ -611,7 +638,7 @@ Status USBClassUVC::OnDataOut(USB& usb, uint8_t epNum, uint32_t len) {
 
 	if(epNum == 0x00) {
 		if(this->pendingRequestInterface == this->dataInterface) {
-			if(len == 34) {
+			if(len == 26 || len == 34) {
 				// Video streaming controls/setup (Probe/Commit Negotiation). Unpack the received bytes into local struct
 				this->UnpackProbeCommit();
 
@@ -650,6 +677,10 @@ Status USBClassUVC::OnDataOut(USB& usb, uint8_t epNum, uint32_t len) {
 					// Commit phase: The host accepted Probe modifications, settings are locked in
 					this->frameIdToggle = 0;
 					this->txBusy = false;
+
+					if(this->streamEventCb != nullptr) {
+						this->streamEventCb(StreamEvent::FormatChange);
+					}
 				}
 
 				// Acknowledge the settings 
@@ -708,13 +739,20 @@ Status USBClassUVC::RegisterFormats(const FrameFormat* formatArray, uint8_t coun
 	return Status::Ok;
 }
 
-Status USBClassUVC::SubmitFrame(const VisionFrame* frame) {
+const FrameFormat* USBClassUVC::GetActiveFormat() const {
+	if(this->probeCommitControl.frameIndex > 0 && this->probeCommitControl.frameIndex <= this->formatCount) {
+		return &this->frameFormats[this->probeCommitControl.frameIndex - 1];
+	}
+	return nullptr;
+}
+
+Status USBClassUVC::SubmitFrame(const VisionFrame* frame, const VisionFrame* frameHeader) {
 	if(this->bus == nullptr || this->isStreaming == false) {
 		return Status::Error;
 	}
 
 	// Prevent overwriting a frame that is currently in progress
-	if(this->frameBufferRemaining > 0) {
+	if(this->frameBufferRemaining > 0|| this->frameHeaderRemaining > 0) {
 		return Status::Busy;
 	}
 
@@ -725,6 +763,10 @@ Status USBClassUVC::SubmitFrame(const VisionFrame* frame) {
 
 	// Set up the tracking variables for the new frame
 	this->frameIdToggle = (this->frameIdToggle == 0) ? 1 : 0;
+	// Queue the header prefix if provided
+	this->frameHeaderBuffer = frameHeader ? frameHeader->startAddress : nullptr;
+	this->frameHeaderRemaining = frameHeader ? frameHeader->payloadSize : 0;
+	// Queue the Video Frame
 	this->frameBuffer = frame->startAddress;
 	this->frameBufferRemaining = frame->payloadSize;
 
@@ -756,8 +798,10 @@ void USBClassUVC::StartTX() {
 		headerInfo |= 0x01; // Set the FID bit
 	}
 
+	uint32_t totalRemaining = this->frameHeaderRemaining + this->frameBufferRemaining;
+
 	// Handle the Idle / Starved state (in Isochronous mode, something has to be sent always!)
-	if(this->frameBufferRemaining == 0) {
+	if(totalRemaining == 0) {
 		this->epInBuffer[0] = 2;
 		this->epInBuffer[1] = 0x80 | (this->frameIdToggle != 0 ? 0x01 : 0x00);
 		this->txBusy = true;
@@ -767,15 +811,12 @@ void USBClassUVC::StartTX() {
 
 	// Calculate how much payload data can fit in this single hardware packet
 	uint32_t maxPayloadSize = this->isoMaxPacketSize - headerLength;
-	uint32_t bytesToSend = this->frameBufferRemaining;
-	bool isLastPacket = false;
-
+	uint32_t bytesToSend = totalRemaining;
 	if(bytesToSend > maxPayloadSize) {
 		bytesToSend = maxPayloadSize;
 	} 
 	else {
 		// This packet will finish the current frame
-		isLastPacket = true;
 		headerInfo |= 0x02; // Set the EOF bit
 	}
 
@@ -799,12 +840,27 @@ void USBClassUVC::StartTX() {
 	this->epInBuffer[10] = static_cast<uint8_t>(usbSofToken & 0xFF);
 	this->epInBuffer[11] = static_cast<uint8_t>((usbSofToken >> 8) & 0xFF);
 
-	// Copy video payload
-	memcpy(&this->epInBuffer[headerLength], this->frameBuffer, bytesToSend);
+	uint8_t* destPtr = &this->epInBuffer[headerLength];
+    uint32_t bytesLeftToCopy = bytesToSend;
 
-	// Advance the frame tracking pointers
-	this->frameBuffer += bytesToSend;
-	this->frameBufferRemaining -= bytesToSend;
+	// Copy from header prefix buffer first
+	if(this->frameHeaderRemaining > 0) {
+		uint32_t pCopy = (bytesLeftToCopy < this->frameHeaderRemaining) ? bytesLeftToCopy : this->frameHeaderRemaining;
+		memcpy(destPtr, this->frameHeaderBuffer, pCopy);
+		
+		this->frameHeaderBuffer += pCopy;
+		this->frameHeaderRemaining -= pCopy;
+		destPtr += pCopy;
+		bytesLeftToCopy -= pCopy;
+	}
+
+	// Then from normal video buffer
+	if(bytesLeftToCopy > 0) {
+		memcpy(destPtr, this->frameBuffer, bytesLeftToCopy);
+		
+		this->frameBuffer += bytesLeftToCopy;
+		this->frameBufferRemaining -= bytesLeftToCopy;
+	}
 
 	// Lock the pipeline and hand the buffer to driver
 	this->txBusy = true;

@@ -34,7 +34,8 @@ Status CameraMIPI::Init(const Config &config) {
 
 	// Configure the Interface (CSI)
 	Csi::Config csiCfg;
-	csiCfg.bitrate = 448 * 1000000;
+	// csiCfg.bitrate = 448 * 1000000;
+	csiCfg.bitrate = this->sensor.GetMIPIBitrate();
 	csiCfg.laneMapping = Csi::LaneMapping::Direct;
 	csiCfg.lanes = Csi::LaneCount::Two;
 

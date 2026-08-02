@@ -37,4 +37,25 @@ class ImageWriter {
 		/// @param fileName	The target file name (e.g., "snap0001.jpg").
 		/// @return Status::Ok on success, Status::Error on file system failure.
 		// static Status SaveJpeg(const MediaPacket& packet, FX_MEDIA& media, const char* fileName);
+
+		/// @brief Opens a file stream for streaming/recording (e.g., H.264 video).
+		/// @param file			Reference to opened file.
+		/// @param media		Reference to the initialized FileX media.
+		/// @param fileName		The target file name (e.g., "snap0001.bmp").
+		/// @param headerFrame	The H264 image header buffer.
+		/// @param allocSize	Size to pre-allocate in the file system, in bytes.
+		/// @return Status::Ok on success, Status::Error on file system failure.
+		static Status OpenStream(FX_FILE& file, FX_MEDIA& media, const char* fileName, const VisionFrame& headerFrame, uint32_t allocSize);
+
+		/// @brief Appends a frame to an active stream file.
+		/// @param file		Reference to opened file.
+		/// @param frame	The H264 image buffer.
+		/// @return Status::Ok on success, Status::Error on file system failure.
+		static Status AppendStream(FX_FILE& file, const VisionFrame& frame);
+
+		/// @brief Closes and flushes an active stream file.
+		/// @param file		Reference to opened file.
+		/// @param media	Reference to the initialized FileX media.
+		/// @return Status::Ok on success, Status::Error on file system failure.
+		static Status CloseStream(FX_FILE& file, FX_MEDIA& media);
 };

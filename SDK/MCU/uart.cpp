@@ -23,78 +23,78 @@ Status UART::Init(const Config &config) {
 	}
 	
 	// Enable bus clocks and identify IRQ lines
-	if(instance == USART1) {
+	if(this->instance == USART1) {
 		LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1);
-		irqCall = USART1_IRQn;
+		this->irqCall = USART1_IRQn;
 	}
-	else if(instance == USART2) {
+	else if(this->instance == USART2) {
 		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART2);
-		irqCall = USART2_IRQn;
+		this->irqCall = USART2_IRQn;
 	}
-	else if(instance == USART3) {
+	else if(this->instance == USART3) {
 		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART3);
-		irqCall = USART3_IRQn;
+		this->irqCall = USART3_IRQn;
 	}
-	else if(instance == UART4) {
+	else if(this->instance == UART4) {
 		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART4);
-		irqCall = UART4_IRQn;
+		this->irqCall = UART4_IRQn;
 	}
-	else if(instance == UART5) {
+	else if(this->instance == UART5) {
 		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART5);
-		irqCall = UART5_IRQn;
+		this->irqCall = UART5_IRQn;
 	}
-	else if(instance == USART6) {
+	else if(this->instance == USART6) {
 		LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART6);
-		irqCall = USART6_IRQn;
+		this->irqCall = USART6_IRQn;
 	}
-	else if(instance == UART7) {
+	else if(this->instance == UART7) {
 		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART7);
-		irqCall = UART7_IRQn;
+		this->irqCall = UART7_IRQn;
 	}
-	else if(instance == UART8) {
+	else if(this->instance == UART8) {
 		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART8);
-		irqCall = UART8_IRQn;
+		this->irqCall = UART8_IRQn;
 	}
-	else if(instance == UART9) {
+	else if(this->instance == UART9) {
 		LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_UART9);
-		irqCall = UART9_IRQn;
+		this->irqCall = UART9_IRQn;
 	}
-	else if(instance == USART10) {
+	else if(this->instance == USART10) {
 		LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART10);
-		irqCall = USART10_IRQn;
+		this->irqCall = USART10_IRQn;
 	}
 	else {
 		return Status::Error;
 	}
 
 	// Configure UART Interface
-	LL_USART_SetTransferDirection(instance, LL_USART_DIRECTION_TX_RX);
-	LL_USART_SetDataWidth(instance, static_cast<uint32_t>(config.dataBits));
-	LL_USART_SetParity(instance, static_cast<uint32_t>(config.parity));
-	LL_USART_SetStopBitsLength(instance, static_cast<uint32_t>(config.stopBits));
+	LL_USART_SetTransferDirection(this->instance, LL_USART_DIRECTION_TX_RX);
+	LL_USART_SetDataWidth(this->instance, static_cast<uint32_t>(config.dataBits));
+	LL_USART_SetParity(this->instance, static_cast<uint32_t>(config.parity));
+	LL_USART_SetStopBitsLength(this->instance, static_cast<uint32_t>(config.stopBits));
 	if(config.hwFlowControl == 0x00) {
-		LL_USART_SetHWFlowCtrl(instance, LL_USART_HWCONTROL_NONE);
+		LL_USART_SetHWFlowCtrl(this->instance, LL_USART_HWCONTROL_NONE);
 	} 
 	else {
-		LL_USART_SetHWFlowCtrl(instance, LL_USART_HWCONTROL_RTS_CTS);
+		LL_USART_SetHWFlowCtrl(this->instance, LL_USART_HWCONTROL_RTS_CTS);
 	}
-	LL_USART_SetOverSampling(instance, LL_USART_OVERSAMPLING_16);
-	LL_USART_SetBaudRate(instance, config.sourceClockHz, LL_USART_PRESCALER_DIV1, LL_USART_OVERSAMPLING_16, config.baudrate);
-	LL_USART_SetPrescaler(instance, LL_USART_PRESCALER_DIV1);
-	LL_USART_SetTXFIFOThreshold(instance, LL_USART_FIFOTHRESHOLD_1_8);
-	LL_USART_SetRXFIFOThreshold(instance, LL_USART_FIFOTHRESHOLD_1_8);
-	LL_USART_DisableFIFO(instance);
-	LL_USART_ConfigAsyncMode(instance);
+	LL_USART_SetOverSampling(this->instance, LL_USART_OVERSAMPLING_16);
+	LL_USART_SetBaudRate(this->instance, config.sourceClockHz, LL_USART_PRESCALER_DIV1, LL_USART_OVERSAMPLING_16, config.baudrate);
+	LL_USART_SetPrescaler(this->instance, LL_USART_PRESCALER_DIV1);
+	LL_USART_SetTXFIFOThreshold(this->instance, LL_USART_FIFOTHRESHOLD_1_8);
+	LL_USART_SetRXFIFOThreshold(this->instance, LL_USART_FIFOTHRESHOLD_1_8);
+	LL_USART_DisableFIFO(this->instance);
+	LL_USART_ConfigAsyncMode(this->instance);
 
 	// Configure UART Interrupts
-	NVIC_SetPriority(irqCall, irqPriority);
-	NVIC_EnableIRQ(irqCall);
-	LL_USART_EnableIT_RXNE_RXFNE(instance);
-	LL_USART_EnableIT_IDLE(instance);
+	NVIC_SetPriority(this->irqCall, this->irqPriority);
+	NVIC_EnableIRQ(this->irqCall);
+	LL_USART_EnableIT_RXNE_RXFNE(this->instance);
+	LL_USART_EnableIT_IDLE(this->instance);
 
-	LL_USART_Enable(instance);
+	LL_USART_Enable(this->instance);
 	// Wait for Init to finish
-	while((!(LL_USART_IsActiveFlag_TEACK(instance))) || (!(LL_USART_IsActiveFlag_REACK(instance))));
+	while((!(LL_USART_IsActiveFlag_TEACK(this->instance))) || (!(LL_USART_IsActiveFlag_REACK(this->instance))));
 
 	// Flush backlog if any
 	//UINT state = tx_interrupt_control(TX_INT_DISABLE);

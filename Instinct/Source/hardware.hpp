@@ -22,6 +22,7 @@
 #include "timer.hpp"
 #include "uart.hpp"
 #include "usb.hpp"
+#include "venc.hpp"
 
 // Storage device drivers
 #include "hyperFlash.hpp"
@@ -45,6 +46,7 @@
 #include "cameraMIPI.hpp"
 #include "cameraDCMI.hpp"
 #include "jpegEncoder.hpp"
+#include "vencEncoder.hpp"
 
 // USB device and class drivers
 #include "usbClassCDC.hpp"
@@ -93,6 +95,7 @@ extern Csi csi;
 extern Dcmi dcmi;
 extern Dcmipp dcmipp;
 extern Jpeg jpeg;
+extern Venc venc;
 
 extern HyperRAM::Config extRAMConfig;
 extern HyperBus hyperBus1;
@@ -165,6 +168,9 @@ extern CameraMIPI cameraHD;
 
 class JPEGEncoder;
 extern JPEGEncoder jpegEncoder;
+
+class VENCEncoder;
+extern VENCEncoder vencEncoder;
 
 extern USB usbHardware;
 extern USBDevice usbDevice;

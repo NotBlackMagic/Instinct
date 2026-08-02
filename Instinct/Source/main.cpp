@@ -388,7 +388,7 @@ void tx_application_define(void *first_unused_memory) {
 			.height = 480,
 			.frameInterval = 2000000, // 5 FPS in 100ns units
 			.format = PixelFormat::Unknown,
-			.codec = VisionCodec::Jpeg
+			.codec = VisionCodec::H264
 		}
 	};
 
@@ -438,12 +438,12 @@ void tx_application_define(void *first_unused_memory) {
 	Console::Init(&uart4);
 
 	// Start application threads
-	MonitorThread::Init();
+	// MonitorThread::Init();
 	StorageThread::Init();
 	VisionThread::Init();
-	InertialThread::Init();
-	AuxiliaryThread::Init();
-	LoggerThread::Init();
+	// InertialThread::Init();
+	// AuxiliaryThread::Init();
+	// LoggerThread::Init();
 	// RadioThread::Init();
 	// TelemetryThread::Init();
 	// SensorHubThread::Init();
@@ -455,8 +455,8 @@ void tx_application_define(void *first_unused_memory) {
 		LOG_ERR("ThreadX Create Byte Pool Failed.");
 	}
 
-	// // Create the TestThread
-	// // Allocate the stack
+	// Create the TestThread
+	// Allocate the stack
 	status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 8192, TX_NO_WAIT);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Stack 0 Allocate Failed.");
@@ -480,15 +480,15 @@ int main(void) {
 	LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_ALL);
 	ledBlue.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
 	ledBlue.Write(0);
-	for(volatile uint32_t i = 0; i < 100000; i++) { __NOP(); }
+	Time::DelayNOP(100000);
 	ledBlue.Write(1);
-	for(volatile uint32_t i = 0; i < 100000; i++) { __NOP(); }
+	Time::DelayNOP(100000);
 	ledBlue.Write(0);
-	for(volatile uint32_t i = 0; i < 100000; i++) { __NOP(); }
+	Time::DelayNOP(100000);
 	ledBlue.Write(1);
-	for(volatile uint32_t i = 0; i < 100000; i++) { __NOP(); }
+	Time::DelayNOP(100000);
 	ledBlue.Write(0);
-	for(volatile uint32_t i = 0; i < 100000; i++) { __NOP(); }
+	Time::DelayNOP(100000);
 
 	// MCU Configuration
 	NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);

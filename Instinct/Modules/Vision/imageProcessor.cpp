@@ -45,6 +45,49 @@ Status ImageProcessor::ConvertToMCU(const VisionFrame& input, VisionFrame& outpu
 	}
 }
 
+Status ImageProcessor::ConvertFormat(const VisionFrame& input, VisionFrame& output) {
+	if(input.startAddress == nullptr || output.startAddress == nullptr) {
+		return Status::Error;
+	}
+
+	switch(input.format) {
+		case PixelFormat::YUV422_YVYU:
+			return ConvertYVYUToYUYV(input, output);
+		default:
+			return Status::Error; // Unsupported format
+	}
+}
+
+Status ImageProcessor::ConvertYVYUToYUYV(const VisionFrame& input, VisionFrame& output) {
+	const uint32_t* in32 = reinterpret_cast<const uint32_t*>(input.startAddress);
+	uint32_t* out32 = reinterpret_cast<uint32_t*>(output.startAddress);
+
+	// Total 32-bit words (4 bytes = 2 pixels per word)
+	uint32_t wordCount = input.payloadSize / 4; 
+
+	for(uint32_t i = 0; i < wordCount; i++) {
+		uint32_t val = in32[i];
+		
+		// Mask out unchanged Y0 and Y1 bytes: 0x00FF00FF
+		uint32_t yMask = val & 0x00FF00FFUL;
+		
+		// Shift U from [31:24] down to [15:8]
+		uint32_t u = (val & 0xFF000000UL) >> 16;
+		
+		// Shift V from [15:8] up to [31:24]
+		uint32_t v = (val & 0x0000FF00UL) << 16;
+		
+		out32[i] = yMask | u | v;
+	}
+
+	output.width = input.width;
+	output.height = input.height;
+	output.format = PixelFormat::YUV422_YUYV;
+	output.payloadSize = input.payloadSize;
+
+	return Status::Ok;
+}
+
 Status ImageProcessor::YUYVToMCU422(const VisionFrame& input, VisionFrame& output) {
 	uint32_t width = input.width;
 	uint32_t height = input.height;

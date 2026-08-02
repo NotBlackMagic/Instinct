@@ -108,7 +108,7 @@ include_directories(
 	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/src/common
 	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/src/h264
 	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/src/jpeg
-	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/ports
+	#${PLUMA_SDK_PATH}/Middleware/VideoEncoder/ports
 	${PLUMA_SDK_PATH}/Middleware/ZenohPico/include
 	${PLUMA_SDK_PATH}/Middleware/ZenohPico/platforms/common
 	${PLUMA_SDK_PATH}/Middleware/ZenohPico/platforms/threadx/stm32
@@ -197,7 +197,7 @@ file(GLOB VENC_SOURCES
 	"${VENC_ROOT}/src/common/*.c"
 	"${VENC_ROOT}/src/h264/*.c"
 	"${VENC_ROOT}/src/jpeg/*.c"
-	"${VENC_ROOT}/ports/*.c"
+	#"${VENC_ROOT}/ports/*.c"
 )
 
 # Zenoh-Pico Sources

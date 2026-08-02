@@ -181,6 +181,16 @@ class USBClassUVC : public USBClass {
 			uint8_t numITControls;					///< Number of controls in the array
 		};
 
+		/// @brief UVC Streaming Events for application notification
+		enum class StreamEvent {
+			Start,
+			Stop,
+			FormatChange
+		};
+
+		/// @brief Callback for notifying the application of USB stream state changes
+		typedef void (*StreamEventCallback)(StreamEvent event);
+
 		USBClassUVC();
 		virtual ~USBClassUVC() = default;
 
@@ -257,10 +267,19 @@ class USBClassUVC : public USBClass {
 		/// @return Status::Ok if was successful.
 		Status RegisterFormats(const FrameFormat* formatArray, uint8_t count);
 
+		/// @brief Retrieves the currently negotiated video format.
+		/// @return Pointer to the active FrameFormat, or nullptr if none is set.
+		const FrameFormat* GetActiveFormat() const;
+
+		/// @brief Registers the callback for USB stream state changes (Start/Stop).
+		/// @param cb The callback function.
+		void RegisterStreamEventCallback(StreamEventCallback cb) { this->streamEventCb = cb; }
+
 		/// @brief Submit a new video frame to be transmitted.
-		/// @param frame	Pointer to the frame.
+		/// @param frame		Pointer to the frame.
+		/// @param frameHeader	Optional pointer to a header payload (e.g. SPS/PPS) to be prepended.
 		/// @return Status::Ok if successfully submitted, Status::Busy if still transmitting previous frame.
-		Status SubmitFrame(const VisionFrame* frame);
+		Status SubmitFrame(const VisionFrame* frame, const VisionFrame* frameHeader = nullptr);
 
 	private:
 		// Dynamically assigned resources
@@ -277,6 +296,7 @@ class USBClassUVC : public USBClass {
 		uint8_t pendingRequestType;
 		__attribute__((aligned(32))) uint8_t controlPayload[32]; // Buffer for getting/setting camera control data
 		uint8_t frameIdToggle;
+
 		// 26-byte UVC 1.0 Probe/Commit control structure
 		__attribute__((aligned(32))) uint8_t probeCommitBytes[64];
 		ProbeCommitControl probeCommitControl;
@@ -291,14 +311,19 @@ class USBClassUVC : public USBClass {
 
 		// Transaction Context
 		static constexpr uint32_t maxPacketSize = 512;
-		
-		const uint8_t* frameBuffer;
 		uint32_t framePTS;
+
+		const uint8_t* frameHeaderBuffer;
+		uint32_t frameHeaderRemaining;
+		const uint8_t* frameBuffer;
 		uint32_t frameBufferRemaining;
+		
 		__attribute__((aligned(32))) uint8_t activeUVCDescriptor[maxPacketSize];
 
 		// Hardware staging buffer for the payload (Header + Data)
 		__attribute__((aligned(32))) uint8_t epInBuffer[maxPacketSize];
+
+		StreamEventCallback streamEventCb = nullptr;
 
 		// Internal helpers
 		void StartTX();

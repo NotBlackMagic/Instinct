@@ -27,8 +27,12 @@ class ImageProcessor {
 		/// @param output	The pre-allocated buffer, target location, to hold the MCU blocks.
 		static Status ConvertToMCU(const VisionFrame& input, VisionFrame& output);
 
+		static Status ConvertFormat(const VisionFrame& input, VisionFrame& output);
+
 	private:
         // Format-specific highly optimized conversion loops
+		static Status ConvertYVYUToYUYV(const VisionFrame& input, VisionFrame& output);
+
 		// Interleaved 4:2:2 (Outputs 16x8 MCUs)
 		static Status YUYVToMCU422(const VisionFrame& input, VisionFrame& output);
 		static Status YVYUToMCU422(const VisionFrame& input, VisionFrame& output);

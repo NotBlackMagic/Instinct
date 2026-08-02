@@ -22,6 +22,15 @@ struct System {
 	// Delete constructor.
 	System() = delete;
 
+	/// @brief Cortex-M55 L1 Data Cache size in bytes.
+	static constexpr uint32_t dCacheSize = 32768;
+
+	/// @brief Cortex-M55 L1 Instruction Cache size in bytes.
+	static constexpr uint32_t iCacheSize = 32768;
+
+	/// @brief Cortex-M55 L1 cache line width in bytes (identical for I-Cache and D-Cache).
+	static constexpr uint32_t cacheLineSize = 32;
+
 	/// @brief Defines the primary clock distribution nodes in the STM32N6.
 	enum class ClockNode {
 		SYS,
@@ -78,10 +87,10 @@ struct System {
 	/// @brief Enables the debug interface in flash run mode.
 	static void EnableDebug(void);
 	
-	/// @brief Enables the ITCM and DTCM caches of the MCU.
+	/// @brief Enables the I-Cache and D-Cache of the MCU.
 	static void EnableCache(void);
 
-	/// @brief Disables the ITCM and DTCM caches of the MCU.
+	/// @brief Disables the I-Cache and D-Cache of the MCU.
 	static void DisableCache(void);
 
 	/// @brief Cleans the D-Cache by address.
@@ -119,4 +128,8 @@ struct Time {
 	/// @brief Delays/blocks for a set amount of time (milliseconds).
 	/// @param ms Milliseconds to wait.
 	static void Delay(uint32_t ms);
+
+	/// @brief Delays/blocks for a set amount of NOP instructions.
+	/// @param count: Number of NOPs to execute
+	static void DelayNOP(uint32_t count);
 };

@@ -122,6 +122,10 @@ class OV5645 {
 		/// @return Camera sensor information.
 		SensorInfo GetInfo() { return sensorInfo; }
 
+		/// @brief Gets the current MIPI bitrate in bits per second.
+        /// @return The MIPI bitrate in bits per second (per lane).
+        uint32_t GetMIPIBitrate() const { return mipiBitrate; }
+
 		/// @brief Sets the desired brightness level.
 		/// @param value Brightness level to use, signed value (default is 0x00).
 		/// @return Status::Ok if set succeeded, or Status::Error if failed.
@@ -190,6 +194,7 @@ class OV5645 {
 		Config config;
 
 		SensorInfo sensorInfo;
+		uint32_t mipiBitrate;
 
 		static constexpr uint16_t transferSize = 32;
 		__attribute__((aligned(32))) uint8_t buffer[transferSize];

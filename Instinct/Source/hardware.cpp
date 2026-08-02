@@ -49,6 +49,9 @@ extern "C" void DCMI_PSSI_IRQHandler(void) { dcmi.InterruptHandler(); }
 Jpeg jpeg(JPEG);
 extern "C" void JPEG_IRQHandler(void) { jpeg.InterruptHandler(); }
 
+Venc venc(nullptr);
+extern "C" void VENC_IRQHandler(void) { venc.InterruptHandler(); }
+
 // Default for Rev. A is: Cypress S80KS2564
 HyperRAM::Config extRAMConfig = {	
 	.deviceName = "Cypress S80KS2564",
@@ -56,7 +59,7 @@ HyperRAM::Config extRAMConfig = {
 	.sizeBytes = 32768 * 1024,	// 32 MByte
 	.pageSize = 32 * 8 * 4,		// 1 kByte
 	.sourceClockHz = 0,
-	.frequencyHz = 200000000,	// 100 MHz
+	.frequencyHz = 200000000,	// 200 MHz
 	.initialLatency = 7,		// 7 Cycles
 	.fixedLatency = true,
 	.rwRecoveryTime = 7,		// 7 Cycles @ 200MHz
@@ -78,7 +81,7 @@ HyperFlash::Config extFlashConfig = {
 	.sectorSize = 256 * 1024,		// 256 kByte
 	.pageSize = 256,				// 512 bytes or 256 bytes (default: 256)
 	.sourceClockHz = 0,
-	.frequencyHz = 200000000,		// 100 MHz
+	.frequencyHz = 200000000,		// 200 MHz
 	.initialLatency = 16,			// 16 Cycles
 	.fixedLatency = false,
 	.rwRecoveryTime = 0,
@@ -397,6 +400,7 @@ CameraDCMI cameraSD(dcmi, ov7670, dcmiDMAChannel);
 CameraMIPI cameraHD(csi, dcmipp, ov5645, csiDMAChannel);
 
 JPEGEncoder jpegEncoder(jpeg, jpegEncInDMAChannel, jpegEncOutDMAChannel);
+VENCEncoder vencEncoder(venc);
 
 void HardwareInit() {
 	// Initialize Physical Layer

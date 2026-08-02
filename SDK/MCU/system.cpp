@@ -370,7 +370,13 @@ void System::DisableCache(void) {
 }
 
 void System::CleanCache(void* addr, uint32_t size) {
-	SCB_CleanDCache_by_Addr(addr, (int32_t)size);
+	// If to clean cache area is bigger then the D-Cache area just clean all
+	if(size >= System::dCacheSize) {
+		SCB_CleanDCache();
+	}
+	else {
+		SCB_CleanDCache_by_Addr(addr, (int32_t)size);
+	}
 }
 
 void System::InvalidateCache(void* addr, uint32_t size) {
@@ -438,6 +444,13 @@ uint64_t Time::GetUs() {
 void Time::Delay(uint32_t ms) {
 	uint64_t start = GetUs();
 	while ((GetUs() - start) < ((uint64_t)ms * 1000));
+}
+
+void Time::DelayNOP(uint32_t count) {
+	volatile uint32_t i;
+	for(i = 0; i < count; i++) {
+		__NOP();
+	}
 }
 
 // ---------------------------------------------------------

@@ -264,8 +264,8 @@ static constexpr OV5645::RegisterValuePair ov5645VGA[] = {
 	{ static_cast<OV5645::Register>(0x3614), 0x50 },
 	{ static_cast<OV5645::Register>(0x3618), 0x00 },
 	{ static_cast<OV5645::Register>(0x3034), 0x18 },	// PLL charge pump control, MIPI bit more: 8-bit mode
-	{ static_cast<OV5645::Register>(0x3035), 0x21 },	// ?? (ESP-32: 0x12) System clock divider: 2, Scale divider for MIPI: 1
-	{ static_cast<OV5645::Register>(0x3036), 0x70 },	// ?? PLL multiplier: x112
+	{ static_cast<OV5645::Register>(0x3035), 0x21 },	// System clock divider: 2, Scale divider for MIPI: 1
+	{ static_cast<OV5645::Register>(0x3036), 0x70 },	// PLL multiplier: x112
 	{ static_cast<OV5645::Register>(0x3600), 0x09 },
 	{ static_cast<OV5645::Register>(0x3601), 0x43 },
 	{ static_cast<OV5645::Register>(0x3708), 0x66 },
@@ -315,7 +315,7 @@ static constexpr OV5645::RegisterValuePair ov5645SXGA[] = {
 	{ static_cast<OV5645::Register>(0x3614), 0x50 },
 	{ static_cast<OV5645::Register>(0x3618), 0x00 },
 	{ static_cast<OV5645::Register>(0x3034), 0x18 },	// PLL charge pump control, MIPI bit more: 8-bit mode
-	{ static_cast<OV5645::Register>(0x3035), 0x21 },	// System clock divider: XX, Scale divider for MIPI: YY
+	{ static_cast<OV5645::Register>(0x3035), 0x21 },	// System clock divider: 2, Scale divider for MIPI: 1
 	{ static_cast<OV5645::Register>(0x3036), 0x70 },	// PLL multiplier: x112
 	{ static_cast<OV5645::Register>(0x3600), 0x09 },
 	{ static_cast<OV5645::Register>(0x3601), 0x43 },
@@ -415,8 +415,8 @@ static constexpr OV5645::RegisterValuePair ov5645QSXGA[] = {
 	{ static_cast<OV5645::Register>(0x3614), 0x50 },
 	{ static_cast<OV5645::Register>(0x3618), 0x04 },
 	{ static_cast<OV5645::Register>(0x3034), 0x18 },
-	{ static_cast<OV5645::Register>(0x3035), 0x11 },
-	{ static_cast<OV5645::Register>(0x3036), 0x54 },
+	{ static_cast<OV5645::Register>(0x3035), 0x11 },	// System clock divider: 1, Scale divider for MIPI: 1
+	{ static_cast<OV5645::Register>(0x3036), 0x54 },	// PLL multiplier: x84
 	{ static_cast<OV5645::Register>(0x3600), 0x08 },
 	{ static_cast<OV5645::Register>(0x3601), 0x33 },
 	{ static_cast<OV5645::Register>(0x3708), 0x63 },
@@ -608,23 +608,43 @@ Status OV5645::SetResolution(uint16_t width, uint16_t height) {
 		return Status::Error;
 	}
 
+	//Clock config for MIPI bitrate:
+	//MIPI_CLK = PLL1 * 1/SDIV0 * 1/MIPI_DIV * 1/2
+	//PLL1 = CLK_PAD * 1/PRE_DIV0 * DIV_CNT7B
+	//PRE_DIV0 -> 0x3037 [0:3]
+	//DIV_CNT7B -> 0x3036 [7:0]
+	//SDIV0 -> 0x3035 [7:4]
+	//MIPI_DIV -> 0x3035 [3:0]
+
 	// Update config to used resolution
 	switch (resolution) {
 		case InternalResolution::QSXGA:
 			this->config.width = 2592;
 			this->config.height = 1944;
+			//PLL1 = 24M * 1/3 * 84 = 672MHz
+			//MIPI_CLK = 672MHz * 1/1 * 1/1 * 1/2 = 336MHz
+			this->mipiBitrate = 2 * 336000000;	//DDR for MIPI
 			break;
 		case InternalResolution::FHD:
 			this->config.width = 1920;
 			this->config.height = 1080;
+			//PLL1 = 24M * 1/3 * 84 = 672MHz
+			//MIPI_CLK = 672MHz * 1/1 * 1/1 * 1/2 = 336MHz
+			this->mipiBitrate = 2 * 336000000;	//DDR for MIPI
 			break;
 		case InternalResolution::SXGA:
 			this->config.width = 1280;
 			this->config.height = 1024;
+			//PLL1 = 24M * 1/3 * 112 = 896MHz
+			//MIPI_CLK = 896MHz * 1/2 * 1/1 * 1/2 = 224MHz
+			this->mipiBitrate = 2 * 224000000;	//DDR for MIPI
 			break;
 		case InternalResolution::VGA:
 			this->config.width = 640;
 			this->config.height = 480;
+			//PLL1 = 24M * 1/3 * 112 = 896MHz
+			//MIPI_CLK = 896MHz * 1/2 * 1/1 * 1/2 = 224MHz
+			this->mipiBitrate = 2 * 224000000;	//DDR for MIPI
 			break;
 		default:
 			break;;
@@ -687,30 +707,49 @@ Status OV5645::SetFPS(uint32_t fps) {
 }
 
 Status OV5645::SetBrightness(int8_t value) {
-	this->ModifyRegister(static_cast<OV5645::Register>(0x5580), 0x04, 0x04);		// Enable contrast control
+	Status status = Status::Ok;
+	status = this->ModifyRegister(static_cast<OV5645::Register>(0x5580), 0x04, 0x04);		// Enable contrast control
+	if(status != Status::Ok) {
+		return status; 
+	}
 	if(value < 0) {
-		this->ModifyRegister(static_cast<OV5645::Register>(0x5588), 0x08, 0x08);	// Y bright sign
-		this->WriteRegister(static_cast<OV5645::Register>(0x5587), -value);				// Y bright for contrast
+		status = this->ModifyRegister(static_cast<OV5645::Register>(0x5588), 0x08, 0x08);	// Y bright sign
+		if(status != Status::Ok) {
+			return status; 
+		}
+		status = this->WriteRegister(static_cast<OV5645::Register>(0x5587), -value);			// Y bright for contrast
 	}
 	else {
-		this->ModifyRegister(static_cast<OV5645::Register>(0x5588), 0x08, 0x00);
-		this->WriteRegister(static_cast<OV5645::Register>(0x5587), value);				// Y bright for contrast
+		status = this->ModifyRegister(static_cast<OV5645::Register>(0x5588), 0x08, 0x00);
+		if(status != Status::Ok) {
+			return status; 
+		}
+		status = this->WriteRegister(static_cast<OV5645::Register>(0x5587), value);					// Y bright for contrast
 	}
-	return Status::Ok;
+	return status;
 }
 
 Status OV5645::SetContrast(uint8_t value) {
-	this->ModifyRegister(static_cast<OV5645::Register>(0x5580), 0x04, 0x04);	// Enable contrast control
-	// this->WriteRegister(static_cast<OV5645::Register>(0x5585), 0x00);	// Y offset for contrast
-	this->WriteRegister(static_cast<OV5645::Register>(0x5586), value);	// Y gain for contrast
-	return Status::Ok;
+	Status status = Status::Ok;
+	status = this->ModifyRegister(static_cast<OV5645::Register>(0x5580), 0x04, 0x04);	// Enable contrast control
+	if(status != Status::Ok) {
+		return status; 
+	}
+	// status = this->WriteRegister(static_cast<OV5645::Register>(0x5585), 0x00);	// Y offset for contrast
+	return this->WriteRegister(static_cast<OV5645::Register>(0x5586), value);	// Y gain for contrast
 }
 
 Status OV5645::SetSaturation(uint8_t value) {
-	this->ModifyRegister(static_cast<OV5645::Register>(0x5580), 0x02, 0x02);	// Enable saturation control
-	this->WriteRegister(static_cast<OV5645::Register>(0x5583), value);	// Saturation U
-	this->WriteRegister(static_cast<OV5645::Register>(0x5584), value);	// Saturation V
-	return Status::Ok;
+	Status status = Status::Ok;
+	status = this->ModifyRegister(static_cast<OV5645::Register>(0x5580), 0x02, 0x02);	// Enable saturation control
+	if(status != Status::Ok) {
+		return status; 
+	}
+	status = this->WriteRegister(static_cast<OV5645::Register>(0x5583), value);	// Saturation U
+	if(status != Status::Ok) {
+		return status; 
+	}
+	return this->WriteRegister(static_cast<OV5645::Register>(0x5584), value);	// Saturation V
 }
 
 Status OV5645::SetWhiteBalance(uint8_t redGain, uint8_t blueGain) {
@@ -748,7 +787,7 @@ Status OV5645::SetWhiteBalance(uint8_t redGain, uint8_t blueGain) {
 	if(status != Status::Ok) {
 		return status;
 	}
-	return status = this->WriteRegister(static_cast<OV5645::Register>(0x519D), gB & 0xFF);
+	return this->WriteRegister(static_cast<OV5645::Register>(0x519D), gB & 0xFF);
 }
 
 Status OV5645::SetManualExposure(uint32_t exposure) {

@@ -125,7 +125,6 @@ Status SDMMC::DeInit(void) {
 
 Status SDMMC::SetClock(uint32_t freqHz) {
 	// This bit can only be written when the CPSM and DPSM are not active (CPSMACT = 0 and DPSMACT = 0).
-	
 	uint16_t clockDiv = 1;
 	if(freqHz < this->sourceClockHz) {
 		clockDiv = (this->sourceClockHz + (2 * freqHz - 1)) / (2 * freqHz);		
@@ -133,11 +132,12 @@ Status SDMMC::SetClock(uint32_t freqHz) {
 		if(clockDiv > 0x3FFUL) {
 			clockDiv = 0x3FFUL;
 		}
-		if(clockDiv == 0) {
-			// Clock divider of 0 is allowed but DDR is not suported in that case!
-			clockDiv = 1;
-		}
 	}
+
+	// Hardware constraint: DDR mode strictly requires CLKDIV > 0
+	if ((clockDiv == 0) && ((this->instance->CLKCR & SDMMC_CLKCR_DDR) == SDMMC_CLKCR_DDR)) {
+        clockDiv = 1;
+    }
 
 	MODIFY_REG(this->instance->CLKCR, SDMMC_CLKCR_CLKDIV, clockDiv);
 	return Status::Ok;

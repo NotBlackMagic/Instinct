@@ -146,13 +146,13 @@ Status ImageWriter::SaveBMP(const VisionFrame& frame, FX_MEDIA& media, const cha
 	// Create and open a file
 	status = fx_file_create(&media, const_cast<char*>(fileName));
 	if(status != FX_SUCCESS) {
-		LOG_WARN("Cannot save: SD Card not ready or not mounted.");
+		LOG_WARN("Cannot save: SD Card not ready or not mounted: %u", status);
 		return Status::Error;
 	}
 
 	status = fx_file_open(&media, &myFile, const_cast<char*>(fileName), FX_OPEN_FOR_WRITE);
 	if(status != FX_SUCCESS) {
-		LOG_ERR("Failed to open file on SD Card.");
+		LOG_ERR("Failed to open file on SD Card: %u", status);
 		return Status::Error;
 	}
 
@@ -166,7 +166,7 @@ Status ImageWriter::SaveBMP(const VisionFrame& frame, FX_MEDIA& media, const cha
 	// Write the raw buffer directly to the file
 	status = fx_file_write(&myFile, frame.startAddress, frame.payloadSize);
 	if(status != FX_SUCCESS) {
-		LOG_ERR("Failed to write frame data.");
+		LOG_ERR("Failed to write frame data: %u", status);
 		fx_file_close(&myFile);
 		return Status::Error;
 	}
@@ -198,21 +198,21 @@ Status ImageWriter::SaveBinary(const VisionFrame& frame, FX_MEDIA& media, const 
 	// Create the file
 	status = fx_file_create(&media, const_cast<char*>(fileName));
 	if(status != FX_SUCCESS) {
-		LOG_ERR("Failed to create binary file on SD Card.");
+		LOG_ERR("Failed to create binary file on SD Card: %u", status);
 		return Status::Error;
 	}
 
 	// Open the file
 	status = fx_file_open(&media, &myFile, const_cast<char*>(fileName), FX_OPEN_FOR_WRITE);
 	if(status != FX_SUCCESS) {
-		LOG_ERR("Failed to open file on SD Card.");
+		LOG_ERR("Failed to open file on SD Card: %u", status);
 		return Status::Error;
 	}
 
 	// Write the raw buffer directly to the file
 	status = fx_file_write(&myFile, frame.startAddress, frame.payloadSize);
 	if(status != FX_SUCCESS) {
-		LOG_ERR("Failed to write frame data.");
+		LOG_ERR("Failed to write frame data: %u", status);
 		fx_file_close(&myFile);
 		return Status::Error;
 	}
@@ -223,4 +223,75 @@ Status ImageWriter::SaveBinary(const VisionFrame& frame, FX_MEDIA& media, const 
 	LOG_INFO("Snapshot saved successfully!");
 
 	return Status::Ok;
+}
+
+Status ImageWriter::OpenStream(FX_FILE& file, FX_MEDIA& media, const char* fileName, const VisionFrame& headerFrame, uint32_t allocSize) {
+	UINT status;
+
+	if(media.fx_media_id != FX_MEDIA_ID) {
+		LOG_WARN("Cannot save: SD Card not ready or not mounted.");
+		return Status::Error;
+	}
+
+	// Force delete file if it already exists
+	fx_file_delete(&media, const_cast<char*>(fileName));
+
+	// Create the file
+	status = fx_file_create(&media, const_cast<char*>(fileName));
+	if(status != FX_SUCCESS) {
+		LOG_ERR("Failed to create stream file on SD Card: %u", status);
+		return Status::Error;
+	}
+
+	// Open the file
+	status = fx_file_open(&media, &file, const_cast<char*>(fileName), FX_OPEN_FOR_WRITE);
+	if(status != FX_SUCCESS) {
+		LOG_ERR("Failed to open file on SD Card: %u", status);
+		return Status::Error;
+	}
+
+	// Pre-allocate contiguous space to prevent FAT fragmentation stalls
+	status = fx_file_allocate(&file, allocSize);
+	if(status != FX_SUCCESS) {
+		LOG_ERR("Failed to pre-allocate stream file space: %u", status);
+		fx_file_close(&file);
+		return Status::Error;
+	}
+
+	// Write SPS/PPS headers as the very first payload
+	if(headerFrame.startAddress != nullptr && headerFrame.payloadSize > 0) {
+		status = fx_file_write(&file, headerFrame.startAddress, headerFrame.payloadSize);
+		if(status != FX_SUCCESS) {
+			LOG_ERR("Failed to write stream headers: %u", status);
+			fx_file_close(&file);
+			return Status::Error;
+		}
+	}
+
+	return Status::Ok;
+}
+
+Status ImageWriter::AppendStream(FX_FILE& file, const VisionFrame& frame) {
+	if(frame.startAddress == nullptr || frame.payloadSize == 0) {
+		return Status::Error;
+	}
+
+	UINT status = fx_file_write(&file, frame.startAddress, frame.payloadSize);
+	if(status != FX_SUCCESS) {
+		LOG_ERR("Failed to append frame data. Error: %u", status);
+		return Status::Error;
+	}
+
+	return Status::Ok;
+}
+
+Status ImageWriter::CloseStream(FX_FILE& file, FX_MEDIA& media) {
+	UINT status = fx_file_close(&file);
+	if(status != FX_SUCCESS) {
+		LOG_ERR("Failed to close stream file. Error: %u", status);
+	}
+
+	fx_media_flush(&media);
+
+	return (status == FX_SUCCESS) ? Status::Ok : Status::Error;
 }
