@@ -11,6 +11,9 @@
 
 #include "common.hpp"
 
+// Enforce byte-alignment
+#pragma pack(push, 1)
+
 struct RCMsg {
 	Timestamp timestamp;	// Microseconds (Timestamp of last valid frame)
 	uint16_t channels[16];	// 1000-2000us standardized range
@@ -40,3 +43,5 @@ struct ManualControlMsg {
 
 	uint8_t linkState;
 };
+
+#pragma pack(pop) // Restore default compiler alignment

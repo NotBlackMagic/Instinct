@@ -204,6 +204,9 @@ Status HyperBus::DeInit(void) {
 Status HyperBus::LockBus(uint32_t timeoutTicks) {
 #if defined (USE_RTOS)
 	// Try lock HyperBus device
+	if(tx_thread_identify() == nullptr) {
+		return Status::Ok;
+	}
 	if(tx_mutex_get(&this->mutex, timeoutTicks) != TX_SUCCESS) {
 		return Status::Timeout;
 	}
@@ -214,6 +217,9 @@ Status HyperBus::LockBus(uint32_t timeoutTicks) {
 Status HyperBus::UnlockBus() {
 #if defined (USE_RTOS)
 	// Release HyperBus device
+	if(tx_thread_identify() == nullptr) {
+		return Status::Ok;
+	}
 	if(tx_mutex_put(&this->mutex) != TX_SUCCESS) {
 		return Status::Error;
 	}
@@ -232,10 +238,11 @@ Status HyperBus::TransferAsync(AddressSpace space, uint32_t addr, AddrSize addrS
 	}
 	
 	// Clear event flags
-#if defined (USE_RTOS)
-	tx_event_flags_set(&this->event, 0, TX_AND);
-#else
 	this->eventFlags = 0;
+#if defined (USE_RTOS)
+	if(tx_thread_identify() != nullptr) {
+		tx_event_flags_set(&this->event, 0, TX_AND);
+	}
 #endif
 
 	// Prepare internal transfer variables
@@ -279,21 +286,28 @@ Status HyperBus::TransferAsync(AddressSpace space, uint32_t addr, AddrSize addrS
 Status HyperBus::TransferWait(uint32_t timeoutTicks) {
 	// Wait for event
 #if defined (USE_RTOS)
-	ULONG events;
-	UINT status = tx_event_flags_get(&this->event, EVT_TRANS_CPLT | EVT_ERR, TX_OR_CLEAR, &events, timeoutTicks);
+	if(tx_thread_identify() != nullptr) {
+		ULONG events;
+		UINT status = tx_event_flags_get(&this->event, EVT_TRANS_CPLT | EVT_ERR, TX_OR_CLEAR, &events, timeoutTicks);
 
-	if(status != TX_SUCCESS) {
-		return Status::Timeout;
-	}
+		if(status != TX_SUCCESS) {
+			return Status::Timeout;
+		}
 
-	if((events & EVT_ERR) == EVT_ERR) {
-		return Status::Error;
+		if((events & EVT_ERR) == EVT_ERR) {
+			return Status::Error;
+		}
+		return Status::Ok;
 	}
-#else
+#endif
+
 	uint32_t startMs = Time::GetMs();
-
 	while(1) {
-		InterruptHandler();
+		// If interrupts disabled (e.g. flash loader), run handler here manually
+		if(__get_PRIMASK() != 0) {
+			InterruptHandler();
+		}
+
 		if(this->eventFlags != 0) {
 			break;
 		}
@@ -308,7 +322,6 @@ Status HyperBus::TransferWait(uint32_t timeoutTicks) {
 	if((this->eventFlags & EVT_ERR) == EVT_ERR) {
 		return Status::Error;
 	}
-#endif
 
 	return Status::Ok;
 }
@@ -498,10 +511,10 @@ void HyperBus::InterruptHandler() {
 		WRITE_REG(this->instance->FCR, XSPI_FCR_CTEF);
 		// Disable interrupts
 		CLEAR_BIT(this->instance->CR, XSPI_CR_TCIE | XSPI_CR_TEIE | XSPI_CR_FTIE);
+
+		this->eventFlags |= EVT_ERR;
 #if defined (USE_RTOS)
 		tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
-#else
-		this->eventFlags |= EVT_ERR;
 #endif
 	}
 
@@ -546,10 +559,10 @@ void HyperBus::InterruptHandler() {
 		WRITE_REG(this->instance->FCR, XSPI_FCR_CTCF);
 		// Disable interrupts
 		CLEAR_BIT(this->instance->CR, XSPI_CR_TCIE | XSPI_CR_TEIE | XSPI_CR_FTIE);
+
+		this->eventFlags |= EVT_TRANS_CPLT;
 #if defined (USE_RTOS)
 		tx_event_flags_set(&this->event, EVT_TRANS_CPLT, TX_OR);
-#else
-		this->eventFlags |= EVT_TRANS_CPLT;
 #endif
 	}
 }

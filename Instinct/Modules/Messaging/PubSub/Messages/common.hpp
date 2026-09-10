@@ -19,4 +19,9 @@ struct Quaternion {
 	float x, y, z, w;
 };
 
+struct ControlWrench {
+	Vector3f force;		// Linear effort: X, Y, Z [-1.0f to 1.0f]
+	Vector3f torque;	// Angular effort: Roll, Pitch, Yaw [-1.0f to 1.0f]
+};
+
 using Timestamp = uint64_t;

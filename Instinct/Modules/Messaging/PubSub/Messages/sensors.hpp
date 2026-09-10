@@ -11,6 +11,9 @@
 
 #include "common.hpp"
 
+// Enforce byte-alignment
+#pragma pack(push, 1)
+
 struct AccelMsg {
 	Timestamp timestamp;	// Microseconds
 	float values[3];		// m/s^2
@@ -52,3 +55,5 @@ struct NavSatMsg {
 	float alt;				// In meters, positive is above the WGS 84 ellipsoid
 	float hdop;				// Horizontal dilution
 };
+
+#pragma pack(pop) // Restore default compiler alignment

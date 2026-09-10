@@ -72,11 +72,17 @@ Status UART::Init(const Config &config) {
 	LL_USART_SetDataWidth(this->instance, static_cast<uint32_t>(config.dataBits));
 	LL_USART_SetParity(this->instance, static_cast<uint32_t>(config.parity));
 	LL_USART_SetStopBitsLength(this->instance, static_cast<uint32_t>(config.stopBits));
-	if(config.hwFlowControl == 0x00) {
+	if(config.hwFlowControl == false) {
 		LL_USART_SetHWFlowCtrl(this->instance, LL_USART_HWCONTROL_NONE);
 	} 
 	else {
 		LL_USART_SetHWFlowCtrl(this->instance, LL_USART_HWCONTROL_RTS_CTS);
+	}
+	if(config.swapTxRx == true) {
+		LL_USART_SetTXRXSwap(this->instance, LL_USART_TXRX_SWAPPED);
+	}
+	else {
+		LL_USART_SetTXRXSwap(this->instance, LL_USART_TXRX_STANDARD);
 	}
 	LL_USART_SetOverSampling(this->instance, LL_USART_OVERSAMPLING_16);
 	LL_USART_SetBaudRate(this->instance, config.sourceClockHz, LL_USART_PRESCALER_DIV1, LL_USART_OVERSAMPLING_16, config.baudrate);

@@ -43,6 +43,13 @@ defined in linker script */
 /* end address for the .bss section. defined in linker script */
 .word _ebss
 
+/* Added for TCM */
+.word _siitcm
+.word _sitcm
+.word _eitcm
+.word _sdtcm_bss
+.word _edtcm_bss
+
 /**
  * @brief  This is the code that gets called when the processor first
  *          starts execution following a reset event. Only the absolutely
@@ -93,6 +100,37 @@ FillZerobss:
 LoopFillZerobss:
   cmp r2, r4
   bcc FillZerobss
+
+/* Copy the ITCM code segment from ROM to ITCM */
+  ldr r0, =_sitcm
+  ldr r1, =_eitcm
+  ldr r2, =_siitcm
+  movs r3, #0
+  b LoopCopyITCMInit
+
+CopyITCMInit:
+  ldr r4, [r2, r3]
+  str r4, [r0, r3]
+  adds r3, r3, #4
+
+LoopCopyITCMInit:
+  adds r4, r0, r3
+  cmp r4, r1
+  bcc CopyITCMInit
+
+/* Zero fill the DTCM bss segment */
+  ldr r2, =_sdtcm_bss
+  ldr r4, =_edtcm_bss
+  movs r3, #0
+  b LoopFillZeroDTCMbss
+
+FillZeroDTCMbss:
+  str  r3, [r2]
+  adds r2, r2, #4
+
+LoopFillZeroDTCMbss:
+  cmp r2, r4
+  bcc FillZeroDTCMbss
 
 /* Call static constructors */
   bl __libc_init_array

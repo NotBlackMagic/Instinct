@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/Vision/VENCEncoder.hpp
- * Author:  NotBlackMagic
- * Brief:   H.264 video stream encoder.
+ * File:	Instinct/Modules/Vision/VENCEncoder.hpp
+ * Author:	NotBlackMagic
+ * Brief:	H.264 video stream encoder.
  */
 
 #pragma once
@@ -22,7 +22,7 @@
 #include "tx_api.h"
 
 class VENCEncoder {
-    public:
+	public:
 		/// @brief Constructor.
 		/// @param venc		Reference to the low-level VENC driver
 		VENCEncoder(Venc& venc) : vencInstance(venc), outFrameContext(nullptr), inFrameContext(nullptr) {};
@@ -65,6 +65,8 @@ class VENCEncoder {
 		// Capture context
 		VisionFrame* outFrameContext;
 		const VisionFrame* inFrameContext;
+		bool streamingMode;
+		uint32_t lineBufferLines;
 
 		TX_EVENT_FLAGS_GROUP syncEvent;
 		static constexpr uint32_t EVT_DONE = 0x01;

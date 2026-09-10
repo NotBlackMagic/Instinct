@@ -14,6 +14,7 @@
 #include "logger.hpp"
 #include "shell.hpp"
 #include "version.hpp"
+#include "memoryTest.hpp"
 
 #include "system_stm32n6xx.h"
 #include "tx_thread.h"

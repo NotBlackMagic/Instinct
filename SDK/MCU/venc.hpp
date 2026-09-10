@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/venc.hpp
- * Author:  NotBlackMagic
- * Brief:   VENC (H.264) hardware codec driver for STM32N6 encapsulating the core encoding API.
+ * File:	SDK/MCU/venc.hpp
+ * Author:	NotBlackMagic
+ * Brief:	VENC (H.264) hardware codec driver for STM32N6 encapsulating the core encoding API.
  */
 
 #pragma once
@@ -52,9 +52,30 @@ class Venc {
 			NonIdrIntra = 2		// Non-IDR I-Frame
 		};
 
+		/// @brief H.264 Profiles defining compression feature sets.
+		enum class H264Profile : uint32_t {
+			Baseline = 0,		// Low latency/power, no CABAC, no 8x8 transform
+			Main = 1,			// Good balance, uses CABAC
+			High = 2			// Best compression, uses CABAC and 8x8 transform
+		};
+
+		/// @brief Total line capacity of the circular wrap buffer (2^k lines).
+		/// @brief Line interval between hardware trigger pulses (2^k lines).
+		enum class LineCount : uint32_t {
+			Lines1 = 0,
+			Lines2 = 1,
+			Lines4 = 2,
+			Lines8 = 3,
+			Lines16 = 4,
+			Lines32 = 5,
+			Lines64 = 6,
+			Lines128 = 7
+		};
+
 		/// @brief Hardware and Encoding Events.
 		enum class Event {
 			FrameReady,
+			SliceReady,
 			DesyncError,
 			TimeoutError,
 			SystemError
@@ -70,21 +91,20 @@ class Venc {
 
 		/// @brief H.264 Rate Control configuration.
 		struct RateControl {
-			bool enablePictureRc;
-			uint32_t bitPerSecond;
-			uint32_t gopLen;
-			uint32_t qpMin;
-			uint32_t qpMax;
-			uint32_t qpHdr;
+			bool enablePictureRc = true;
+			uint32_t bitPerSecond = 0;	// 0 = Auto-calculate based on resolution
+			uint32_t gopLen = 30;
+			uint32_t qpMin = 10;
+			uint32_t qpMax = 51;
+			uint32_t qpHdr = 26;
 		};
 
 		/// @brief H.264 Coding and Slice control.
 		struct CodingControl {
-			uint32_t sliceSize;
-			bool enableCabac;
-			bool enableTransform8x8;
-			bool insertIdrHeader;
-			bool disableDeblockingFilter;
+			H264Profile profile = H264Profile::High;
+			uint32_t sliceSize = 0;
+			bool insertIdrHeader = true;
+			bool disableDeblockingFilter = false;
 		};
 
 		/// @brief VENC peripheral hardware configuration.
@@ -94,6 +114,9 @@ class Venc {
 			RateControl rateControl;		// For H264
 			CodingControl codingControl;	// For H264
 			uint32_t jpegQuality;			// For JPEG
+			bool enableStreamingMode;		// For streaming partial frames, no complete frames mode
+			LineCount lineWrap = LineCount::Lines64;	// Total lines in buffer (e.g., 64 or 128)
+			LineCount lineTrigger = LineCount::Lines32;	// Handshake trigger step (e.g., 16 or 32)
 
 			// Memory pool for encoder internal states
 			uint8_t* poolAddress;
@@ -178,6 +201,10 @@ class Venc {
 		TX_EVENT_FLAGS_GROUP event;
 		TX_BYTE_POOL bytePool;
 
+		// Variables to hold the latest slice info for the application to read
+		uint32_t lastSliceSize = 0;
+		uint32_t lastSliceOffset = 0;
+
 		// Event Flags Definitions
 		static constexpr ULONG EVT_SLICE_RDY = 0x01;
 		static constexpr ULONG EVT_ERR = 0x02;
@@ -200,6 +227,9 @@ class Venc {
 		Status SetPreProcessing();
 		Status SetCodingControl();
 		Status SetRateControl();
+
+		// Internal VENC hardware callback handlers
+		static void SliceReadyCallback(H264EncSliceReady* sliceReady);
 
 		/// @brief Helper to configure Resource Isolation Framework (RIF)
 		void ConfigureRIF(void);

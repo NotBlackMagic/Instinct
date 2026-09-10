@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/Drivers/Video/ov7670.cpp
+ * File:	SDK/Drivers/Video/ov7670.cpp
  */
 
 #include "ov7670.hpp"

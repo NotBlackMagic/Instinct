@@ -23,7 +23,8 @@ class LoggerThread {
 		static TX_THREAD threadPtr;
 		static uint8_t threadStack[4096];
 
-		__attribute__((aligned(32))) static uint8_t writeBuffer[512];
+		static constexpr uint16_t writeBufferSize = 4096;
+		__attribute__((aligned(32))) static uint8_t writeBuffer[writeBufferSize];
 
 		static void Run(ULONG input);
 };

@@ -113,23 +113,25 @@ void AuxiliaryThread::Run(ULONG input) {
 		extMag.RequestData();
 
 		// Wait for all called/triggered requests
-		onboardMag.GetData(magInt.values, &magInt.temperature);
-		onboardMag.ReadTemperature(magInt.temperature);
-		// Convert from sensor coordinate frame to FRD/NED
-		// float tmp = magInt.values[0];
-		// magInt.values[0] = -magInt.values[1];
-		// magInt.values[1] = -tmp;
-		// magInt.values[2] = -magInt.values[2];
-		topicMag[0].Publish(magInt);
+		if(onboardMag.GetData(magInt.values, &magInt.temperature) == Status::Ok) {
+			onboardMag.ReadTemperature(magInt.temperature);
+			// Convert from sensor coordinate frame to FRD/NED
+			float tmp = magInt.values[0];
+			magInt.values[0] = -magInt.values[0];
+			magInt.values[1] = -magInt.values[1];
+			magInt.values[2] = magInt.values[2];
+			topicMag[0].Publish(magInt);
+		}
 
 		// Wait for all called/triggered requests
-		extMag.GetData(magExt.values, &magExt.temperature);
-		// Convert from sensor coordinate frame to FRD/NED
-		// tmp = extMag.values[0];
-		// extMag.values[0] = -extMag.values[1];
-		// extMag.values[1] = -tmp;
-		// extMag.values[2] = -extMag.values[2];
-		topicMag[1].Publish(magExt);
+		if(extMag.GetData(magExt.values, &magExt.temperature) == Status::Ok) {
+			// Convert from sensor coordinate frame to FRD/NED
+			// tmp = extMag.values[0];
+			// extMag.values[0] = -extMag.values[1];
+			// extMag.values[1] = -tmp;
+			// extMag.values[2] = -extMag.values[2];
+			topicMag[1].Publish(magExt);			
+		}
 
 		// Start request of sensors on shared buse from previous request
 		baroInt.timestamp = Time::GetUs();
@@ -138,11 +140,13 @@ void AuxiliaryThread::Run(ULONG input) {
 		extBaro.RequestData();
 
 		// Wait for all called/triggered requests
-		onboardBaro.GetData(&baroInt.pressure, &baroInt.temperature);
-		topicBaro[0].Publish(baroInt);
+		if(onboardBaro.GetData(&baroInt.pressure, &baroInt.temperature) == Status::Ok) {
+			topicBaro[0].Publish(baroInt);
+		}
 
-		extBaro.GetData(&baroExt.pressure, &baroExt.temperature);
-		topicBaro[1].Publish(baroExt);
+		if(extBaro.GetData(&baroExt.pressure, &baroExt.temperature) == Status::Ok) {
+			topicBaro[1].Publish(baroExt);
+		}
 
 		// Match set ODR rates of 25Hz
 		tx_thread_sleep(40);

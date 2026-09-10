@@ -13,8 +13,8 @@ set(CMAKE_C_EXTENSIONS ON)
 
 set(MCU_FLAGS  "-mcpu=cortex-m55 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -mcmse " )
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MCU_FLAGS} -ffunction-sections -fdata-sections -flax-vector-conversions")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MCU_FLAGS} -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti -flax-vector-conversions")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MCU_FLAGS} -Wno-error=incompatible-pointer-types -Wno-incompatible-pointer-types -ffunction-sections -fdata-sections -flax-vector-conversions")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MCU_FLAGS} -Wno-error=incompatible-pointer-types -Wno-incompatible-pointer-types -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti -flax-vector-conversions")
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${MCU_FLAGS}") 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MCU_FLAGS} -Wl,--gc-sections -Wl,--print-memory-usage")
 
@@ -30,7 +30,7 @@ add_compile_definitions(
 	TX_INCLUDE_USER_DEFINE_FILE
 	TX_SINGLE_MODE_SECURE=1
 	FX_INCLUDE_USER_DEFINE_FILE
-	ARM_MATH_DSP
+	ARM_MATH_HELIUM
 	DISABLEFLOAT16
 
 	ZENOH_THREADX_STM32=1        # Use the built-in ThreadX memory/time hooks
@@ -71,11 +71,16 @@ include_directories(
 
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Acquisition
+	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Actuation
+	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Commander
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Control
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Estimator
+	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Math
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging/PubSub
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Messaging/PubSub/Messages
+	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Navigation
+	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Payloads
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/System
 	${CMAKE_CURRENT_SOURCE_DIR}/Modules/Vision
 
@@ -182,12 +187,16 @@ file(GLOB CMSIS_DSP_SOURCES
 	"${CMSIS_DSP_ROOT}/Source/MatrixFunctions/*.c"
 	"${CMSIS_DSP_ROOT}/Source/StatisticsFunctions/*.c"
 	"${CMSIS_DSP_ROOT}/Source/QuaternionMathFunctions/*.c"
+	"${CMSIS_DSP_ROOT}/Source/CommonTables/arm_common_tables.c"
+	"${CMSIS_DSP_ROOT}/Source/CommonTables/arm_common_tables_f16.c"
+	"${CMSIS_DSP_ROOT}/Source/CommonTables/arm_const_structs.c"
 )
 # Remove the CMSIS-DSP "Master" files to prevent multiple definition linker errors
 list(FILTER CMSIS_DSP_SOURCES EXCLUDE REGEX "BasicMathFunctions\\.c$")
 list(FILTER CMSIS_DSP_SOURCES EXCLUDE REGEX "FastMathFunctions\\.c$")
 list(FILTER CMSIS_DSP_SOURCES EXCLUDE REGEX "MatrixFunctions\\.c$")
 list(FILTER CMSIS_DSP_SOURCES EXCLUDE REGEX "StatisticsFunctions\\.c$")
+list(FILTER CMSIS_DSP_SOURCES EXCLUDE REGEX "QuaternionMathFunctions\\.c$")
 list(FILTER CMSIS_DSP_SOURCES EXCLUDE REGEX "QuaternionMathFunctions\\.c$")
 list(FILTER CMSIS_DSP_SOURCES EXCLUDE REGEX ".*FunctionsF16\\.c$")
 

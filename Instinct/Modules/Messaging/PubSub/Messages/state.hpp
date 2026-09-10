@@ -11,6 +11,9 @@
 
 #include "common.hpp"
 
+// Enforce byte-alignment
+#pragma pack(push, 1)
+
 // Defines the current health and convergence level of the InEKF
 enum class EstimatorState : uint8_t {
 	Uninitialized = 0,	// Waiting for sensors / IMU alignment
@@ -36,3 +39,5 @@ struct StateMsg {
 	// Estimator Filter Health
 	EstimatorState status;	// Enum indicating which fields downstream nodes can trust
 };
+
+#pragma pack(pop) // Restore default compiler alignment

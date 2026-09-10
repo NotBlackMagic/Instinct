@@ -13,13 +13,42 @@
 
 class TopicBase {
 	public:
-		TopicBase(const char* name, uint8_t topicID, uint8_t instance) : nextTopic(nullptr), name(name), topicID(topicID), instance(instance), msgCount(0), publishTimestamp(0), subCount(0), averagePeriodUs(0) {}
+		TopicBase(const char* name, uint8_t topicID, uint8_t instance)
+			: 	nextTopic(nullptr), 
+				name(name),
+				topicID(topicID),
+				instance(instance),
+				msgCount(0),
+				publishTimestamp(0),
+				subCount(0),
+				averagePeriodUs(0),
+				logEnabled(false),
+				logPeriodUs(0),
+				lastLogTimestamp(0) {}
 		
 		virtual ~TopicBase() = default;
 
 		const char* GetName() const { return name; }
 		uint8_t GetTopicID() const { return topicID; }
 		uint8_t GetInstance() const { return instance; }
+
+		/// @brief Enable binary SD logging for this topic
+		/// @param rateHz Target log rate in Hz. Set to 0 to log at native publish rate.
+		void EnableLogging(uint32_t rateHz = 0) {
+			logEnabled = true;
+			if(rateHz > 0) {
+				logPeriodUs = 1000000 / rateHz;
+			}
+			else {
+				logPeriodUs = 0; // 0 = every publish
+			}
+		}
+
+		void DisableLogging() {
+			logEnabled = false;
+		}
+
+		bool IsLoggingEnabled() const { return logEnabled; }
 
 		void GetStats(uint32_t& msgCount, uint32_t& publishTimestamp, uint32_t& subCount, float& rate) {
 			msgCount = this->msgCount;
@@ -44,4 +73,9 @@ class TopicBase {
 		volatile uint64_t publishTimestamp;
 		volatile uint8_t subCount;
 		uint32_t averagePeriodUs;
+
+		// Logging control variables
+		bool logEnabled;
+		uint32_t logPeriodUs;
+		uint64_t lastLogTimestamp;
 };

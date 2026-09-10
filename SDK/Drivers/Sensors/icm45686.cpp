@@ -147,7 +147,7 @@ Status ICM45686::GetData(float* accel, float* gyro, float* temp) {
 	accel[1] = this->ParseAxis(rxBuffer[3], rxBuffer[4], sens, accelOffset[1]);
 	accel[2] = this->ParseAxis(rxBuffer[5], rxBuffer[6], sens, accelOffset[2]);
 
-	sens = gyroSens[static_cast<uint8_t>(this->config.gyroScale)];
+	sens = gyroSens[static_cast<uint8_t>(this->config.gyroScale)] * (3.1415926535f / 180.0f);	// Add in conversion from deg/s to rad/s
 	gyro[0] = this->ParseAxis(rxBuffer[7], rxBuffer[8], sens, gyroOffset[0]);
 	gyro[1] = this->ParseAxis(rxBuffer[9], rxBuffer[10], sens, gyroOffset[1]);
 	gyro[2] = this->ParseAxis(rxBuffer[11], rxBuffer[12], sens, gyroOffset[2]);

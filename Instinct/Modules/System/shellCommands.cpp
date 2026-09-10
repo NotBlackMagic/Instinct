@@ -11,6 +11,9 @@ extern char _stext[], _etext[];
 extern char _sdata[], _edata[];
 extern char _sbss[],  _ebss[];
 extern char _estack[];
+// extern char __snoncacheable[], __enoncacheable[];
+extern char _srom[], _erom[];
+extern char _rom_capacity[], _ram_capacity[];
 
 // Basic commands
 
@@ -98,28 +101,38 @@ static bool CommandStatus(const char* args) {
 static bool CommandMemory(const char* args) {
 	(void)args;
 
+	// Retrieve absolute capacities from the linker script
+	uint32_t romTotal = (uint32_t)_rom_capacity;
+	uint32_t ramTotal = (uint32_t)_ram_capacity;
+
 	// Calculate Usage
-	uint32_t romUsed = (uint32_t)(_etext - _stext) + (uint32_t)(_edata - _sdata);
-	uint32_t ramUsed = (uint32_t)(_edata - _sdata) + (uint32_t)(_ebss - _sbss);
-	uint32_t dmaUsed = (uint32_t)(__enoncacheable - __snoncacheable);
+	uint32_t romUsed = (uint32_t)(_erom - _srom);
+	// uint32_t dmaUsed = (uint32_t)(__enoncacheable - __snoncacheable);
+	uint32_t dmaUsed = (uint32_t)&__enoncacheable - (uint32_t)&__snoncacheable;
+	uint32_t ramUsed = (uint32_t)(_edata - _sdata) + (uint32_t)(_ebss - _sbss) + dmaUsed;
 
 	// Dynamic memory stuff
 	uint32_t stackTotal = (uint32_t)_estack - (uint32_t)_ebss;
 	uint32_t stackUsed  = (uint32_t)_estack - __get_MSP();
 
+	// External memory stuff
+	uint32_t psramUsed = externalPSRAM.GetUsedSize();
+	uint32_t psramTotal = externalPSRAM.GetTotalSize();
+
 	// Calculate Percentages
-	int romPct = (romUsed * 100) / BoardInfo::SizeROM;
-	int ramPct = (ramUsed * 100) / BoardInfo::SizeRAM;
+	int romPct = (romTotal > 0) ? (romUsed * 100) / romTotal : 0;
+	int ramPct = (ramTotal > 0) ? (ramUsed * 100) / ramTotal : 0;
 	int stackPct = (stackTotal > 0) ? (stackUsed * 100) / stackTotal : 0;
+	int psramPct = (psramTotal > 0) ? (psramUsed * 100) / psramTotal : 0;
 
 	// Print
 	Logger::Instance().Write("\r\n--- MEMORY USAGE ---\r\n");
 	// Internal Memory
-	Logger::Instance().Printf("ROM    : %7lu / %8lu B (%d%%)\r\n", romUsed, BoardInfo::SizeROM, romPct);
-	Logger::Instance().Printf("RAM    : %7lu / %8lu B (%d%%)\r\n", ramUsed, BoardInfo::SizeRAM, ramPct);
+	Logger::Instance().Printf("ROM    : %8lu / %8lu B (%d%%)\r\n", romUsed, BoardInfo::SizeROM, romPct);
+	Logger::Instance().Printf("RAM    : %8lu / %8lu B (%d%%)\r\n", ramUsed, BoardInfo::SizeRAM, ramPct);
 	// External Memory
 	Logger::Instance().Printf("H-FLASH: %8lu / %8lu B (%d%%)\r\n", 0UL, BoardInfo::SizeExtFlash, 0);
-	Logger::Instance().Printf("PSRAM  : %8lu / %8lu B (%d%%)\r\n", 0UL, BoardInfo::SizeExtRAM, 0);
+	Logger::Instance().Printf("PSRAM  : %8lu / %8lu B (%d%%)\r\n", psramUsed, psramTotal, psramPct);
 	// Dynamic Memory
 	Logger::Instance().Printf("STACK  : %8lu / %8lu B (%d%%)\r\n", stackUsed, stackTotal, stackPct);
 	Logger::Instance().Write("--------------------\r\n");
@@ -269,6 +282,13 @@ static bool CommandLog(const char* args) {
 	return true;
 }
 
+static bool CommandRamTest(const char* args) {
+	(void)args;
+	Logger::Instance().Write("Starting PSRAM Benchmark...\r\n");
+	MemoryTest::RunBenchmark();
+	return true;
+}
+
 // SYSTEM COMMANDS
 static const Shell::CommandEntry systemCommands[] {
 	// Basic commands
@@ -286,6 +306,9 @@ static const Shell::CommandEntry systemCommands[] {
 	// Control commands
 	{ "reboot",	CommandReboot,		"Reboots system" },
 	{ "log",		CommandLog,	"Set Log Level (0-6)" },
+
+	// Tests
+	{ "ramtest", CommandRamTest, "Benchmark PSRAM (Direct, MM, DMA)" },
 	
 	{ nullptr,	nullptr,		nullptr } // Terminator
 };

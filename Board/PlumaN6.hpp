@@ -40,5 +40,6 @@ void BoardUART4Init();
 void BoardUART6Init();
 void BoardUART7Init();
 void BoardUART8Init();
+void BoardUART10Init();
 void BoardXSPI1Init();
 void BoardXSPI2Init();

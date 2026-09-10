@@ -21,14 +21,10 @@ std::atomic<bool> StorageThread::storageReady{false};
 void StorageThread::Init() {
 	fx_system_initialize();
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Storage"),
-											StorageThread::Run,
-											0,
-											threadStack,
-											sizeof(threadStack),
-											0,
-											0,
-											TX_NO_TIME_SLICE,
-											TX_AUTO_START);
+											StorageThread::Run, 0,
+											threadStack, sizeof(threadStack),
+											0, 0,
+											TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Storage Thread Create Failed.");
 	}

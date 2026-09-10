@@ -29,7 +29,6 @@ class Logger {
 			Off   = 6  
 		};
 
-
 		// Delete copy constructors.
 		Logger(const Logger&) = delete;
 		void operator=(const Logger&) = delete;
@@ -42,6 +41,9 @@ class Logger {
 		void Printf(const char* fmt, ...);
 		void Write(const char* str);
 		void Write(const char* data, uint16_t len);
+
+		// Binary logging for PubSub payloads
+		void LogData(uint16_t topicId, const uint8_t* payload, uint8_t len);
 
 		void SetConsoleLevel(Logger::LogLevel level);
 		void SetSDLevel(Logger::LogLevel level);

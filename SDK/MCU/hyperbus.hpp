@@ -148,7 +148,7 @@ class HyperBus {
 		static constexpr uint32_t EVT_TRANS_CPLT = 0x01;
 		static constexpr uint32_t EVT_ERR = 0x02;
 
-
+		volatile uint32_t eventFlags;
 #if defined (USE_RTOS)
 		// Synchronization
 		TX_MUTEX mutex;
@@ -156,7 +156,6 @@ class HyperBus {
 		// Timeout defines
 		static constexpr uint32_t TIMEOUT_MUTEX = TX_WAIT_FOREVER;
 #else
-		volatile uint32_t eventFlags;
         static constexpr uint32_t TIMEOUT_MUTEX = 0xFFFFFFFF;
 #endif
 		

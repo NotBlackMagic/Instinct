@@ -13,6 +13,7 @@ Status HyperRAM::Init(const Config &config) {
 	}
 
 	this->config = config;
+	this->allocatedBytes = 0;
 
 	// Configure the Bus
 	HyperBus::Config hyperBusCnfg;
@@ -189,4 +190,42 @@ Status HyperRAM::ExitMemoryMappedMode() {
 	// SCB_CleanDCache_by_Addr((uint32_t*)baseAddr, this->config.sizeBytes);
 
 	return this->bus.ExitMemoryMappedMode();
+}
+
+uint8_t* HyperRAM::Allocate(uint32_t size, uint32_t align) {
+	if(size == 0) {
+		return nullptr;
+	}
+
+	// Require alignment to be a power of 2
+	if((align & (align - 1)) != 0) {
+		return nullptr;
+	}
+
+	// Disable interrupts to make the bump operation thread-safe
+	// UINT state = tx_interrupt_control(TX_INT_DISABLE);
+
+	// Calculate current unaligned address
+	uintptr_t currentAddr = this->GetBaseAddr() + this->allocatedBytes;
+
+	// Calculate aligned address
+	uintptr_t alignedAddr = (currentAddr + align - 1) & ~(align - 1);
+
+	// Calculate how many bytes to push the allocator forward (padding + size)
+	uint32_t padding = alignedAddr - currentAddr;
+	uint32_t totalRequired = padding + size;
+
+	// Check for PSRAM overflow
+	if(this->allocatedBytes + totalRequired > this->config.sizeBytes) {
+		// tx_interrupt_control(state);
+		return nullptr; // Out of memory
+	}
+
+	// Bump the allocator
+	this->allocatedBytes += totalRequired;
+
+	// Restore interrupts
+	// tx_interrupt_control(state);
+
+	return reinterpret_cast<uint8_t*>(alignedAddr);
 }

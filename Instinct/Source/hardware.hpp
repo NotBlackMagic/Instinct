@@ -27,6 +27,7 @@
 // Storage device drivers
 #include "hyperFlash.hpp"
 #include "hyperRAM.hpp"
+#include "memoryTest.hpp"
 #include "sd.hpp"
 
 // Misc sensor drivers
@@ -135,9 +136,12 @@ extern PWM pwm2Ch2;
 extern PWM pwm2Ch3;
 extern PWM pwm2Ch4;
 
-extern UART uart4;
+extern UART debugUART;
+extern UART gps1;
+extern UART gps2;
 extern UART ldrUART;
 extern UART hdrUART;
+extern UART telem2;
 
 extern DMAChannel csiDMAChannel;
 extern DMAChannel dcmiDMAChannel;

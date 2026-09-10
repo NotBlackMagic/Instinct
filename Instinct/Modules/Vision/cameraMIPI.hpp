@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/Vision/cameraMIPI.hpp
- * Author:  NotBlackMagic
- * Brief:   
+ * File:	Instinct/Modules/Vision/cameraMIPI.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Aaa 
  */
 
 #pragma once
@@ -53,8 +53,10 @@ class CameraMIPI {
 		/// @param buffer Frame buffer structure.
 		/// @return Status::Ok if the transfer started, or Status::Busy if device is locked by another thread, or Status::Error if failed.
 		Status CaptureAsync(VisionFrame &buffer);
+		Status CaptureAsync(VisionFrame &buffer0, VisionFrame &buffer1);
+		Status CaptureAsync(VisionFrame &buffer, Dcmipp::LineCount lineMult, Dcmipp::LineCount wrapAddress);
 
-		/// @brief Blocks the current thread until the Async capture completes.
+		/// @brief Blocks until the next frame (or buffer) is complete, handling cache invalidation automatically.
 		/// @param timeoutTicks Max wait time in OS ticks.
 		/// @return Status::Ok if the transfer completed successfully, Status::Timeout if it expired, or Status::Error on hardware faults.
 		Status CaptureWait(uint32_t timeoutTicks);
@@ -74,5 +76,8 @@ class CameraMIPI {
 		DMAChannel& dmaChannel;
 
 		// Capture context
-		VisionFrame* frame;
+		enum class Mode { Idle, Snapshot, Continuous, Partial };
+		Mode currentMode = Mode::Idle;
+		uint8_t currentFrameIdx = 0;
+		VisionFrame* activeFrames[2] = {nullptr, nullptr};
 };

@@ -47,12 +47,13 @@ class UART {
 
 		/// @brief UART peripheral configuration structure.
 		struct Config {
-			uint32_t sourceClockHz;	///< Peripheral source clock frequency in Hz
-			uint32_t baudrate;		///< Baudrate.
-			DataBits dataBits;		///< Data width mode.
-			StopBits stopBits;		///< Stop bits mode.
-			Parity parity;			///< Parity mode.
-			uint8_t hwFlowControl;	///< Enable hardware flow control (0: Disable, 1: Enable).
+			uint32_t sourceClockHz;		///< Peripheral source clock frequency in Hz
+			uint32_t baudrate;			///< Baudrate.
+			DataBits dataBits;			///< Data width mode.
+			StopBits stopBits;			///< Stop bits mode.
+			Parity parity;				///< Parity mode.
+			bool hwFlowControl = false;	///< Enable hardware flow control (0: Disable, 1: Enable).
+			bool swapTxRx = false;		///< Enable or pin swap RX <-> TX
 		};
 
 		// Delete copy constructors

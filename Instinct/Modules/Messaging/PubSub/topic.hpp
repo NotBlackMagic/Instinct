@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "logger.hpp"
 #include "system.hpp"
 
 #include "tx_api.h"
@@ -149,6 +150,15 @@ class Topic : public TopicBase {
 			// version += 1;
 			version.fetch_add(1, std::memory_order_relaxed);
 
+			// Logging hook
+			if(logEnabled == true) {
+				if(logPeriodUs == 0 || (now - lastLogTimestamp) >= logPeriodUs) {
+					lastLogTimestamp = now;
+					uint16_t fullTopicId = (static_cast<uint16_t>(instance) << 8) | topicID;
+					Logger::Instance().LogData(fullTopicId, reinterpret_cast<const uint8_t*>(&data), sizeof(T));
+				}
+			}
+
 			// Notify all subscribers
 			Subscriber<T>* curr = head;
 			while (curr != nullptr) {
@@ -162,30 +172,26 @@ class Topic : public TopicBase {
 			uint8_t retries = 0;
 			const uint8_t maxRetries = 5;
 
-			do {
+			while(retries < maxRetries) {
 				retries += 1;
-				if(retries > maxRetries) {
-					return false;
-				}
-				
-				// v1 = version;
+								
 				v1 = version.load(std::memory_order_acquire);
 				// If odd, publisher is currently writing. Try again.
 				if(v1 & 1) {
 					continue;
 				} 
 
-				// BARRIER();
 				msg = data;
-				// BARRIER();
-
 				std::atomic_thread_fence(std::memory_order_acquire);
-
-				// v2 = version;
 				v2 = version.load(std::memory_order_relaxed);
-			} while (v1 != v2);
 
-			return true;
+				// If versions match, the read was clean!
+				if (v1 == v2) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		bool Take(Subscriber<T>* sub, T& msg, ULONG ticks) {
@@ -197,8 +203,7 @@ class Topic : public TopicBase {
 			UINT status = tx_event_flags_get(&sub->eventGroup, 0x01, TX_OR_CLEAR, &flags, ticks);
 		
 			if(status == TX_SUCCESS) {
-				Peek(msg); // Reuse the read function
-				return true;
+				return Peek(msg);
 			}
 
 			return false;

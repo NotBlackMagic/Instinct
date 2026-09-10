@@ -28,15 +28,11 @@ void Console::Init(UART* uart) {
 	// RegisterFlashCommands();
 	RegisterPubSubCommands();
 
-	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Console"),
-											Console::Run,
-											0,
-											threadStack,
-											sizeof(threadStack),
-											15,
-											15,
-											TX_NO_TIME_SLICE,
-											TX_AUTO_START);
+	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Console"),
+													Console::Run, 0,
+													threadStack, sizeof(threadStack),
+													15, 15,
+													TX_NO_TIME_SLICE, TX_AUTO_START);
 }
 
 void Console::Run(ULONG input) {

@@ -2,13 +2,15 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/venc.cpp
+ * File:	SDK/MCU/venc.cpp
  */
 
 #include "venc.hpp"
+
 Venc* Venc::instance = nullptr;
 
 Venc::Venc(void* instance) {
+	(void)instance;
 	this->isInitialized = false;
 	this->irqPriority = 0x0E; // Lowest priority (safe default)
 	this->h264Encoder = nullptr;
@@ -117,6 +119,7 @@ Status Venc::EncodeFrame(const FrameBuffer& params, uint32_t& generatedBytes, Fr
 		h264EncIn.ltrf = H264ENC_REFERENCE;
 
 		// Set input buffers to structures
+		h264EncIn.lineBufWrCnt = 0;
 		// Map input frame buffers
 		h264EncIn.busLuma = reinterpret_cast<uint32_t>(params.busLuma);
 		h264EncIn.busChromaU = reinterpret_cast<uint32_t>(params.busChromaU);
@@ -127,13 +130,16 @@ Status Venc::EncodeFrame(const FrameBuffer& params, uint32_t& generatedBytes, Fr
 		h264EncIn.outBufSize = params.outBufSize;
 
 		// Fire off hardware block encode execution operation
-		H264EncRet ret = H264EncStrmEncode(this->h264Encoder, &this->h264EncIn, &this->h264EncOut, nullptr, nullptr, nullptr);
+		H264EncRet ret = H264EncStrmEncode(this->h264Encoder, &this->h264EncIn, &this->h264EncOut, Venc::SliceReadyCallback, nullptr, this);
 		switch(ret) {
 			case H264ENC_FRAME_READY:
 				if(h264EncOut.streamSize > 0) {
 					generatedBytes = h264EncOut.streamSize;
 					outFrameType = (h264EncIn.codingType == H264ENC_INTRA_FRAME) ? FrameType::Intra : FrameType::Predicted;
 					this->frameCount++;
+					if(config.EventCallback != nullptr) {
+						config.EventCallback(config.callbackContext, Event::FrameReady);
+					}
 					status = Status::Ok;
 				}
 				break;
@@ -256,7 +262,12 @@ void Venc::InterruptHandler() {
 		LL_VENC_WriteRegister(1UL, ASIC_STATUS_SLICE_READY | ASIC_IRQ_LINE);
 		
 		// Signal waiting thread via RTOS event flag
-		tx_event_flags_set(&this->event, EVT_SLICE_RDY, TX_OR);
+		if((irqStatus & (ASIC_STATUS_FRAME_READY | ASIC_STATUS_SLICE_READY)) != 0U) {
+			tx_event_flags_set(&this->event, EVT_SLICE_RDY, TX_OR);
+		}
+		if((irqStatus & (ASIC_STATUS_HW_TIMEOUT | ASIC_STATUS_ERROR)) != 0U) {
+			tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
+		}
 	}
 }
 
@@ -267,9 +278,26 @@ Status Venc::InitH264() {
 	h264Config.frameRateNum = this->config.imageParams.frameRate;
 	h264Config.width = this->config.imageParams.width;
 	h264Config.height = this->config.imageParams.height;
-	// Baseline profile??
 	h264Config.streamType = H264ENC_BYTE_STREAM;
-	h264Config.level = H264ENC_LEVEL_2_2;	//H264ENC_LEVEL_4_1
+
+	// Auto-calculate H.264 Level based on Macroblocks per frame
+	uint32_t mbWidth = (this->config.imageParams.width + 15) / 16;
+	uint32_t mbHeight = (this->config.imageParams.height + 15) / 16;
+	uint32_t mbsPerFrame = mbWidth * mbHeight;
+
+	if (mbsPerFrame <= 1620) {
+		h264Config.level = H264ENC_LEVEL_3;		// Up to SD (VGA)
+	} 
+	else if (mbsPerFrame <= 3600) {
+		h264Config.level = H264ENC_LEVEL_3_1;	// Up to HD (720p)
+	} 
+	else if (mbsPerFrame <= 8192) {
+		h264Config.level = H264ENC_LEVEL_4_1;	// Up to FHD (1080p)
+	} 
+	else {
+		h264Config.level = H264ENC_LEVEL_5_1;	// Up to QHD/4K
+	}
+
 	h264Config.refFrameAmount = 1;
 	h264Config.svctLevel = 0;
 
@@ -389,9 +417,41 @@ Status Venc::SetCodingControl() {
 	}
 
 	codingCtrl.sliceSize = this->config.codingControl.sliceSize;
-	codingCtrl.enableCabac = this->config.codingControl.enableCabac ? 1 : 0;
-	codingCtrl.transform8x8Mode = this->config.codingControl.enableTransform8x8 ? 1 : 0;
 	codingCtrl.disableDeblockingFilter = this->config.codingControl.disableDeblockingFilter ? 1 : 0;
+
+	// Map Profile to Hardware Features
+	switch(this->config.codingControl.profile) {
+		case H264Profile::Baseline:
+			codingCtrl.enableCabac = 0;
+			codingCtrl.transform8x8Mode = 0;
+			break;
+		case H264Profile::Main:
+			codingCtrl.enableCabac = 1;
+			codingCtrl.transform8x8Mode = 0;
+			break;
+		case H264Profile::High:
+		default:
+			codingCtrl.enableCabac = 1;
+			codingCtrl.transform8x8Mode = 1;
+			break;
+	}	
+
+	// Frame streaming mode configuration (hardware synchronization)
+	if(this->config.enableStreamingMode == true) {
+		codingCtrl.inputLineBufEn = 1;			// Enable input image control signals
+		codingCtrl.inputLineBufLoopBackEn = 1;	// Input buffer loopback mode enable
+		codingCtrl.inputLineBufHwModeEn = 1;	// Enable hardware handshake (venc_rdy)
+
+		uint32_t totalLines = 1U << static_cast<uint32_t>(this->config.lineWrap);
+		uint32_t triggerLines = 1U << static_cast<uint32_t>(this->config.lineTrigger);
+
+		// Number of handshake triggers per circular buffer cycle: totalLines / triggerLines
+		codingCtrl.inputLineBufDepth = totalLines / triggerLines;
+	}
+	else {
+		codingCtrl.inputLineBufEn = 0;
+		codingCtrl.inputLineBufHwModeEn = 0;
+	}
 
 	if(H264EncSetCodingCtrl(this->h264Encoder, &codingCtrl) != H264ENC_OK) {
 		return Status::Error;
@@ -407,11 +467,23 @@ Status Venc::SetRateControl() {
 
 	// Apply your dynamic configuration
 	rateCtrl.pictureRc = this->config.rateControl.enablePictureRc ? 1 : 0;
-	rateCtrl.bitPerSecond = this->config.rateControl.bitPerSecond;
+
+	// Auto-calculate Bitrate if left at default 0
+	if(this->config.rateControl.bitPerSecond == 0) {
+		uint32_t pixels = this->config.imageParams.width * this->config.imageParams.height;
+		// Target ~0.15 bits per pixel per frame
+		uint32_t targetBps = static_cast<uint32_t>(pixels * this->config.imageParams.frameRate * 0.15f);
+		rateCtrl.bitPerSecond = targetBps;
+	}
+	else {
+		rateCtrl.bitPerSecond = this->config.rateControl.bitPerSecond;
+	}
+
 	rateCtrl.qpMin = this->config.rateControl.qpMin;
 	rateCtrl.qpMax = this->config.rateControl.qpMax;
 	rateCtrl.qpHdr = this->config.rateControl.qpHdr;
 	rateCtrl.gopLen = this->config.rateControl.gopLen;
+	
 	// Set standard/safe H.264 Rate Control defaults (matching STM's tested config)
 	rateCtrl.pictureSkip = 0;			// Don't let the encoder drop frames randomly
 	rateCtrl.mbRc = 1;					// Enable Macroblock-level rate control for better quality
@@ -427,6 +499,26 @@ Status Venc::SetRateControl() {
 		return Status::Error;
 	}
 	return Status::Ok;
+}
+
+void Venc::SliceReadyCallback(H264EncSliceReady* sliceReady) {
+	if(sliceReady != nullptr && sliceReady->pAppData != nullptr) {
+		Venc* venc = static_cast<Venc*>(sliceReady->pAppData);
+
+		// Calculate the size and byte offset for the newly finished slice(s)
+		uint32_t offset = 0;
+		for (uint32_t i = 0; i < sliceReady->slicesReadyPrev; i++) {
+			offset += sliceReady->sliceSizes[i];
+		}
+		
+		// Save it to the instance so your app can read it right after the event fires
+		venc->lastSliceOffset = offset;
+		venc->lastSliceSize = sliceReady->sliceSizes[sliceReady->slicesReady - 1];
+
+		if(venc->config.EventCallback != nullptr) {
+			venc->config.EventCallback(venc->config.callbackContext, Event::SliceReady);
+		}
+	}
 }
 
 void Venc::ConfigureRIF(void) {
@@ -526,9 +618,9 @@ int32_t Venc::WaitHardwareReady(uint32_t* slicesReady) {
 	if(status != TX_SUCCESS) {
 		return EWL_HW_WAIT_TIMEOUT;
 	}
-	if((events & EVT_ERR) == EVT_ERR) {
-		return EWL_HW_WAIT_ERROR;
-	}
+	// if((events & EVT_ERR) == EVT_ERR) {
+	// 	return EWL_HW_WAIT_ERROR;
+	// }
 
 	if(slicesReady != nullptr) {
 		*slicesReady = (LL_VENC_ReadRegister(21UL) >> 16) & 0xFFUL;

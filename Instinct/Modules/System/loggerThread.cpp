@@ -10,18 +10,14 @@
 TX_THREAD LoggerThread::threadPtr;
 uint8_t LoggerThread::threadStack[4096];
 
-__attribute__((aligned(32))) uint8_t LoggerThread::writeBuffer[512];
+__attribute__((aligned(32))) uint8_t LoggerThread::writeBuffer[LoggerThread::writeBufferSize];
 
 void LoggerThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Logger"),
-										LoggerThread::Run,
-										0,
-										threadStack,
-										sizeof(threadStack),
-										16,
-										16,
-										TX_NO_TIME_SLICE,
-										TX_AUTO_START);
+										LoggerThread::Run, 0,
+										threadStack, sizeof(threadStack),
+										16, 16,
+										TX_NO_TIME_SLICE, TX_AUTO_START);
 
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Logger Thread Create Failed.");
@@ -52,19 +48,29 @@ void LoggerThread::Run(ULONG input) {
 
 		// Open or Create the log file
 		if(fileIsOpen == false) {
-			status = fx_file_open(StorageThread::GetMedia(), &logFile, const_cast<char*>("syslog.txt"), FX_OPEN_FOR_WRITE);
+			status = fx_file_open(StorageThread::GetMedia(), &logFile, const_cast<char*>("flightlog.bin"), FX_OPEN_FOR_WRITE);
 			
 			if(status == FX_NOT_FOUND) {
-				fx_file_create(StorageThread::GetMedia(), const_cast<char*>("syslog.txt"));
-				status = fx_file_open(StorageThread::GetMedia(), &logFile, const_cast<char*>("syslog.txt"), FX_OPEN_FOR_WRITE);
+				fx_file_create(StorageThread::GetMedia(), const_cast<char*>("flightlog.bin"));
+				status = fx_file_open(StorageThread::GetMedia(), &logFile, const_cast<char*>("flightlog.bin"), FX_OPEN_FOR_WRITE);
+
+				if(status == FX_SUCCESS) {
+					// PRE-ALLOCATE 32MB to prevent FAT fragmentation and write stalls during flight
+					fx_file_allocate(&logFile, 33554432);
+					fx_file_seek(&logFile, 0); 
+				}
 			}
 
 			if(status == FX_SUCCESS) {
-				fx_file_seek(&logFile, logFile.fx_file_current_file_size);
+				// If appending to an existing file, seek to the end
+				if(logFile.fx_file_current_file_size > 0) {
+					fx_file_seek(&logFile, logFile.fx_file_current_file_size);
+				}
 				fileIsOpen = true;
+				LOG_INFO("SD logging binary flight log opened.");
 			} 
 			else {
-				LOG_INFO("SD Logging open/create log file Failed.");
+				LOG_INFO("SD logging open/create log file failed.");
 				tx_thread_sleep(100);
 				continue;
 			}
@@ -72,9 +78,9 @@ void LoggerThread::Run(ULONG input) {
 
 		// Read from the Logger RAM buffer into the temporary chunk buffer
 		bytesToSync = Logger::Instance().ReadSDBuffer(writeBuffer, sizeof(writeBuffer));
-		
 		if(bytesToSync > 0) {
 			status = fx_file_write(&logFile, writeBuffer, bytesToSync);
+
 			if(status == FX_SUCCESS) {
 				// Periodic flush: Flush every 2 seconds
 				deltaTime = Time::GetMs() - timestamp;
@@ -90,7 +96,7 @@ void LoggerThread::Run(ULONG input) {
 			}
 		} 
 		else {
-			tx_thread_sleep(50);
+			tx_thread_sleep(10);
 		}
 	}
 }

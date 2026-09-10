@@ -142,14 +142,23 @@ PWM pwm2Ch2(timer8, PWM::Channel::Ch2);
 PWM pwm2Ch3(timer8, PWM::Channel::Ch3);
 PWM pwm2Ch4(timer8, PWM::Channel::Ch4);
 
-UART uart4(UART4);
-extern "C" void UART4_IRQHandler(void) { uart4.InterruptHandler(); }
+UART debugUART(UART4);
+extern "C" void UART4_IRQHandler(void) { debugUART.InterruptHandler(); }
+
+UART gps1(UART8);
+extern "C" void UART8_IRQHandler(void) { gps1.InterruptHandler(); }
+
+UART gps2(USART10);
+extern "C" void USART10_IRQHandler(void) { gps2.InterruptHandler(); }
 
 UART ldrUART(USART6);
 extern "C" void USART6_IRQHandler(void) { ldrUART.InterruptHandler(); }
 
 UART hdrUART(UART7);
 extern "C" void UART7_IRQHandler(void) { hdrUART.InterruptHandler(); }
+
+UART telem2(USART3);
+extern "C" void USART3_IRQHandler(void) { telem2.InterruptHandler(); } 
 
 USB usbHardware(USB1_OTG_HS);
 extern "C" void USB1_OTG_HS_IRQHandler(void) { usbHardware.InterruptHandler(); }
@@ -435,11 +444,12 @@ void HardwareInit() {
 	BoardSPI4Init();
 	// BoardSPI5Init();
 	// UART peripherals
-	// BoardUART3Init();
+	BoardUART3Init();
 	BoardUART4Init();
 	BoardUART6Init();
 	BoardUART7Init();
-	// BoardUART8Init();
+	BoardUART8Init();
+	BoardUART10Init();
 	// XPSI/HyperBus peripherals
 	BoardXSPI1Init();
 	BoardXSPI2Init();
@@ -480,9 +490,12 @@ void HardwareInit() {
 	LOG_INFO("GPIO Init OK.");
 
 	// Initialize UARTs
-	uart4.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 115200, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
+	debugUART.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 115200, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
+	gps1.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 115200, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
+	gps2.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 115200, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
 	ldrUART.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 115200, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
 	hdrUART.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 115200, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
+	telem2.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 57600, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false, .swapTxRx = true});
 	LOG_INFO("UARTs Init OK.");
 
 	// Initialize I2Cs
@@ -510,16 +523,47 @@ void HardwareInit() {
 
 	// Initialize PWMs
 	pwm1Ch1.Init({.polarity = PWM::Polarity::High});
+	pwm1Ch1.Start();
 	pwm1Ch2.Init({.polarity = PWM::Polarity::High});
+	pwm1Ch2.Start();
 	pwm1Ch3.Init({.polarity = PWM::Polarity::High});
+	pwm1Ch3.Start();
 	pwm1Ch4.Init({.polarity = PWM::Polarity::High});
+	pwm1Ch4.Start();
 	pwm2Ch1.Init({.polarity = PWM::Polarity::High});
+	pwm2Ch1.Start();
 	pwm2Ch2.Init({.polarity = PWM::Polarity::High});
+	pwm2Ch2.Start();
 	pwm2Ch3.Init({.polarity = PWM::Polarity::High});
+	pwm2Ch3.Start();
 	pwm2Ch4.Init({.polarity = PWM::Polarity::High});
+	pwm2Ch4.Start();
 	LOG_INFO("PWMs Init OK.");
 
 	// Configure XSPI clock (needs the System stuff to be initialized!!)
-	extRAMConfig.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC3);	// From IC3
+	extRAMConfig.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC3);		// From IC3
 	extFlashConfig.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC3);	// From IC3
+
+	// Configure and initialize external PSRAM (and flash when NOT XIP)
+	if(externalPSRAM.Init(extRAMConfig) == Status::Ok) {
+		// RAM Memory Mapped Test
+		externalPSRAM.EnterMemoryMappedMode();
+
+		if(MemoryTest::RunQuickTest() == Status::Ok) {
+			LOG_INFO("HyperRAM Init & Test OK: %s", extRAMConfig.deviceName);
+		}
+		else {
+			LOG_ERR("HyperRAM Test Pattern Test Failed!");
+		}
+	}
+	else {
+		LOG_ERR("HyperRAM Init Failed!");
+	}
+
+	// if(externalFlash.Init(extFlashConfig) == Status::Ok) {
+	// 	LOG_INFO("HyperFlash Init OK: %s.", extFlashConfig.deviceName);
+	// }
+	// else {
+	// 	LOG_ERR("HyperFlash Init Failed!");
+	// }
 }

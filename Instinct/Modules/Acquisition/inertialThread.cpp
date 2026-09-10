@@ -64,8 +64,8 @@ void InertialThread::Run(ULONG input) {
 	LSM6DSO::Config lsmCfg = {
 		.accelScale = LSM6DSO::AccelScale::G16,
 		.gyroScale = LSM6DSO::GyroScale::DPS2000,
-		.accelOdr = LSM6DSO::SampleRate::Hz1666,
-		.gyroOdr = LSM6DSO::SampleRate::Hz1666
+		.accelOdr = LSM6DSO::SampleRate::Hz833,
+		.gyroOdr = LSM6DSO::SampleRate::Hz833
 	};
 
 	if(onboardIMU.Init(lsmCfg) == Status::Ok) {
@@ -86,8 +86,8 @@ void InertialThread::Run(ULONG input) {
 	ICM45686::Config icmCfg = {
 		.accelScale = ICM45686::AccelScale::G16,
 		.gyroScale = ICM45686::GyroScale::DPS2000,
-		.accelOdr = ICM45686::OutputDataRate::Hz1600,
-		.gyroOdr = ICM45686::OutputDataRate::Hz1600
+		.accelOdr = ICM45686::OutputDataRate::Hz800,
+		.gyroOdr = ICM45686::OutputDataRate::Hz800
 	};
 
 	if(ext2IMU.Init(icmCfg) == Status::Ok) {

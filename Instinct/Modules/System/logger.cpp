@@ -49,6 +49,51 @@ void Logger::RegisterConsole(UART* uart) {
 	consolePort = uart;
 }
 
+void Logger::LogData(uint16_t topicId, const uint8_t* payload, uint8_t len) {
+	if(len == 0 || sdMinLevel == Logger::LogLevel::Off) {
+		return;
+	}
+
+	// Lock Logger
+	bool useLock = false;
+	if(initialized == true) {
+		if(tx_thread_identify() == nullptr) {
+			return; // Prevent ISR corruption
+		}
+		useLock = true;
+	}
+	if(useLock == true) {
+		if(tx_mutex_get(&mutex, TX_NO_WAIT) != TX_SUCCESS) {
+			return; 
+		}
+	}
+
+	uint16_t syncWord = 0x55AA;
+	uint16_t packetSize = 5 + len; // 2(sync) + 2(topic) + 1(len) + payload
+
+	if((sdCount + packetSize) <= sdBufferSize) {
+		auto writeByte = [&](uint8_t b) {
+			sdBuffer[sdHead] = b;
+			sdHead = (sdHead + 1) % sdBufferSize;
+		};
+
+		writeByte(syncWord & 0xFF);
+		writeByte(syncWord >> 8);
+		writeByte(topicId & 0xFF);
+		writeByte(topicId >> 8);
+		writeByte(len);
+
+		for(uint8_t i = 0; i < len; i++) {
+			writeByte(payload[i]);
+		}
+		sdCount += packetSize;
+	}
+
+	if(useLock == true) {
+		tx_mutex_put(&mutex);
+	}
+}
+
 void Logger::Log(Logger::LogLevel level, const char* file, int line, const char* fmt, ...) {
 	// Check used/set log levels
 	if(level < consoleMinLevel && level < sdMinLevel) {
@@ -56,10 +101,16 @@ void Logger::Log(Logger::LogLevel level, const char* file, int line, const char*
 	}
 
 	// Lock Logger
-	bool useLock = initialized && (tx_thread_identify() != nullptr);
+	bool useLock = false;
+	if(initialized == true) {
+		if(tx_thread_identify() == nullptr) {
+			return; // Prevent ISR corruption
+		}
+		useLock = true;
+	}
 	if(useLock == true) {
-		if(tx_mutex_get(&mutex, TX_WAIT_FOREVER) != TX_SUCCESS) {
-			return;
+		if(tx_mutex_get(&mutex, TX_NO_WAIT) != TX_SUCCESS) {
+			return; 
 		}
 	}
 
@@ -166,17 +217,46 @@ void Logger::Log(Logger::LogLevel level, const char* file, int line, const char*
 	}
 
 	if(level >= sdMinLevel) {
-		// Copy the formatted string into the circular buffer
-		for(uint16_t i = colorLen; i < index; i++) {
-			if(sdCount < sdBufferSize) {
-				sdBuffer[sdHead] = buffer[i];
+		// // Copy the formatted string into the circular buffer
+		// for(uint16_t i = colorLen; i < index; i++) {
+		// 	if(sdCount < sdBufferSize) {
+		// 		sdBuffer[sdHead] = buffer[i];
+		// 		sdHead = (sdHead + 1) % sdBufferSize;
+		// 		sdCount++;
+		// 	}
+		// 	else {
+		// 		// Buffer overflow!
+		// 		break;
+		// 	}
+		// }
+
+		// Pack ASCII text into the binary stream using Topic ID 0x0000
+		uint16_t syncWord = 0x55AA;
+		uint16_t topicId = 0x0000;
+		uint8_t payloadLen = (index - colorLen > 255) ? 255 : (index - colorLen);
+		uint16_t packetSize = 5 + payloadLen;
+
+		if((sdCount + packetSize) <= sdBufferSize) {
+			sdBuffer[sdHead] = (syncWord & 0xFF);
+			sdHead = (sdHead + 1) % sdBufferSize;
+			
+			sdBuffer[sdHead] = (syncWord >> 8);
+			sdHead = (sdHead + 1) % sdBufferSize;
+
+			sdBuffer[sdHead] = (topicId & 0xFF);
+			sdHead = (sdHead + 1) % sdBufferSize;
+
+			sdBuffer[sdHead] = (topicId >> 8);
+			sdHead = (sdHead + 1) % sdBufferSize;
+
+			sdBuffer[sdHead] = (payloadLen);
+			sdHead = (sdHead + 1) % sdBufferSize;
+
+			for(uint16_t i = colorLen; i < colorLen + payloadLen; i++) {
+				sdBuffer[sdHead] = (buffer[i]);
 				sdHead = (sdHead + 1) % sdBufferSize;
-				sdCount++;
 			}
-			else {
-				// Buffer overflow!
-				break;
-			}
+			sdCount += packetSize;
 		}
 	}
 
@@ -187,34 +267,51 @@ void Logger::Log(Logger::LogLevel level, const char* file, int line, const char*
 
 uint16_t Logger::ReadSDBuffer(uint8_t* outBuffer, uint16_t maxLen) {
 	// Lock Logger
-	bool useLock = initialized && (tx_thread_identify() != nullptr);
+	bool useLock = false;
+	if(initialized == true) {
+		if(tx_thread_identify() == nullptr) {
+			return 0; // Prevent ISR corruption
+		}
+		useLock = true;
+	}
 	if(useLock == true) {
-		if(tx_mutex_get(&mutex, TX_WAIT_FOREVER) != TX_SUCCESS) {
+		if(tx_mutex_get(&mutex, TX_NO_WAIT) != TX_SUCCESS) {
 			return 0;
 		}
 	}
 
 	uint16_t bytesRead = 0;
-	while (sdCount > 0 && bytesRead < maxLen) {
+
+	// For high speed SDMMC, force reads in multiples of 512 bytes.
+	uint16_t available = (sdCount > maxLen) ? maxLen : sdCount;
+	available = (available / 512) * 512;
+
+	while(bytesRead < available) {
 		outBuffer[bytesRead] = sdBuffer[sdTail];
 		sdTail = (sdTail + 1) % sdBufferSize;
-		sdCount = sdCount - 1;
-		bytesRead = bytesRead + 1;
+		sdCount--;
+		bytesRead++;
 	}
 
 	if(useLock == true) {
 		tx_mutex_put(&mutex);
 	}
-	
+
 	return bytesRead;
 }
 
 void Logger::Printf(const char* fmt, ...) {
 	// Lock Logger
-	bool useLock = initialized && (tx_thread_identify() != nullptr);
+	bool useLock = false;
+	if(initialized == true) {
+		if(tx_thread_identify() == nullptr) {
+			return; // Prevent ISR corruption
+		}
+		useLock = true;
+	}
 	if(useLock == true) {
-		if(tx_mutex_get(&mutex, TX_WAIT_FOREVER) != TX_SUCCESS) {
-			return;
+		if(tx_mutex_get(&mutex, TX_NO_WAIT) != TX_SUCCESS) {
+			return; 
 		}
 	}
 
@@ -248,10 +345,16 @@ void Logger::Write(const char* data, uint16_t len) {
 	}
 
 	// Lock Logger
-	bool useLock = initialized && (tx_thread_identify() != nullptr);
+	bool useLock = false;
+	if(initialized == true) {
+		if(tx_thread_identify() == nullptr) {
+			return; // Prevent ISR corruption
+		}
+		useLock = true;
+	}
 	if(useLock == true) {
-		if(tx_mutex_get(&mutex, TX_WAIT_FOREVER) != TX_SUCCESS) {
-			return;
+		if(tx_mutex_get(&mutex, TX_NO_WAIT) != TX_SUCCESS) {
+			return; 
 		}
 	}
 

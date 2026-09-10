@@ -41,12 +41,12 @@ void RadioThread::Run(ULONG input) {
 	// RadioThread::Config threadConfig = SystemSettings::GetRadioConfig();
 
 	// Testing Hardcode
-    RadioThread::Config threadConfig = {
-        .protocol = RCReceiver::Protocol::IBus,
-        .rssiChannelIndex = 13,
-        .channelMap = ChannelMap::AETR, // FlySky default
-        .deadband = 4                   // 4us deadband for jitter rejection
-    };
+	RadioThread::Config threadConfig = {
+		.protocol = RCReceiver::Protocol::IBus,
+		.rssiChannelIndex = 13,
+		.channelMap = ChannelMap::AETR,	// FlySky default
+		.deadband = 4					// 4us deadband for jitter rejection
+	};
 
 	// Initialize with a default protocol
 	RCReceiver::Config config = {
@@ -84,7 +84,7 @@ void RadioThread::Run(ULONG input) {
 
 				// Failsafe override
 				if(data.linkState != RCReceiver::LinkState::Connected) {
-					//ZERO out the control vectors
+					// Zero out the control vectors
 					controlMsg.roll = 0.0f;
 					controlMsg.pitch = 0.0f;
 					controlMsg.yaw = 0.0f;
@@ -109,7 +109,7 @@ void RadioThread::Run(ULONG input) {
 						// Flying vehicle mappings
 						// AETR Default
 						uint8_t idxRoll = 0, idxPitch = 1, idxYaw = 3, idxThrottle = 2;
-						if (threadConfig.channelMap == ChannelMap::TAER) {
+						if(threadConfig.channelMap == ChannelMap::TAER) {
 							idxThrottle = 0; idxRoll = 1; idxPitch = 2; idxYaw = 3;
 						}
 						

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/Vision/vencEncoder.cpp
+ * File:	Instinct/Modules/Vision/vencEncoder.cpp
  */
 
 #include "vencEncoder.hpp"
@@ -14,6 +14,8 @@ Status VENCEncoder::Init(Venc::Config& config) {
 
 	// Cache the active format for payload tagging
 	this->codec = (config.codec == Venc::Codec::H264) ? VisionCodec::H264 : VisionCodec::Jpeg;
+	this->streamingMode = config.enableStreamingMode;
+	this->lineBufferLines = 1U << static_cast<uint32_t>(config.lineWrap);
 
 	// Configure VENC Event bindings
 	config.EventCallback = VENCEncoder::EventCallback;
@@ -53,13 +55,32 @@ Status VENCEncoder::EncodeAsync(const VisionFrame& inputFrame, VisionFrame& outp
 	tx_event_flags_set(&this->syncEvent, 0, TX_AND); // Clear events
 
 	// Handle cache coherency
-	System::CleanCache((uint32_t*)inputFrame.startAddress, inputFrame.payloadSize);
+	if(this->streamingMode == false) {
+		System::CleanCache((uint32_t*)inputFrame.startAddress, inputFrame.payloadSize);
+	}
 
 	// Setup input/output buffering. VENC features built-in AXI bus mastering (internal DMA)
 	Venc::FrameBuffer params = {};
 	params.busLuma = (const uint32_t*)inputFrame.startAddress;
-	params.busChromaU = params.busLuma; 
-	params.busChromaV = params.busLuma;
+	if(inputFrame.format == PixelFormat::YUV420_NV12) {
+		if(this->streamingMode) {
+			// Line buffer mode: chroma starts directly after the wrapped luma lines (e.g. 64 lines)
+			uint32_t lumaStrideBytes = this->inFrameContext->width * this->lineBufferLines;
+			params.busChromaU = (const uint32_t*)((uintptr_t)params.busLuma + lumaStrideBytes);
+			params.busChromaV = params.busChromaU;
+		}
+		else {
+			// Full frame mode: chroma starts after the full luma plane
+			uint32_t lumaStrideBytes = this->inFrameContext->width * this->inFrameContext->height;
+			params.busChromaU = (const uint32_t*)((uintptr_t)params.busLuma + lumaStrideBytes);
+			params.busChromaV = params.busChromaU;
+		}
+	}
+	else {
+		// YUV422 interleaved (YUYV) or RGB formats
+		params.busChromaU = params.busLuma;
+		params.busChromaV = params.busLuma;
+	}
 	params.outBuffer = (uint32_t*)outputFrame.startAddress;
 	params.outBufSize = outputFrame.allocatedSize;
 	params.frameType = requestKeyframe ? Venc::FrameType::Intra : Venc::FrameType::Predicted;
@@ -117,7 +138,7 @@ Status VENCEncoder::EncodeStop(VisionFrame& outputFrame) {
 	if(status == Status::Ok) {
 		outputFrame.payloadSize = generatedBytes;
 		outputFrame.codec = this->codec;
-		uint32_t alignedSize = (this->outFrameContext->payloadSize + 31U) & 0xFFFFFFE0;
+		uint32_t alignedSize = (generatedBytes + 31U) & 0xFFFFFFE0;
 		System::InvalidateCache((uint32_t*)outputFrame.startAddress, alignedSize);
 	}
 
@@ -134,6 +155,9 @@ Status VENCEncoder::EncodeAbort() {
 void VENCEncoder::EventCallback(void* ctx, Venc::Event evt) {
 	VENCEncoder* encoder = static_cast<VENCEncoder*>(ctx);
 	if(evt == Venc::Event::FrameReady) {
+		tx_event_flags_set(&encoder->syncEvent, EVT_DONE, TX_OR);
+	}
+	else if(evt == Venc::Event::SliceReady) {
 		tx_event_flags_set(&encoder->syncEvent, EVT_DONE, TX_OR);
 	}
 	else {

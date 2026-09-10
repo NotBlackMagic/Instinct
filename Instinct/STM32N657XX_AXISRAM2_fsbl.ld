@@ -27,8 +27,16 @@ MEMORY
 {
 	ITCM	(rx)	: ORIGIN = 0x10000000,	LENGTH = 128K
 	DTCM	(rw)	: ORIGIN = 0x30000000,	LENGTH = 128K
-	ROM		(xrw)	: ORIGIN = 0x34180400,	LENGTH = 328K	/* ORIGIN = 0x34180400,	LENGTH = 255K */
-	RAM		(xrw)	: ORIGIN = 0x341D2400,	LENGTH = 183K	/* ORIGIN = 0x341C0000,	LENGTH = 256K */
+	/*
+	ROM		(xrw)	: ORIGIN = 0x34180400,	LENGTH = 255K
+	RAM		(xrw)	: ORIGIN = 0x341C0000,	LENGTH = 256K
+	*/
+	/*
+	ROM     (xrw)   : ORIGIN = 0x34180400,  LENGTH = 280K
+	RAM     (xrw)   : ORIGIN = 0x341C6400,  LENGTH = 231K
+	*/
+	ROM     (xrw)   : ORIGIN = 0x34180400,  LENGTH = 350K
+    RAM     (xrw)   : ORIGIN = 0x341D7C00,  LENGTH = 161K
 }
 
 /* Memories definition (Run in XIP mode from HyperFlash/XSPI2) */
@@ -38,9 +46,15 @@ MEMORY
 	RAM		(xrw)	: ORIGIN = 0x34100000,	LENGTH = 1024K
 } */
 
+_rom_capacity = LENGTH(ROM);
+_ram_capacity = LENGTH(RAM);
+
 /* Sections */
 SECTIONS
 {
+	/* Mark the absolute start of ROM */
+    _srom = ORIGIN(ROM);
+
 	/* The startup code into "RAM" Ram type memory */
 	.isr_vector :
 	{
@@ -48,6 +62,18 @@ SECTIONS
 		KEEP(*(.isr_vector)) /* Startup code */
 		. = ALIGN(4);
 	} >ROM
+
+	/* Critical code to execute from ITCM */
+	_siitcm = LOADADDR(.itcm_text);
+	.itcm_text :
+	{
+		. = ALIGN(4);
+		_sitcm = .;
+		*(.itcm_text)
+		*(.itcm_text*)
+		. = ALIGN(4);
+		_eitcm = .;
+	} >ITCM AT> ROM
 
 	/* The program code and other data into "RAM" Ram type memory */
 	.text :
@@ -139,6 +165,9 @@ SECTIONS
 
 	} >RAM AT> ROM
 
+	/* The absolute end of the ROM payload is the Load Address (LMA) of .data plus its size */
+	_erom = _sidata + (_edata - _sdata);
+
 	.noncacheable :
 	{
 		. = ALIGN(8);
@@ -155,6 +184,7 @@ SECTIONS
 		*(.gnu.sgstubs*)	/* Secure Gateway stubs */
 		. = ALIGN(4);
 	} >ROM
+
 	/* Uninitialized data section into "RAM" Ram type memory */
 	. = ALIGN(4);
 	.bss :
@@ -170,6 +200,17 @@ SECTIONS
 		_ebss = .;			/* define a global symbol at bss end */
 		__bss_end__ = _ebss;
 	} >RAM
+
+	/* Fast data stored in DTCM */
+	.dtcm_bss (NOLOAD) :
+	{
+		. = ALIGN(4);
+		_sdtcm_bss = .;
+		*(.dtcm_bss)
+		*(.dtcm_bss*)
+		. = ALIGN(4);
+		_edtcm_bss = .;
+	} >DTCM
 
 	/* User_heap_stack section, used to check that there is enough "RAM" Ram type memory left */
 	._user_heap_stack :

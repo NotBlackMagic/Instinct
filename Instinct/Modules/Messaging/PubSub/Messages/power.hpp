@@ -11,6 +11,9 @@
 
 #include "common.hpp"
 
+// Enforce byte-alignment
+#pragma pack(push, 1)
+
 struct PowerMsg {
 	Timestamp timestamp;	// Microseconds
 	float voltage;			// Volts (V)
@@ -24,3 +27,5 @@ struct BatteryMsg {
 	uint8_t stateOfCharge;	// Percentage (0-100%)
 	bool isLowVoltage;		// Flag for failsafe triggers
 };
+
+#pragma pack(pop) // Restore default compiler alignment

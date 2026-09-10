@@ -36,5 +36,15 @@ enum class TopicID : uint8_t {
 	ManualControl = 41,
 
 	// Estimation / State
-	State = 50
+	State = 50,
+	VehicleStatus = 51,
+
+	// Control Commands
+	ControlSetpoint = 60,
+
+	// Actuators / Hardware Outputs
+	Actuator = 70,
+
+	// Payloads
+	Gimbal = 80
 };

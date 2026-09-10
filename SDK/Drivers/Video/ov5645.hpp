@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/Drivers/Video/ov5645.hpp
- * Author:  NotBlackMagic
- * Brief:   OV5645 Camera driver class for STM32N6.
+ * File:	SDK/Drivers/Video/ov5645.hpp
+ * Author:	NotBlackMagic
+ * Brief:	OV5645 Camera driver class for STM32N6.
  */
 
 #pragma once
@@ -28,7 +28,7 @@ class OV5645 {
 		enum class Register : uint16_t {
 			SYSTEM_CTRL0 = 0x3008,		// 
 			CHIP_ID_HIGH = 0x300A,		// Product ID Number MSB (Read only = 0x56)
-			CHIP_ID_LOW  = 0x300B,		// Product ID Number LSB (Read only = 0x45)
+			CHIP_ID_LOW = 0x300B,		// Product ID Number LSB (Read only = 0x45)
 			IO_MIPI_CTRL00 = 0x300E,	// IO MIPI Control 00
 			PAD_OUT_VAL00 = 0x3019,		// Pad Output Value
 			FORMAT_CTRL00 = 0x4300,		// Format Control 00
@@ -103,8 +103,8 @@ class OV5645 {
 		Status ReadID(uint16_t *id);
 
 		/// @brief Sets the desired frame resolution, approximated to closed (lower) valid resolution.
-		/// @param width  Target frame width.
-		/// @param height Target frame height.
+		/// @param width	Target frame width.
+		/// @param height	Target frame height.
 		/// @return Status::Ok if set succeeded, or Status::Error if failed.
 		Status SetResolution(uint16_t width, uint16_t height);
 
@@ -123,8 +123,8 @@ class OV5645 {
 		SensorInfo GetInfo() { return sensorInfo; }
 
 		/// @brief Gets the current MIPI bitrate in bits per second.
-        /// @return The MIPI bitrate in bits per second (per lane).
-        uint32_t GetMIPIBitrate() const { return mipiBitrate; }
+		/// @return The MIPI bitrate in bits per second (per lane).
+		uint32_t GetMIPIBitrate() const { return mipiBitrate; }
 
 		/// @brief Sets the desired brightness level.
 		/// @param value Brightness level to use, signed value (default is 0x00).
@@ -201,7 +201,7 @@ class OV5645 {
 
 		/// @brief Implemented frame resolutions.
 		enum class InternalResolution {
-			QSXGA, FHD, SXGA, VGA, UNKNOWN
+			QSXGA, QHD, FHD, SXGA, HD, VGA, UNKNOWN
 		};
 
 		InternalResolution FindNearestResolution(uint16_t w, uint16_t h);

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/dcmipp.cpp
+ * File:	SDK/MCU/dcmipp.cpp
  */
 
 #include "dcmipp.hpp"
@@ -58,17 +58,25 @@ Status Dcmipp::Init() {
 
 	// IP-PLUG Client 2 (Pipe 1, Y/RGB component) Configuration
 	// Max Outstanding Transactions (e.g., 4) and Burst size (default: 4, 128 bytes/burst)
-	WRITE_REG(this->instance->IPC1R1, (0x04 << DCMIPP_IPC1R1_OTR_Pos) | (0x04 << DCMIPP_IPC1R1_TRAFFIC_Pos));
+	WRITE_REG(this->instance->IPC2R1, (0x04 << DCMIPP_IPC1R1_OTR_Pos) | (0x04 << DCMIPP_IPC1R1_TRAFFIC_Pos));
 	// Set ratio of total bandwith, arbitration between clients
-	WRITE_REG(this->instance->IPC1R2, (0U << DCMIPP_IPC1R2_WLRU_Pos));
+	WRITE_REG(this->instance->IPC2R2, (0U << DCMIPP_IPC1R2_WLRU_Pos));
 	// Set FIFO End/Start address (64-bit word address)
-	WRITE_REG(this->instance->IPC1R3, (fifoAddStart << DCMIPP_IPC1R3_DPREGSTART_Pos) | (fifoAddrEnd << DCMIPP_IPC1R3_DPREGEND_Pos));
+	WRITE_REG(this->instance->IPC2R3, (fifoAddStart << DCMIPP_IPC1R3_DPREGSTART_Pos) | (fifoAddrEnd << DCMIPP_IPC1R3_DPREGEND_Pos));
 	fifoAddStart = fifoAddrEnd + 1;
 	fifoAddrEnd += fifoSize;
 
 	// IP-PLUG Client 3 (Pipe 1, U component) Configuration
+	WRITE_REG(this->instance->IPC3R1, (0x04 << DCMIPP_IPC1R1_OTR_Pos) | (0x04 << DCMIPP_IPC1R1_TRAFFIC_Pos));
+	WRITE_REG(this->instance->IPC3R2, (0U << DCMIPP_IPC1R2_WLRU_Pos));
+	WRITE_REG(this->instance->IPC3R3, (fifoAddStart << DCMIPP_IPC1R3_DPREGSTART_Pos) | (fifoAddrEnd << DCMIPP_IPC1R3_DPREGEND_Pos));
+	fifoAddStart = fifoAddrEnd + 1;
+	fifoAddrEnd += fifoSize;
 
 	// IP-PLUG Client 4 (Pipe 1, V component) Configuration
+	WRITE_REG(this->instance->IPC4R1, (0x04 << DCMIPP_IPC1R1_OTR_Pos) | (0x04 << DCMIPP_IPC1R1_TRAFFIC_Pos));
+	WRITE_REG(this->instance->IPC4R2, (0U << DCMIPP_IPC1R2_WLRU_Pos));
+	WRITE_REG(this->instance->IPC4R3, (fifoAddStart << DCMIPP_IPC1R3_DPREGSTART_Pos) | (fifoAddrEnd << DCMIPP_IPC1R3_DPREGEND_Pos));
 
 	// IP-PLUG Client 5 (Pipe 2) Configuration
 
@@ -209,6 +217,50 @@ Status Dcmipp::ConfigurePipe(PipeID pipe, const PipeConfig &config) {
 	return Status::Ok;
 }
 
+Status Dcmipp::EnableLineWrapping(PipeID pipe, LineCount addressWrap, LineCount lineMult) {
+	if(pipe == PipeID::Main) {
+		// Set Line Mult Address Wrapping Modulo (LMAWM) and Line Multiplier (LINEMULT)
+		
+		// #define DCMIPP_MULTILINE_1_LINE		0UL										// Event after every 1 line
+		// #define DCMIPP_MULTILINE_2_LINES		(1UL << DCMIPP_P0PPCR_LINEMULT_Pos)		// Event after every 2 lines
+		// #define DCMIPP_MULTILINE_4_LINES		(2UL << DCMIPP_P0PPCR_LINEMULT_Pos)		// Event after every 4 lines
+		// #define DCMIPP_MULTILINE_8_LINES		(3UL << DCMIPP_P0PPCR_LINEMULT_Pos)		// Event after every 8 lines
+		// #define DCMIPP_MULTILINE_16_LINES	(4UL << DCMIPP_P0PPCR_LINEMULT_Pos)		// Event after every 16 lines
+		// #define DCMIPP_MULTILINE_32_LINES	(5UL << DCMIPP_P0PPCR_LINEMULT_Pos)		// Event after every 32 lines
+		// #define DCMIPP_MULTILINE_64_LINES	(6UL << DCMIPP_P0PPCR_LINEMULT_Pos)		// Event after every 64 lines
+		// #define DCMIPP_MULTILINE_128_LINES	(7UL << DCMIPP_P0PPCR_LINEMULT_Pos)		// Event after every 128 lines
+
+		// #define DCMIPP_WRAP_ADDRESS_1_LINE		(0UL << DCMIPP_P1PPCR_LMAWM_Pos)	// Wraps address after 1 line
+		// #define DCMIPP_WRAP_ADDRESS_2_LINES		(1UL << DCMIPP_P1PPCR_LMAWM_Pos)	// Wraps address after 2 lines
+		// #define DCMIPP_WRAP_ADDRESS_4_LINES		(2UL << DCMIPP_P1PPCR_LMAWM_Pos)	// Wraps address after 4 lines
+		// #define DCMIPP_WRAP_ADDRESS_8_LINES		(3UL << DCMIPP_P1PPCR_LMAWM_Pos)	// Wraps address after 8 lines
+		// #define DCMIPP_WRAP_ADDRESS_16_LINES		(4UL << DCMIPP_P1PPCR_LMAWM_Pos)	// Wraps address after 16 lines
+		// #define DCMIPP_WRAP_ADDRESS_32_LINES		(5UL << DCMIPP_P1PPCR_LMAWM_Pos)	// Wraps address after 32 lines
+		// #define DCMIPP_WRAP_ADDRESS_64_LINES		(6UL << DCMIPP_P1PPCR_LMAWM_Pos)	// Wraps address after 64 lines
+		// #define DCMIPP_WRAP_ADDRESS_128_LINES	(7UL << DCMIPP_P1PPCR_LMAWM_Pos)	// Wraps address after 128 lines
+
+		MODIFY_REG(this->instance->P1PPCR, DCMIPP_P1PPCR_LMAWM_Msk, (static_cast<uint32_t>(addressWrap) << DCMIPP_P1PPCR_LMAWM_Pos));
+		MODIFY_REG(this->instance->P1PPCR, DCMIPP_P1PPCR_LINEMULT_Msk, (static_cast<uint32_t>(lineMult) << DCMIPP_P1PPCR_LINEMULT_Pos));
+		
+		// Enable Line Mult Address Wrapping (LMAWE)
+		SET_BIT(this->instance->P1PPCR, DCMIPP_P1PPCR_LMAWE);
+	}
+	else {
+		return Status::Error;
+	}
+	return Status::Ok;
+}
+
+Status Dcmipp::DisableLineWrapping(PipeID pipe) {
+	if(pipe == PipeID::Main) {
+		CLEAR_BIT(this->instance->P1PPCR, DCMIPP_P1PPCR_LMAWE);
+		// Reset line multiplier to 128 lines to prevent spurious interrupts
+		MODIFY_REG(this->instance->P1PPCR, DCMIPP_P1PPCR_LINEMULT_Msk, (0x03U << DCMIPP_P1PPCR_LINEMULT_Pos));
+		return Status::Ok;
+	}
+	return Status::Error;
+}
+
 Status Dcmipp::CaptureAsync(PipeID pipe, const MemoryDestination &dest, CaptureMode mode) {
 	if(pipe == PipeID::Dump) {
 		// Ensure pipe is not active
@@ -227,6 +279,10 @@ Status Dcmipp::CaptureAsync(PipeID pipe, const MemoryDestination &dest, CaptureM
 		else {
 			CLEAR_BIT(this->instance->P0PPCR, DCMIPP_P0PPCR_DBM);
 		}
+
+		// Clear ThreadX event flags
+		ULONG dummy;
+		tx_event_flags_get(&this->event, 0xFFFFFFFF, TX_OR_CLEAR, &dummy, TX_NO_WAIT);
 
 		// Set Capture Mode (Snapshot / Continuous)
 		if(mode == Dcmipp::CaptureMode::Continuous) {
@@ -273,6 +329,10 @@ Status Dcmipp::CaptureAsync(PipeID pipe, const MemoryDestination &dest, CaptureM
 			WRITE_REG(this->instance->P1PPM2AR1, dest.vAddress);
 		}
 
+		// Clear ThreadX event flags
+		ULONG dummy;
+		tx_event_flags_get(&this->event, 0xFFFFFFFF, TX_OR_CLEAR, &dummy, TX_NO_WAIT);
+
 		// Set Capture Mode (Snapshot / Continuous)
 		if(mode == Dcmipp::CaptureMode::Continuous) {
 			MODIFY_REG(this->instance->P1FCTCR, DCMIPP_P1FCTCR_CPTMODE_Msk, 0x00);
@@ -307,6 +367,10 @@ Status Dcmipp::CaptureAsync(PipeID pipe, const MemoryDestination &dest, CaptureM
 		else {
 			CLEAR_BIT(this->instance->P2PPCR, DCMIPP_P2PPCR_DBM);
 		}
+
+		// Clear ThreadX event flags
+		ULONG dummy;
+		tx_event_flags_get(&this->event, 0xFFFFFFFF, TX_OR_CLEAR, &dummy, TX_NO_WAIT);
 
 		// Set Capture Mode (Snapshot / Continuous)
 		if(mode == Dcmipp::CaptureMode::Continuous) {
@@ -368,8 +432,9 @@ Status Dcmipp::CaptureAbort(PipeID pipe) {
 			}
 		}
 
-		// Disable Double Buffering to reset state
-		CLEAR_BIT(this->instance->P1PPCR, DCMIPP_P1PPCR_DBM);
+		// Disable Double Buffering to reset state and clear line wrapping
+		CLEAR_BIT(this->instance->P1PPCR, DCMIPP_P1PPCR_DBM | DCMIPP_P1PPCR_LMAWE);
+		MODIFY_REG(this->instance->P1PPCR, DCMIPP_P1PPCR_LINEMULT_Msk, (0x03U << DCMIPP_P1PPCR_LINEMULT_Pos)); // 128 lines
 
 		// Disable Pipe Processing
 		CLEAR_BIT(this->instance->P1FSCR, DCMIPP_P1FSCR_PIPEN);
@@ -489,7 +554,7 @@ void Dcmipp::InterruptHandler() {
 	// Handle Pipe 0 FRAME Event
 	if(((cmsr2 & DCMIPP_CMSR2_P0FRAMEF) == DCMIPP_CMSR2_P0FRAMEF) && ((cmier & DCMIPP_CMIER_P0FRAMEIE) == DCMIPP_CMIER_P0FRAMEIE)) {
 		// If snapshot mode, automatically disable interrupts and reset states
-		if((this->instance->P1FCTCR & DCMIPP_P0FCTCR_CPTMODE) == DCMIPP_P0FCTCR_CPTMODE) {
+		if((this->instance->P0FCTCR & DCMIPP_P0FCTCR_CPTMODE) == DCMIPP_P0FCTCR_CPTMODE) {
 			// Disable Interrupts
 			MODIFY_REG(this->instance->CMIER, DCMIPP_CMIER_P0FRAMEIE | DCMIPP_CMIER_P0VSYNCIE | DCMIPP_CMIER_P0OVRIE, 0x00);
 		}

@@ -142,12 +142,12 @@ Status LSM6DSO::GetData(float* accel, float* gyro, float* temp) {
 		return Status::Error;
 	}
 
-	float sens = this->accelSens[static_cast<uint8_t>(this->config.accelScale)];
+	float sens = this->accelSens[static_cast<uint8_t>(this->config.accelScale)] * 9.80665f;	// Add in conversion from G to m/s2
 	accel[0] = this->ParseAxis(this->rxBuffer[10], this->rxBuffer[9], sens, this->accelOffset[0]);
 	accel[1] = this->ParseAxis(this->rxBuffer[12], this->rxBuffer[11], sens, this->accelOffset[1]);
 	accel[2] = this->ParseAxis(this->rxBuffer[14], this->rxBuffer[13], sens, this->accelOffset[2]);
 
-	sens = this->gyroSens[static_cast<uint8_t>(this->config.gyroScale)];
+	sens = this->gyroSens[static_cast<uint8_t>(this->config.gyroScale)] * (3.1415926535f / 180.0f);	// Add in conversion from deg/s to rad/s
 	gyro[0] = this->ParseAxis(this->rxBuffer[4], this->rxBuffer[3], sens, this->gyroOffset[0]);
 	gyro[1] = this->ParseAxis(this->rxBuffer[6], this->rxBuffer[5], sens, this->gyroOffset[1]);
 	gyro[2] = this->ParseAxis(this->rxBuffer[8], this->rxBuffer[7], sens, this->gyroOffset[2]);

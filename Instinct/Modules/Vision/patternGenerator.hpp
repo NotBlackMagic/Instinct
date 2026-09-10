@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/Vision/patternGenerator.hpp
- * Author:  NotBlackMagic
- * Brief:   Utility to generate synthetic video frames for pipeline testing.
+ * File:	Instinct/Modules/Vision/patternGenerator.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Utility to generate synthetic video frames for pipeline testing.
  */
 
 #pragma once

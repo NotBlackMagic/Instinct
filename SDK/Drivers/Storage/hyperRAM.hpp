@@ -102,7 +102,25 @@ class HyperRAM {
 		/// @return The physical address from the underlying bus.
 		uint32_t GetBaseAddr() const { return bus.GetBaseAddr(); }
 
+		/// @brief Allocates an aligned block of memory from this HyperRAM device.
+		/// @param size		The number of bytes to allocate.
+		/// @param align	Memory alignment (default 32 bytes for AXI/Cache efficiency).
+		/// @return Pointer to the allocated memory, or nullptr if out of memory.
+		uint8_t* Allocate(uint32_t size, uint32_t align = 32);
+
+		/// @brief Returns the total size of this memory device in bytes.
+		uint32_t GetTotalSize() const { return config.sizeBytes; }
+
+		/// @brief Returns the number of bytes currently allocated.
+		uint32_t GetUsedSize() const { return allocatedBytes; }
+
+		/// @brief Resets the allocator, freeing all memory.
+		void ResetAllocation() { allocatedBytes = 0; }
+
 	private:
 		HyperBus& bus;
 		Config config;
+
+		// Memory allocation tracker
+		uint32_t allocatedBytes = 0;
 };

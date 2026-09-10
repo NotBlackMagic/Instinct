@@ -53,6 +53,8 @@ Status ImageProcessor::ConvertFormat(const VisionFrame& input, VisionFrame& outp
 	switch(input.format) {
 		case PixelFormat::YUV422_YVYU:
 			return ConvertYVYUToYUYV(input, output);
+		case PixelFormat::YUV422_YUYV:
+			return Status::Ok;
 		default:
 			return Status::Error; // Unsupported format
 	}

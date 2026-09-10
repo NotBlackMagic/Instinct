@@ -81,8 +81,8 @@ class LIS2MDL {
 		__attribute__((aligned(32))) uint8_t buffer[transferSize];
 
 		//8 LSB/C + 25C zero offset (https://github.com/STMicroelectronics/lis2mdl-pid/blob/master/lis2mdl_reg.c)
-		static constexpr float magSens = 1.5f;
-		static constexpr float tempSens = (1.0f/8);		
+		static constexpr float magSens = 0.0015f;	// 1.5 mG/LSB
+		static constexpr float tempSens = (1.0f/8);
 
 		float magOffset[3] = {0.0f, 0.0f, 0.0f};
 		static constexpr float tempOffset = 25.0f;

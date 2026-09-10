@@ -16,9 +16,13 @@
 #include "broker.hpp"
 
 // Messaging headers/defines
+#include "actuators.hpp"
+#include "commands.hpp"
 #include "common.hpp"
 #include "inputs.hpp"
+#include "payload.hpp"
 #include "power.hpp"
 #include "sensors.hpp"
 #include "state.hpp"
 #include "topicIDs.hpp"
+#include "vehicleStatus.hpp"

@@ -438,8 +438,8 @@ class ICM45686 {
 		/// @param spi	Reference to the low-level bus driver.
 		ICM45686(SPI& spi) : bus(spi) {};
 
-		/// @brief Initializes the ICM-45686 magnetometer.
-		/// @param config ICM-45686 magnetometer configuration.
+		/// @brief Initializes the ICM-45686 sensor.
+		/// @param config ICM-45686 sensor configuration.
 		/// @return Status::Ok if initialization succeeded, or Status::Error if the config was invalid or failed.
 		Status Init(const Config& config);
 

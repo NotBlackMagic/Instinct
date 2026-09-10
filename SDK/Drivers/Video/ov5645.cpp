@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/Drivers/Video/ov5645.cpp
+ * File:	SDK/Drivers/Video/ov5645.cpp
  */
 
 #include "ov5645.hpp"
@@ -460,6 +460,110 @@ static constexpr OV5645::RegisterValuePair ov5645QSXGA[] = {
 	{ static_cast<OV5645::Register>(0x4202), 0x00 }
 };
 
+static constexpr OV5645::RegisterValuePair ov5645QHD[] = {
+	{ static_cast<OV5645::Register>(0x3612), 0xab },
+	{ static_cast<OV5645::Register>(0x3614), 0x50 },
+	{ static_cast<OV5645::Register>(0x3618), 0x04 },
+	{ static_cast<OV5645::Register>(0x3034), 0x18 },
+	{ static_cast<OV5645::Register>(0x3035), 0x11 },	// System clock divider: 1, Scale divider for MIPI: 1
+	{ static_cast<OV5645::Register>(0x3036), 0x54 },	// PLL multiplier: x84
+	{ static_cast<OV5645::Register>(0x3600), 0x08 },
+	{ static_cast<OV5645::Register>(0x3601), 0x33 },
+	{ static_cast<OV5645::Register>(0x3708), 0x63 },
+	{ static_cast<OV5645::Register>(0x370c), 0xc0 },
+
+	{ static_cast<OV5645::Register>(0x3800), 0x00 },	// X address start = 16
+	{ static_cast<OV5645::Register>(0x3801), 0x10 },
+	{ static_cast<OV5645::Register>(0x3802), 0x00 },	// Y address start = 252
+	{ static_cast<OV5645::Register>(0x3803), 0xfc },
+	{ static_cast<OV5645::Register>(0x3804), 0x0a },	// X address end = 2575
+	{ static_cast<OV5645::Register>(0x3805), 0x2f },
+	{ static_cast<OV5645::Register>(0x3806), 0x06 },	// Y address end = 1691
+	{ static_cast<OV5645::Register>(0x3807), 0xa3 },
+	{ static_cast<OV5645::Register>(0x3808), 0x0a },	// Horizontal width, DVPHO = 2560
+	{ static_cast<OV5645::Register>(0x3809), 0x00 },
+	{ static_cast<OV5645::Register>(0x380a), 0x05 },	// Vertical height, DVPVO = 1440
+	{ static_cast<OV5645::Register>(0x380b), 0xa0 },
+
+	{ static_cast<OV5645::Register>(0x380c), 0x0b },
+	{ static_cast<OV5645::Register>(0x380d), 0x1c },
+	{ static_cast<OV5645::Register>(0x380e), 0x07 },
+	{ static_cast<OV5645::Register>(0x380f), 0xb0 },
+	{ static_cast<OV5645::Register>(0x3813), 0x06 },
+	{ static_cast<OV5645::Register>(0x3814), 0x11 },
+	{ static_cast<OV5645::Register>(0x3815), 0x11 },
+	{ static_cast<OV5645::Register>(0x3820), 0x47 },
+	{ static_cast<OV5645::Register>(0x4514), 0x88 },
+	{ static_cast<OV5645::Register>(0x3a02), 0x07 },
+	{ static_cast<OV5645::Register>(0x3a03), 0xb0 },
+	{ static_cast<OV5645::Register>(0x3a08), 0x01 },
+	{ static_cast<OV5645::Register>(0x3a09), 0x27 },
+	{ static_cast<OV5645::Register>(0x3a0a), 0x00 },
+	{ static_cast<OV5645::Register>(0x3a0b), 0xf6 },
+	{ static_cast<OV5645::Register>(0x3a0e), 0x06 },
+	{ static_cast<OV5645::Register>(0x3a0d), 0x08 },
+	{ static_cast<OV5645::Register>(0x3a14), 0x07 },
+	{ static_cast<OV5645::Register>(0x3a15), 0xb0 },
+	{ static_cast<OV5645::Register>(0x3a18), 0x01 },
+	{ static_cast<OV5645::Register>(0x4004), 0x06 },
+	{ static_cast<OV5645::Register>(0x4005), 0x18 },
+	{ static_cast<OV5645::Register>(0x4300), 0x32 },
+	{ static_cast<OV5645::Register>(0x4837), 0x0b },
+	{ static_cast<OV5645::Register>(0x4202), 0x00 }
+};
+
+static constexpr OV5645::RegisterValuePair ov5645HD[] = {
+	{ static_cast<OV5645::Register>(0x3612), 0xab },
+	{ static_cast<OV5645::Register>(0x3614), 0x50 },
+	{ static_cast<OV5645::Register>(0x3618), 0x04 },
+	{ static_cast<OV5645::Register>(0x3034), 0x18 },
+	{ static_cast<OV5645::Register>(0x3035), 0x11 },	// System clock divider: 1, Scale divider for MIPI: 1
+	{ static_cast<OV5645::Register>(0x3036), 0x54 },	// PLL multiplier: x84
+	{ static_cast<OV5645::Register>(0x3600), 0x08 },
+	{ static_cast<OV5645::Register>(0x3601), 0x33 },
+	{ static_cast<OV5645::Register>(0x3708), 0x63 },
+	{ static_cast<OV5645::Register>(0x370c), 0xc0 },
+	{ static_cast<OV5645::Register>(0x3800), 0x01 },	// X address start
+	{ static_cast<OV5645::Register>(0x3801), 0x50 },
+	{ static_cast<OV5645::Register>(0x3802), 0x01 },	// Y address start
+	{ static_cast<OV5645::Register>(0x3803), 0xb2 },
+	{ static_cast<OV5645::Register>(0x3804), 0x08 },	// X address end
+	{ static_cast<OV5645::Register>(0x3805), 0xef },
+	{ static_cast<OV5645::Register>(0x3806), 0x05 },	// Y address end
+	{ static_cast<OV5645::Register>(0x3807), 0xf1 },
+
+	{ static_cast<OV5645::Register>(0x3808), 0x05 },	// Horizontal width, DVPHO = 1280
+	{ static_cast<OV5645::Register>(0x3809), 0x00 },
+	{ static_cast<OV5645::Register>(0x380a), 0x02 },	// Vertical height, DVPVO = 720
+	{ static_cast<OV5645::Register>(0x380b), 0xD0 },
+	
+	{ static_cast<OV5645::Register>(0x380c), 0x09 },	// Total horizontal size, 2500
+	{ static_cast<OV5645::Register>(0x380d), 0xc4 },
+	{ static_cast<OV5645::Register>(0x380e), 0x04 },	// Total vertical size, 1120
+	{ static_cast<OV5645::Register>(0x380f), 0x60 },
+	{ static_cast<OV5645::Register>(0x3813), 0x04 },
+	{ static_cast<OV5645::Register>(0x3814), 0x11 },
+	{ static_cast<OV5645::Register>(0x3815), 0x11 },
+	{ static_cast<OV5645::Register>(0x3820), 0x47 },
+	{ static_cast<OV5645::Register>(0x4514), 0x88 },
+	{ static_cast<OV5645::Register>(0x3a02), 0x04 },
+	{ static_cast<OV5645::Register>(0x3a03), 0x60 },
+	{ static_cast<OV5645::Register>(0x3a08), 0x01 },
+	{ static_cast<OV5645::Register>(0x3a09), 0x50 },
+	{ static_cast<OV5645::Register>(0x3a0a), 0x01 },
+	{ static_cast<OV5645::Register>(0x3a0b), 0x18 },
+	{ static_cast<OV5645::Register>(0x3a0e), 0x03 },
+	{ static_cast<OV5645::Register>(0x3a0d), 0x04 },
+	{ static_cast<OV5645::Register>(0x3a14), 0x04 },
+	{ static_cast<OV5645::Register>(0x3a15), 0x60 },
+	{ static_cast<OV5645::Register>(0x3a18), 0x00 },
+	{ static_cast<OV5645::Register>(0x4004), 0x06 },
+	{ static_cast<OV5645::Register>(0x4005), 0x18 },
+	{ static_cast<OV5645::Register>(0x4300), 0x32 },
+	{ static_cast<OV5645::Register>(0x4202), 0x00 },
+	{ static_cast<OV5645::Register>(0x4837), 0x0b }
+};
+
 extern const OV5645::RegisterValuePair ov5645AFSetting[];
 extern const uint16_t ov5645AFSettingSize = 4098;
 
@@ -625,6 +729,13 @@ Status OV5645::SetResolution(uint16_t width, uint16_t height) {
 			//MIPI_CLK = 672MHz * 1/1 * 1/1 * 1/2 = 336MHz
 			this->mipiBitrate = 2 * 336000000;	//DDR for MIPI
 			break;
+		case InternalResolution::QHD:
+			this->config.width = 2560;
+			this->config.height = 1440;
+			//PLL1 = 24M * 1/3 * 84 = 672MHz
+			//MIPI_CLK = 672MHz * 1/1 * 1/1 * 1/2 = 336MHz
+			this->mipiBitrate = 2 * 336000000;	//DDR for MIPI
+			break;
 		case InternalResolution::FHD:
 			this->config.width = 1920;
 			this->config.height = 1080;
@@ -635,6 +746,13 @@ Status OV5645::SetResolution(uint16_t width, uint16_t height) {
 		case InternalResolution::SXGA:
 			this->config.width = 1280;
 			this->config.height = 1024;
+			//PLL1 = 24M * 1/3 * 112 = 896MHz
+			//MIPI_CLK = 896MHz * 1/2 * 1/1 * 1/2 = 224MHz
+			this->mipiBitrate = 2 * 224000000;	//DDR for MIPI
+			break;
+		case InternalResolution::HD:
+			this->config.width = 1280;
+			this->config.height = 720;
 			//PLL1 = 24M * 1/3 * 112 = 896MHz
 			//MIPI_CLK = 896MHz * 1/2 * 1/1 * 1/2 = 224MHz
 			this->mipiBitrate = 2 * 224000000;	//DDR for MIPI
@@ -952,11 +1070,19 @@ OV5645::InternalResolution OV5645::FindNearestResolution(uint16_t w, uint16_t h)
 	if(w >= 2592) {
 		return InternalResolution::QSXGA;
 	}
-	if(w >= 1920) {
+	else if(w >= 2560) {
+		return InternalResolution::QHD;
+	}
+	else if(w >= 1920) {
 		return InternalResolution::FHD;
 	}
 	else if(w >= 1280) {
-		return InternalResolution::SXGA;
+		if(h >= 1024) {
+			return InternalResolution::SXGA;
+		}
+		else {
+			return InternalResolution::HD;
+		}
 	}
 	else if(w >= 640) {
 		return InternalResolution::VGA;
@@ -971,6 +1097,11 @@ Status OV5645::ApplyResolution(InternalResolution resolution) {
 			uint16_t size = sizeof(ov5645QSXGA) / sizeof(ov5645QSXGA[0]);
 			return this->WriteRegisterArray(ov5645QSXGA, size);
 		}
+		case InternalResolution::QHD: {
+			// Quad-HD (2560x1440)
+			uint16_t size = sizeof(ov5645QHD) / sizeof(ov5645QHD[0]);
+			return this->WriteRegisterArray(ov5645QHD, size);
+		}
 		case InternalResolution::FHD: {
 			// Full HD (1920x1080)
 			uint16_t size = sizeof(ov5645FHD) / sizeof(ov5645FHD[0]);
@@ -980,6 +1111,11 @@ Status OV5645::ApplyResolution(InternalResolution resolution) {
 			// SXGA (1280x1024)
 			uint16_t size = sizeof(ov5645SXGA) / sizeof(ov5645SXGA[0]);
 			return this->WriteRegisterArray(ov5645SXGA, size);
+		}
+		case InternalResolution::HD: {
+			// HD (1280x720)
+			uint16_t size = sizeof(ov5645HD) / sizeof(ov5645HD[0]);
+			return this->WriteRegisterArray(ov5645HD, size);
 		}
 		case InternalResolution::VGA: {
 			// VGA (640x480)

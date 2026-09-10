@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/Drivers/Video/ov7670.hpp
- * Author:  NotBlackMagic
- * Brief:   OV7670 Camera driver class for STM32N6.
+ * File:	SDK/Drivers/Video/ov7670.hpp
+ * Author:	NotBlackMagic
+ * Brief:	OV7670 Camera driver class for STM32N6.
  */
 
 #pragma once

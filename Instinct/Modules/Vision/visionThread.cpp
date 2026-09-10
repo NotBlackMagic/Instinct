@@ -1,9 +1,11 @@
 #include "visionThread.hpp"
 
+#define USE_LINE_MODE						1	// 1 = Hardware line mode (64 lines), 0 = Full-frame ping-pong
+
 TX_THREAD VisionThread::threadPtr;
 uint8_t VisionThread::threadStack[8196];
 
-static VisionFrame rawFrameBuffer;
+static VisionFrame rawFrameBuffer[2];
 static VisionFrame processedFrameBuffer;
 static VisionFrame jpegFrameBuffer[2];
 
@@ -80,16 +82,31 @@ void VisionThread::Run(ULONG input) {
 	
 	LOG_INFO("Vision Thread Initialized.");
 
+	// General camera configurations
+	uint32_t camWidth = 1280;
+	uint32_t camHeight = 720;
+	uint8_t camFPS = 30;
+	PixelFormat camFormat = PixelFormat::YUV422_YUYV;
+
+	// Line mode parameters
+#if USE_LINE_MODE
+	constexpr Dcmipp::LineCount lineWrap = Dcmipp::LineCount::Lines64;
+	constexpr Dcmipp::LineCount lineTrigger = Dcmipp::LineCount::Lines32;
+	// vv For statistics/metering only vv
+	constexpr uint32_t wrapLines = 1U << static_cast<uint32_t>(lineWrap);
+	const float numSlices = static_cast<float>(camHeight) / static_cast<float>(wrapLines);
+#endif
+
 	// Initialize
 	// USB UVC stuff
 	usbUVC.RegisterStreamEventCallback(VisionThread::OnUVCStreamState);
 
 	// SD-CAM Initialization
 	CameraDCMI::Config configSD;
-	configSD.width = 640;
-	configSD.height = 480;
-	configSD.fps = 30;
-	configSD.format = PixelFormat::YUV422_YVYU;
+	configSD.width = camWidth;
+	configSD.height = camHeight;
+	configSD.fps = camFPS;
+	configSD.format = camFormat;
 	Status status = cameraSD.Init(configSD);
 	if(status != Status::Ok) {
 		LOG_ERR("SD-CAM Init Failed.");
@@ -106,10 +123,10 @@ void VisionThread::Run(ULONG input) {
 
 	// HD-CAM Initialization
 	CameraMIPI::Config configHD;
-	configHD.width = 640;
-	configHD.height = 480;
-	configHD.fps = 30;
-	configHD.format = PixelFormat::YUV422_YVYU;
+	configHD.width = camWidth;
+	configHD.height = camHeight;
+	configHD.fps = camFPS;
+	configHD.format = camFormat;
 	status = cameraHD.Init(configHD);
 	if(status != Status::Ok) {
 		LOG_ERR("HD-CAM Init Failed.");
@@ -133,10 +150,20 @@ void VisionThread::Run(ULONG input) {
 
 	// VENC Initialization in JPEG mode
 	Venc::Config vencConfig = {};
+#if USE_LINE_MODE
+	vencConfig.enableStreamingMode = true;
+	vencConfig.lineWrap = static_cast<Venc::LineCount>(lineWrap);
+	vencConfig.lineTrigger = static_cast<Venc::LineCount>(lineTrigger);
+	// 64 lines = 4 MB rows per slice
+	vencConfig.codingControl.sliceSize = 0;	// 0 = encode whole frame as one slice
+#else
+	vencConfig.enableStreamingMode = false;
+	vencConfig.codingControl.sliceSize = 0;	// 0 = encode whole frame as one slice
+#endif
 	vencConfig.codec = Venc::Codec::H264;
-	vencConfig.imageParams.width = 640;
-	vencConfig.imageParams.height = 480;
-	vencConfig.imageParams.frameRate = 30;
+	vencConfig.imageParams.width = camWidth;
+	vencConfig.imageParams.height = camHeight;
+	vencConfig.imageParams.frameRate = camFPS;
 	vencConfig.imageParams.inputFormat = Venc::InputFormat::YUV422InterleavedYUYV;
 	// For JPEG Encoding mode
 	vencConfig.jpegQuality = 8;
@@ -148,14 +175,12 @@ void VisionThread::Run(ULONG input) {
 	vencConfig.rateControl.qpMax = 51;
 	vencConfig.rateControl.qpHdr = 26;
 	// H.264 Coding Control
-	vencConfig.codingControl.sliceSize = 0; // 0 = encode whole frame as one slice
-	vencConfig.codingControl.enableCabac = true;
-	vencConfig.codingControl.enableTransform8x8 = true;
+	vencConfig.codingControl.profile = Venc::H264Profile::High;
 	vencConfig.codingControl.insertIdrHeader = true;
 	vencConfig.codingControl.disableDeblockingFilter = false;
 	// Ideal pool size can be found: VC8000NanoE Video Encoder Software Integration Guide, Section H264 4.3.1-4.3.4
-	vencConfig.poolAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x400000);
-	vencConfig.poolSize = 2 * 1024 * 1024;
+	vencConfig.poolSize = 4 * 1024 * 1024;
+	vencConfig.poolAddress = externalPSRAM.Allocate(vencConfig.poolSize, 32);
 	status = vencEncoder.Init(vencConfig);
 	if(status != Status::Ok) {
 		LOG_ERR("VENC H264 Encoder Init Failed.");
@@ -166,36 +191,43 @@ void VisionThread::Run(ULONG input) {
 	LOG_INFO("VENC H264 Encoder Initialized.");
 
 	// Setup frame buffer
-	rawFrameBuffer.startAddress = (uint8_t*)hyperBus1.GetBaseAddr();
-	rawFrameBuffer.width = 640;
-	rawFrameBuffer.height = 480;
-	rawFrameBuffer.payloadSize = 640 * 480 * 2;
-	rawFrameBuffer.allocatedSize = 640 * 480 * 2;
-	rawFrameBuffer.format = PixelFormat::YUV422_YVYU;
+	rawFrameBuffer[0].width = camWidth;
+	rawFrameBuffer[0].height = camHeight;
+	rawFrameBuffer[0].format = camFormat;
+	rawFrameBuffer[0].payloadSize = camWidth * camHeight * 2;
+	rawFrameBuffer[0].allocatedSize = camWidth * camHeight * 2;
+	rawFrameBuffer[0].startAddress = externalPSRAM.Allocate(rawFrameBuffer[0].allocatedSize, 32);
 
-	processedFrameBuffer.startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x100000); // Offset past raw buffer
-	processedFrameBuffer.width = 640;
-	processedFrameBuffer.height = 480;
-	processedFrameBuffer.payloadSize = 640 * 480 * 2;
-	processedFrameBuffer.allocatedSize = 640 * 480 * 2;
+	rawFrameBuffer[1].width = camWidth;
+	rawFrameBuffer[1].height = camHeight;
+	rawFrameBuffer[1].format = camFormat;
+	rawFrameBuffer[1].payloadSize = camWidth * camHeight * 2;
+	rawFrameBuffer[1].allocatedSize = camWidth * camHeight * 2;
+	rawFrameBuffer[1].startAddress = externalPSRAM.Allocate(rawFrameBuffer[1].allocatedSize, 32);
+
 	processedFrameBuffer.format = PixelFormat::Unknown;	// Handled by processor
+	processedFrameBuffer.width = camWidth;
+	processedFrameBuffer.height = camHeight;
+	processedFrameBuffer.payloadSize = camWidth * camHeight * 2;
+	processedFrameBuffer.allocatedSize = camWidth * camHeight * 2;
+	processedFrameBuffer.startAddress = externalPSRAM.Allocate(processedFrameBuffer.allocatedSize, 32);
 
-	jpegFrameBuffer[0].startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x200000); // Offset past raw buffer
-	jpegFrameBuffer[0].width = 640;
-	jpegFrameBuffer[0].height = 480;
-	jpegFrameBuffer[0].allocatedSize = 640 * 480 * 2;
 	jpegFrameBuffer[0].format = PixelFormat::Unknown;	// Handled by codec
 	jpegFrameBuffer[0].codec = VisionCodec::H264;
+	jpegFrameBuffer[0].width = camWidth;
+	jpegFrameBuffer[0].height = camHeight;
+	jpegFrameBuffer[0].allocatedSize = camWidth * camHeight * 2;
+	jpegFrameBuffer[0].startAddress = externalPSRAM.Allocate(jpegFrameBuffer[0].allocatedSize, 32);
 
-	jpegFrameBuffer[1].startAddress = (uint8_t*)(hyperBus1.GetBaseAddr() + 0x300000); // Offset past raw buffer
-	jpegFrameBuffer[1].width = 640;
-	jpegFrameBuffer[1].height = 480;
-	jpegFrameBuffer[1].allocatedSize = 640 * 480 * 2;
 	jpegFrameBuffer[1].format = PixelFormat::Unknown;	// Handled by codec
 	jpegFrameBuffer[1].codec = VisionCodec::H264;
+	jpegFrameBuffer[1].width = camWidth;
+	jpegFrameBuffer[1].height = camHeight;
+	jpegFrameBuffer[1].allocatedSize = camWidth * camHeight * 2;
+	jpegFrameBuffer[1].startAddress = externalPSRAM.Allocate(jpegFrameBuffer[1].allocatedSize, 32);
 
 	// H.264 Stream Start (SPS/PPS Generation)
-	static uint8_t spsPpsStorage[128];          // Dedicated buffer for SPS/PPS headers
+	static uint8_t spsPpsStorage[128];		// Dedicated buffer for SPS/PPS headers
 	static VisionFrame spsPpsFrame = {};
 	VisionFrame& headerBuf = jpegFrameBuffer[0];
 	status = vencEncoder.EncodeStart(headerBuf);
@@ -217,8 +249,15 @@ void VisionThread::Run(ULONG input) {
 	uint32_t startupBurstCounter = 3;
 	uint64_t timestamp = Time::GetMs();
 	uint64_t deltaTime = 0;
-	uint32_t timeCap, timeConvMCU, timeEncJpeg;
+	uint32_t timeCap, timeConvMCU, timeEnc, timeIO;
+	uint64_t timeCapSum, timeConvMCUSum, timeEncSum, timeIOSum;
 
+#if USE_LINE_MODE
+	uint32_t timeSliceCap = 0, timeSliceEnc = 0;
+	uint64_t timeSliceCapSum = 0, timeSliceEncSum = 0;
+#endif
+
+	uint8_t rawBufIx = 0;	// The active index for MCU to read from
 	uint8_t jpegBufIx = 0;	// The active index for hardware to write to
 
 	bool isRecording = false;
@@ -228,6 +267,21 @@ void VisionThread::Run(ULONG input) {
 
 	bool saveSnapshot = false;
 	bool lastBtnState = false;
+
+#if USE_LINE_MODE
+	// Start continuous hardware line-wrapping capture
+	status = cameraHD.CaptureAsync(rawFrameBuffer[0], lineTrigger, lineWrap);
+	if(status != Status::Ok) {
+		LOG_ERR("Failed to start line-mode HD-CAM capture.");
+	}
+#else
+	// Start hardware continuous capture
+	status = cameraHD.CaptureAsync(rawFrameBuffer[0], rawFrameBuffer[1]);
+	if(status != Status::Ok) {
+		LOG_ERR("Failed to start continuous HD-CAM capture.");
+	}
+#endif
+
 	while(1) {
 		// Process pending UVC camera control updates
 		for(uint8_t i = 0; i < numPUControls; i++) {
@@ -281,42 +335,71 @@ void VisionThread::Run(ULONG input) {
 			}
 		}
 
-		// Grab references to the active buffer
-		VisionFrame& jpegBuf = jpegFrameBuffer[jpegBufIx];
-
+		timeIO = Time::GetUs() - timestamp;
+		timeIOSum = timeIOSum + timeIO;
 		timestamp = Time::GetUs();
 		
 		// status = cameraSD.CaptureAsync(rawFrameBuffer);
-		status = cameraHD.CaptureAsync(rawFrameBuffer);
+		// status = cameraHD.CaptureAsync(rawFrameBuffer);
+		status = Status::Ok;
 		if(status == Status::Ok) {
 			// status = cameraSD.CaptureWait(1000);	// Capture takes about 43ms
 			status = cameraHD.CaptureWait(1000);
-
-			rawFrameBuffer.timestampUs = Time::GetUs();
-
-			timeCap = Time::GetUs() - timestamp;
-			timestamp = Time::GetUs();
-
 			// status = PatternGenerator::Checkerboard(rawFrameBuffer);
 			if(status == Status::Ok) {
+#if USE_LINE_MODE
+				VisionFrame& currentRaw = rawFrameBuffer[0];
+				VisionFrame& currentJpeg = jpegFrameBuffer[jpegBufIx];
+				jpegBufIx = 1 - jpegBufIx;
+#else
+				VisionFrame& currentRaw = rawFrameBuffer[rawBufIx];
+				VisionFrame& currentJpeg = jpegFrameBuffer[jpegBufIx];
+
+				// Toggles the buffer index for the next loop iteration (Ping-Pong)
+				rawBufIx = 1 - rawBufIx;
+				jpegBufIx = 1 - jpegBufIx;
+#endif
+
+				currentRaw.timestampUs = Time::GetUs();
+
+#if !USE_LINE_MODE
+				timeCap = Time::GetUs() - timestamp;
+				timeCapSum = timeCapSum + timeCap;
+#endif
+				timestamp = Time::GetUs();
+
 				// Pass through image processor to transfor to MCU blocks
 				// status = ImageProcessor::ConvertToMCU(rawFrameBuffer, processedFrameBuffer);
-				status = ImageProcessor::ConvertFormat(rawFrameBuffer, processedFrameBuffer);
+				// status = ImageProcessor::ConvertFormat(rawFrameBuffer, processedFrameBuffer);
 				timeConvMCU = Time::GetUs() - timestamp;
+				timeConvMCU = timeConvMCU + timeConvMCU;
 				timestamp = Time::GetUs();
 
 				// Request a keyframe for the first 3 frames
-                bool requestIFrame = (startupBurstCounter > 0);
+				bool requestIFrame = (startupBurstCounter > 0);
 
 				// Compress Raw Frame to JPEG
 				// status = jpegEncoder.EncodeAsync(processedFrameBuffer, jpegBuf, 80);
-				status = vencEncoder.EncodeAsync(processedFrameBuffer, jpegBuf, requestIFrame);
+				status = vencEncoder.EncodeAsync(currentRaw, currentJpeg, requestIFrame);
 				if(status == Status::Ok) {
 					// status = jpegEncoder.EncodeWait(1000);	// Encoding takes about 6ms
 					status = vencEncoder.EncodeWait(1000);
-					jpegBuf.timestampUs = Time::GetUs();
+				
+					currentJpeg.timestampUs = Time::GetUs();
+					timeEnc = Time::GetUs() - timestamp;
+					timeEncSum = timeEncSum + timeEnc;
+#if USE_LINE_MODE
+					// In line mode, frame capture and encoding occur concurrently in lockstep.
+					// The duration spent during EncodeWait is the full concurrent frame time.
+					timeCap = timeEnc;
+					timeCapSum += timeCap;
 
-					timeEncJpeg = Time::GetUs() - timestamp;
+					// Per-slice metrics for line mode
+					timeSliceCap = static_cast<uint32_t>(static_cast<float>(timeCap) / numSlices);
+					timeSliceEnc = static_cast<uint32_t>(static_cast<float>(timeEnc) / numSlices);
+					timeSliceCapSum += timeSliceCap;
+					timeSliceEncSum += timeSliceEnc;
+#endif
 					timestamp = Time::GetUs();
 
 					if(status == Status::Ok) {
@@ -326,7 +409,7 @@ void VisionThread::Run(ULONG input) {
 						
 						// USB UVC Stuff
 						// For H264, the SPS/PPS header must be injected at the start of a stream (as with saving to a file/SD card). This is done here, adding the cached header ("spsPpsFrame") at the beginning of the first frames.
-						status = usbUVC.SubmitFrame(&jpegBuf, requestIFrame ? &spsPpsFrame : nullptr);
+						status = usbUVC.SubmitFrame(&currentJpeg, requestIFrame ? &spsPpsFrame : nullptr);
 						if(status == Status::Ok) {
 							// tx_thread_sleep(50);
 							// jpegBufIx = 1 - jpegBufIx;	// Ping-pong buffer indexing
@@ -338,7 +421,7 @@ void VisionThread::Run(ULONG input) {
 
 						if(saveSnapshot == true) {
 							// For stream/video recording mode
-							if(jpegBuf.isKeyframe == true && isRecording == false) {
+							if(currentJpeg.isKeyframe == true && isRecording == false) {
 								if(StorageThread::IsReady() == true) {
 									Status res = ImageWriter::OpenStream(videoFile, *StorageThread::GetMedia(), "vid.264", spsPpsFrame, 10 * 1024 * 1024);
 									if(res == Status::Ok) {
@@ -390,7 +473,7 @@ void VisionThread::Run(ULONG input) {
 							// saveSnapshot = false;
 						}
 						if(isRecording == true) {
-							Status res = ImageWriter::AppendStream(videoFile, jpegBuf);
+							Status res = ImageWriter::AppendStream(videoFile, currentJpeg);
 							if(res == Status::Ok) {
 								recordedFrames++;
 							}
@@ -451,13 +534,40 @@ void VisionThread::Run(ULONG input) {
 							// HD-CAM & Venc Pool, Proc., Out Buffer in SRAM, rest in HyperRAM & Code in SRAM:	Cap 43979 us, To YUYV  18889 us, Enc 3684 us
 
 							//Note: Removing all Clean/Invalidate cache from VENCEncoder and VENC reduces Encoding by ~1000us
-							//Alternative (better), optimized cache clean/invaldiate calls to minimum reduced about 500us. Using full cache clean on large buffers (like the video buffer) reduced it a further 400us:
+							//Alternative (better), optimized cache clean/invalidates calls to minimum reduced about 500us. Using full cache clean on large buffers (like the video buffer) reduced it a further 400us:
 							// Performance values for VGA 640x480 on VENC JPEG Encoder (all with HyperRAM@200M) after cache handling optimization:
 							// HD-CAM & All Buf in HyperRAM & Code in SRAM:										Cap 47166 us, To YUYV  15704 us, Enc 3763 us
 							// HD-CAM & Venc Pool in SRAM, rest in HyperRAM & Code in SRAM:						Cap 47329 us, To YUYV  15705 us, Enc 3602 us
 							// HD-CAM & Venc Pool, Proc. Buffer in SRAM, rest in HyperRAM & Code in SRAM:		Cap 45085 us, To YUYV  18887 us, Enc 2661 us
-							
-							LOG_INFO("HD-CAM: DCMI %d us, MCU Blk %d us, JPEG %d us", timeCap, timeConvMCU, timeEncJpeg);	
+
+							// Calculate averages safely
+							uint32_t avgCap = (frameCount > 0) ? (timeCapSum / frameCount) : 0;
+							uint32_t avgConv = (frameCount > 0) ? (timeConvMCUSum / frameCount) : 0;
+							uint32_t avgEnc = (frameCount > 0) ? (timeEncSum / frameCount) : 0;
+							uint32_t avgIO = (frameCount > 0) ? (timeIOSum / frameCount) : 0;
+
+#if USE_LINE_MODE
+							uint32_t avgSliceCap = (frameCount > 0) ? (timeSliceCapSum / frameCount) : 0;
+							uint32_t avgSliceEnc = (frameCount > 0) ? (timeSliceEncSum / frameCount) : 0;
+
+							LOG_INFO("HD-CAM: Cap %lu, Enc %lu, I/O %lu [us] | Per Slice (%lu lines): Cap %lu, Enc %lu [us]", 
+										timeCap, timeEnc, timeIO, wrapLines, timeSliceCap, timeSliceEnc);
+							LOG_INFO("HD-CAM: Avg Cap %lu, Enc %lu, I/O %lu [us] | Avg Slice: Cap %lu, Enc %lu [us]", 
+										avgCap, avgEnc, avgIO, avgSliceCap, avgSliceEnc);
+#else
+							LOG_INFO("HD-CAM: Cap %d, Conv %d, Enc %d, I/O %d [us]", timeCap, timeConvMCU, timeEnc, timeIO);
+							LOG_INFO("HD-CAM: Avg Cap %lu, Conv %lu, Enc %ld, I/O %lu [us]", avgCap, avgConv, avgEnc, avgIO);
+#endif
+
+							// Reset accumulators
+							timeCapSum = 0;
+							timeConvMCUSum = 0;
+							timeEncSum = 0;
+							timeIOSum = 0;
+#if USE_LINE_MODE
+							timeSliceCapSum = 0;
+							timeSliceEncSum = 0;
+#endif
 							frameCount = 0;
 							uvcDropedCount = 0;
 							deltaTime = Time::GetMs() + 5000;
@@ -466,7 +576,23 @@ void VisionThread::Run(ULONG input) {
 				}
 			}
 			else {
-				// LOG_WARN("HD-CAM Frame Drop.");
+				LOG_WARN("HD-CAM Frame Drop / Error. Restarting Pipeline...");
+
+#if USE_LINE_MODE
+				cameraHD.CaptureAbort();
+				vencEncoder.EncodeAbort();
+				status = cameraHD.CaptureAsync(rawFrameBuffer[0], lineTrigger, lineWrap);
+#else
+				// The driver caught a glitch and automatically aborted into Idle mode. Restart the continuous hardware pipeline.
+				status = cameraHD.CaptureAsync(rawFrameBuffer[0], rawFrameBuffer[1]);
+#endif
+
+				// Reset application ping-pong indices.
+				rawBufIx = 0;
+				jpegBufIx = 0;
+
+				// Give the MIPI PHY a tiny moment to stabilize
+				tx_thread_sleep(5);
 			}
 		}
 		else {
