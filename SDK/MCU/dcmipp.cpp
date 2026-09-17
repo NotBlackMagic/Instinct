@@ -547,12 +547,17 @@ void Dcmipp::InterruptHandler() {
 
 	// Handle Pipe 0 VSYNC Event
 	if(((cmsr2 & DCMIPP_CMSR2_P0VSYNCF) == DCMIPP_CMSR2_P0VSYNCF) && ((cmier & DCMIPP_CMIER_P0VSYNCIE) == DCMIPP_CMIER_P0VSYNCIE)) {
+		this->stats[0].lastVsyncTimestamp = Time::GetUs();
+		// Reset line timestamp so the first slice duration is measured from VSYNC
+		this->stats[0].lastLineTimestamp = this->stats[1].lastVsyncTimestamp;
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP0VSYNCF);
 	}
 
 	// Handle Pipe 0 FRAME Event
 	if(((cmsr2 & DCMIPP_CMSR2_P0FRAMEF) == DCMIPP_CMSR2_P0FRAMEF) && ((cmier & DCMIPP_CMIER_P0FRAMEIE) == DCMIPP_CMIER_P0FRAMEIE)) {
+		this->stats[0].lastFrameTimestamp = Time::GetUs();
+		this->stats[0].frameCount++;
 		// If snapshot mode, automatically disable interrupts and reset states
 		if((this->instance->P0FCTCR & DCMIPP_P0FCTCR_CPTMODE) == DCMIPP_P0FCTCR_CPTMODE) {
 			// Disable Interrupts
@@ -565,12 +570,17 @@ void Dcmipp::InterruptHandler() {
 
 	// Handle Pipe 0 LINE Event
 	if(((cmsr2 & DCMIPP_CMSR2_P0LINEF) == DCMIPP_CMSR2_P0LINEF) && ((cmier & DCMIPP_CMIER_P0LINEIE) == DCMIPP_CMIER_P0LINEIE)) {
+		uint64_t now = Time::GetUs();
+		this->stats[0].sliceDurationUs = static_cast<uint32_t>(now - this->stats[0].lastLineTimestamp);
+		this->stats[0].lastLineTimestamp = now;
+		this->stats[0].lineEvents++;
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP0LINEF);
 	}
 
 	// Handle Pipe 0 Overrun error Event
 	if(((cmsr2 & DCMIPP_CMSR2_P0OVRF) == DCMIPP_CMSR2_P0OVRF) && ((cmier & DCMIPP_CMIER_P0OVRIE) == DCMIPP_CMIER_P0OVRIE)) {
+		this->stats[0].overrunErrors++;
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP0OVRF);
 	}
@@ -578,18 +588,27 @@ void Dcmipp::InterruptHandler() {
 	// Pipe 1 Interrupts
 	// Handle Pipe 1 LINE Event
 	if(((cmsr2 & DCMIPP_CMSR2_P1LINEF) == DCMIPP_CMSR2_P1LINEF) && ((cmier & DCMIPP_CMIER_P1LINEIE) == DCMIPP_CMIER_P1LINEIE)) {
+		uint64_t now = Time::GetUs();
+		this->stats[1].sliceDurationUs = static_cast<uint32_t>(now - this->stats[1].lastLineTimestamp);
+		this->stats[1].lastLineTimestamp = now;
+		this->stats[1].lineEvents++;
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP1LINEF);
 	}
 
 	// Handle Pipe 1 VSYNC Event
 	if(((cmsr2 & DCMIPP_CMSR2_P1VSYNCF) == DCMIPP_CMSR2_P1VSYNCF) && ((cmier & DCMIPP_CMIER_P1VSYNCIE) == DCMIPP_CMIER_P1VSYNCIE)) {
+		this->stats[1].lastVsyncTimestamp = Time::GetUs();
+		// Reset line timestamp so the first slice duration is measured from VSYNC
+		this->stats[1].lastLineTimestamp = this->stats[1].lastVsyncTimestamp;
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP1VSYNCF);
 	}
 
 	// Handle Pipe 1 Frame End Event
 	if(((cmsr2 & DCMIPP_CMSR2_P1FRAMEF) == DCMIPP_CMSR2_P1FRAMEF) && ((cmier & DCMIPP_CMIER_P1FRAMEIE) == DCMIPP_CMIER_P1FRAMEIE)) {
+		this->stats[1].lastFrameTimestamp = Time::GetUs();
+		this->stats[1].frameCount++;
 		// If snapshot mode, automatically disable interrupts and reset states
 		if((this->instance->P1FCTCR & DCMIPP_P1FCTCR_CPTMODE) == DCMIPP_P1FCTCR_CPTMODE) {
 			// Disable Interrupts
@@ -607,6 +626,7 @@ void Dcmipp::InterruptHandler() {
 
 	// Handle Overrun and Synchronization Errors as needed
 	if(((cmsr2 & DCMIPP_CMSR2_P1OVRF) == DCMIPP_CMSR2_P1OVRF) && ((cmier & DCMIPP_CMIER_P1OVRIE) == DCMIPP_CMIER_P1OVRIE)) {
+		this->stats[1].overrunErrors++;
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP1OVRF);
 
@@ -616,18 +636,27 @@ void Dcmipp::InterruptHandler() {
 	// Pipe 2 Interrupts
 	// Handle Pipe 2 LINE Event
 	if(((cmsr2 & DCMIPP_CMSR2_P2LINEF) == DCMIPP_CMSR2_P2LINEF) && ((cmier & DCMIPP_CMIER_P2LINEIE) == DCMIPP_CMIER_P2LINEIE)) {
+		uint64_t now = Time::GetUs();
+		this->stats[2].sliceDurationUs = static_cast<uint32_t>(now - this->stats[2].lastLineTimestamp);
+		this->stats[2].lastLineTimestamp = now;
+		this->stats[2].lineEvents++;
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP2LINEF);
 	}
 
 	// Handle Pipe 2 VSYNC Event
 	if(((cmsr2 & DCMIPP_CMSR2_P2VSYNCF) == DCMIPP_CMSR2_P2VSYNCF) && ((cmier & DCMIPP_CMIER_P2VSYNCIE) == DCMIPP_CMIER_P2VSYNCIE)) {
+		this->stats[2].lastVsyncTimestamp = Time::GetUs();
+		// Reset line timestamp so the first slice duration is measured from VSYNC
+		this->stats[2].lastLineTimestamp = this->stats[1].lastVsyncTimestamp;
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP2VSYNCF);
 	}
 
 	// Handle Pipe 2 Frame End Event
 	if(((cmsr2 & DCMIPP_CMSR2_P2FRAMEF) == DCMIPP_CMSR2_P2FRAMEF) && ((cmier & DCMIPP_CMIER_P2FRAMEIE) == DCMIPP_CMIER_P2FRAMEIE)) {
+		this->stats[2].lastFrameTimestamp = Time::GetUs();
+		this->stats[2].frameCount++;
 		// If snapshot mode, automatically disable interrupts and reset states
 		if((this->instance->P2FCTCR & DCMIPP_P2FCTCR_CPTMODE) == DCMIPP_P2FCTCR_CPTMODE) {
 			// Disable Interrupts
@@ -638,8 +667,9 @@ void Dcmipp::InterruptHandler() {
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP2FRAMEF);
 	}
 
-	// Handle Overrun and Synchronization Errors as needed
+	// Handle Pipe 2 Overrun and Synchronization Errors as needed
 	if(((cmsr2 & DCMIPP_CMSR2_P2OVRF) == DCMIPP_CMSR2_P2OVRF) && ((cmier & DCMIPP_CMIER_P2OVRIE) == DCMIPP_CMIER_P2OVRIE)) {
+		this->stats[2].overrunErrors++;
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP2OVRF);
 	}

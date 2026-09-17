@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/System/console.cpp
+ * File:	Instinct/Modules/System/console.cpp
  */
 
 #include "console.hpp"
@@ -21,12 +21,16 @@ void Console::Init(UART* uart) {
 	// Register all active command modules
 	RegisterSystemCommands();
 	RegisterI2CCommands();
+	// RegisterI3CCommands();
 	RegisterGPIOCommands();
 	// RegisterSerialCommands();
 	RegisterCameraCommands();
 	// RegisterPWMCommands();
 	// RegisterFlashCommands();
 	RegisterPubSubCommands();
+	RegisterStorageCommands();
+	RegisterVisionCommands();
+	RegisterUSBCommands();
 
 	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Console"),
 													Console::Run, 0,

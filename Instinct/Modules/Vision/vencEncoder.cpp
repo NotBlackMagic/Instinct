@@ -152,6 +152,18 @@ Status VENCEncoder::EncodeAbort() {
 	return Status::Ok;
 }
 
+Status VENCEncoder::ReconfigureStreamParameters(uint32_t sliceSize, uint32_t gdrDuration, bool denoise, VisionFrame& headerFrame) {
+	uint32_t headerBytes = 0;
+	Status status = this->vencInstance.ReconfigureStream(sliceSize, gdrDuration, denoise, (uint32_t*)headerFrame.startAddress,headerFrame.allocatedSize, headerBytes);
+	if(status == Status::Ok) {
+		headerFrame.payloadSize = headerBytes;
+		headerFrame.codec = this->codec;
+		uint32_t alignedSize = (headerBytes + 31U) & 0xFFFFFFE0;
+		System::InvalidateCache((uint32_t*)headerFrame.startAddress, alignedSize);
+	}
+	return status;
+}
+
 void VENCEncoder::EventCallback(void* ctx, Venc::Event evt) {
 	VENCEncoder* encoder = static_cast<VENCEncoder*>(ctx);
 	if(evt == Venc::Event::FrameReady) {

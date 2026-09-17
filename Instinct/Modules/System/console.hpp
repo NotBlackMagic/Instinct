@@ -1,3 +1,12 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:	Instinct/Modules/System/console.hpp
+ * Author:	NotBlackMagic
+ * Brief:	System console/shell thread.
+ */
+
 #pragma once
 
 #include "tx_api.h"

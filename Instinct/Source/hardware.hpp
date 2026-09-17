@@ -110,7 +110,7 @@ extern I2C i2c1;
 extern I2C i2c2;
 extern I2C i2c4;
 
-// extern I3C i3c1;
+extern I3C i3c1;
 extern I3C i3c2;
 
 extern SD::Config sdConfig;

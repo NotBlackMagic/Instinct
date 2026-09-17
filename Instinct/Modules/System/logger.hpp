@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/System/logger.hpp
- * Author:  NotBlackMagic
- * Brief:   System logger, write log messages to console, SD card and telemetry.
+ * File:	Instinct/Modules/System/logger.hpp
+ * Author:	NotBlackMagic
+ * Brief:	System logger, write log messages to console, SD card and telemetry.
  */
 
 #pragma once
@@ -22,11 +22,11 @@ class Logger {
 		enum class LogLevel : uint8_t {
 			Trace = 0,		// Noise (Register dumps, etc.)
 			Debug = 1,		// Dev info
-			Info  = 2,		// Nominal events
-			Warn  = 3,		// Watch out
+			Info = 2,		// Nominal events
+			Warn = 3,		// Watch out
 			Error = 4,		// Functionality lost
 			Fatal = 5,		// System dead/Unsafe
-			Off   = 6  
+			Off = 6
 		};
 
 		// Delete copy constructors.
@@ -78,7 +78,7 @@ class Logger {
 // Helpers/shortcodes for logging specific message types
 #define LOG_TRACE(...)		Logger::Instance().Log(Logger::LogLevel::Trace, __FILE__, __LINE__, __VA_ARGS__)
 #define LOG_DEBUG(...)		Logger::Instance().Log(Logger::LogLevel::Debug, __FILE__, __LINE__, __VA_ARGS__)
-#define LOG_INFO(...) 		Logger::Instance().Log(Logger::LogLevel::Info,  nullptr, 0, __VA_ARGS__)
-#define LOG_WARN(...) 		Logger::Instance().Log(Logger::LogLevel::Warn,  __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_INFO(...) 		Logger::Instance().Log(Logger::LogLevel::Info, nullptr, 0, __VA_ARGS__)
+#define LOG_WARN(...) 		Logger::Instance().Log(Logger::LogLevel::Warn, __FILE__, __LINE__, __VA_ARGS__)
 #define LOG_ERR(...) 		Logger::Instance().Log(Logger::LogLevel::Error, __FILE__, __LINE__, __VA_ARGS__)
 #define LOG_FATAL(...)		Logger::Instance().Log(Logger::LogLevel::Fatal, __FILE__, __LINE__, __VA_ARGS__)

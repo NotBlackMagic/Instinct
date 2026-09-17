@@ -30,6 +30,20 @@
 /// @brief Driver for the STM32 Hardware VENC (H.264) Codec.
 class Venc {
 	public:
+		/// @brief VENC driver statistics.
+		struct Statistics {
+			uint32_t encodedFrames = 0;
+			uint32_t hwErrors = 0;
+
+			// Frame-level stats
+			uint64_t lastFrameEndTimestamp = 0;
+			uint32_t lastFrameBytes = 0;
+
+			// Slice-level stats
+			uint64_t lastSliceEndTimestamp = 0;
+			uint32_t lastSliceBytes = 0;
+		};
+
 		/// @brief Used VENC encoder/decoder mode.
 		enum class Codec : uint32_t {
 			H264 = 0,
@@ -173,6 +187,44 @@ class Venc {
 		/// @brief Triggers a peripheral reset to recover from fuse/desync errors.
 		void Reset();
 
+		/// @brief Returns driver performance statistics.
+		Statistics GetStatistics() const { return stats; }
+
+		/// @brief Updates target bitrate dynamically while streaming.
+		/// @param bps Target bitrate in bps (e.g. 2000000 for 2 Mbps).
+		Status SetBitrate(uint32_t bps);
+
+		/// @brief Sets QP boundaries or forces a fixed QP for benchmarking.
+		/// @param min		Minimum QP allowed [0..51].
+		/// @param max		Maximum QP allowed [0..51].
+		/// @param fixed	If greater than 0, disables picture RC and forces this constant QP.
+		Status SetQPBounds(uint32_t min, uint32_t max, int32_t fixed = -1);
+
+		/// @brief Changes the GOP length (cadence of I-frames).
+		/// @param len Number of frames between I-frames.
+		Status SetGOPLength(uint32_t len);
+
+		/// @brief Attaches arbitrary telemetry/metadata to the next frame as SEI user data.
+		/// @param data Pointer to raw telemetry payload.
+		/// @param size Size in bytes.
+		Status SetSEIUserData(const uint8_t* data, uint32_t size);
+
+		/// @brief Defines a Region of Interest with preferential quality.
+		/// @param top		Top MB row.
+		/// @param left		Left MB column.
+		/// @param bottom	Bottom MB row.
+		/// @param right	Right MB column.
+		/// @param delta	Negative offset to make area higher quality [-15..0].
+		Status SetROI(uint32_t top, uint32_t left, uint32_t bottom, uint32_t right, int32_t delta);
+
+		/// @brief Reconfigures structural stream parameters that require a clean SPS/PPS restart.
+		/// @param sliceSize Macroblock rows per slice (0 = whole frame).
+		/// @param gdrDuration Frames across which to distribute intra refresh (0 = disabled).
+		/// @param denoise Enable hardware Wiener filter.
+		/// @param outNewHeaders Destination buffer for the newly generated SPS/PPS.
+		/// @param outHeaderBytes Size of the generated parameter sets.
+		Status ReconfigureStream(uint32_t sliceSize, uint32_t gdrDuration, bool denoise, uint32_t* outNewHeaders, uint32_t outBufSize, uint32_t& outHeaderBytes);
+
 		/// @brief Interrupt Service Routine handler.
 		/// @warning This function is called by the NVIC. Do not call manually.
 		void InterruptHandler();
@@ -180,12 +232,17 @@ class Venc {
 		/// @brief Global singleton accessor used by C EWL bridge functions.
 		static Venc* GetInstance() { return instance; }
 
+		/// @brief Return/get current configuration.
+		Config GetConfig();
+
 		// Internal EWL Bridge Methods (Called by extern "C" EWL functions)
 		int32_t AllocateLinearMemory(uint32_t size, EWLLinearMem_t* info);
 		void FreeLinearMemory(EWLLinearMem_t* info);
 		void* AllocateMemory(uint32_t size);
 		void FreeMemory(void* ptr);
 		int32_t WaitHardwareReady(uint32_t* slicesReady);
+
+		static EWLHwConfig_t GetHWCapabilities();
 
 	private:
 		// VENC_TypeDef* instance;
@@ -195,6 +252,7 @@ class Venc {
 		uint8_t irqPriority;
 		Config config;
 		bool isInitialized;
+		Statistics stats;
 
 		// ThreadX Primitives
 		TX_MUTEX mutex;

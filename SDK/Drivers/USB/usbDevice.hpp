@@ -17,6 +17,13 @@
 
 class USBDevice {
 	public:
+		/// @brief USB core protocol and enumeration statistics.
+		struct Statistics {
+			uint32_t setupPackets = 0;
+			uint32_t controlStalls = 0;
+			uint32_t configChanges = 0;
+		};
+
 		/// @brief USB Standard Request Codes (Chapter 9).
 		enum class Code : uint8_t {
 			GetStatus = 0,
@@ -89,6 +96,12 @@ class USBDevice {
 		/// @return USB device state.
 		State GetState() const { return this->state; }
 
+		/// @brief Returns USB core device statistics.
+		Statistics GetStatistics() const { return this->stats; }
+
+		/// @brief Resets USB core device statistics counters.
+		void ResetStatistics() { this->stats = {}; }
+
 	private:
 		USB& bus;
 		Config config;
@@ -96,6 +109,7 @@ class USBDevice {
 
 		bool isInitialized;
 		uint8_t deviceAddress;
+		Statistics stats = {};
 		
 		// Memory for EP0 IN transmissions (Descriptors)
 		__attribute__((aligned(32))) uint8_t ep0TxBuffer[512];

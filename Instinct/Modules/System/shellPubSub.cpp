@@ -9,6 +9,9 @@
 
  #include "broker.hpp"
 
+static void PrintHelp() {
+}
+
  static bool CommandPubSub(const char* args) {
 	(void)args; // Ignore arguments for the basic 'topics' command
 

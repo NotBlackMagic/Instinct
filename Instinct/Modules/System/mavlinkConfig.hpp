@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/System/mavlinkConfig.hpp
- * Author:  NotBlackMagic
- * Brief:   Centralized configuration for MAVLink telemetry stream rates.
+ * File:	Instinct/Modules/System/mavlinkConfig.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Centralized configuration for MAVLink telemetry stream rates.
  */
 
 #pragma once

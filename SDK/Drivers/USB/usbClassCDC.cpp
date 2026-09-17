@@ -256,12 +256,19 @@ Status USBClassCDC::OnDataOut(USB& usb, uint8_t epNum, uint32_t len) {
 		}
 	}
 	else if(epNum == this->bulkOutEp) {
+		this->stats.rxBytes = this->stats.rxBytes + len;
+
 		// Copy the newly received data from the hardware catch buffer into our ring buffer
 		for(uint32_t i = 0; i < len; i++) {
 			if(Available() < rxBufferSize) {
 				this->rxBuffer[this->rxBufHead] = this->epOutBuffer[i];
 				this->rxBufHead = (this->rxBufHead + 1) % this->rxBufferSize;
 			}
+		}
+
+		uint32_t currentRx = Available();
+		if(currentRx > this->stats.rxBufferWatermark) {
+			this->stats.rxBufferWatermark = currentRx;
 		}
 
 		// Re-prime the endpoint to receive the next packet into the catch buffer
@@ -292,11 +299,23 @@ Status USBClassCDC::Write(const uint8_t* buf, uint32_t len) {
 
 	uint32_t bytesToWrite = (len > freeSpace) ? freeSpace : len;
 
+	// Track dropped bytes if buffer cannot fit the whole write
+	if(len > freeSpace) {
+		this->stats.txDroppedBytes += (len - freeSpace);
+	}
+
 	// Push application data into the TX ring buffer
 	for(uint32_t i = 0; i < bytesToWrite; i++) {
 		this->txBuffer[this->txBufHead] = buf[i];
 		this->txBufHead = (this->txBufHead + 1) % this->txBufferSize;
 	}
+
+	// Update queue watermark
+	uint32_t totalQueued = itemsInQueue + bytesToWrite;
+	if(totalQueued > this->stats.txBufferWatermark) {
+		this->stats.txBufferWatermark = totalQueued;
+	}
+	this->stats.txBytes = this->stats.txBytes + bytesToWrite;
 
 	// Kickstart the transmission pipeline
 	if(bytesToWrite > 0) {

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/i2c.cpp
+ * File:	SDK/MCU/i2c.cpp
  */
 
 //Reserved I2C Addresses List (https://www.ti.com/content/dam/videos/external-videos/en-us/8/3816841626001/6241024036001.mp4/subassets/adcs-introduction-to-i2c-reserved-addresses-presentation.pdf)
@@ -20,6 +20,8 @@
 I2C::I2C(I2C_TypeDef *instance) {
 	this->instance = instance;
 	this->irqPriority = 0x0E; // Lowest priority (safe default)
+	this->isInitialized = false;
+	this->transferHasError = false;
 }
 
 Status I2C::Init(const Config &config) {
@@ -124,6 +126,7 @@ uint8_t I2C::Probe(uint16_t addr) {
 	}
 
 	// Clear event flags
+	this->transferHasError = false;
 	tx_event_flags_set(&this->event, 0, TX_AND);
 
 	this->address = addr << 1;
@@ -139,16 +142,20 @@ uint8_t I2C::Probe(uint16_t addr) {
 
 	// Wait for event (STOP or NACK)
 	ULONG events;
-	tx_event_flags_get(&this->event, EVT_TRANS_CPLT | EVT_ERR, TX_OR_CLEAR, &events, TX_WAIT_FOREVER);
-
-	uint8_t nack = 0x00;
-	if((events & EVT_ERR) == EVT_ERR) {
-		nack = 0x01;
+	UINT status = tx_event_flags_get(&this->event, EVT_TRANS_CPLT | EVT_ERR, TX_OR_CLEAR, &events, 10);
+	if(status != TX_SUCCESS) {
+		this->TransferAbort();
+		return 0x00;
 	}
 
 	// Disable interrupts again
 	LL_I2C_DisableIT_NACK(this->instance);
 	LL_I2C_DisableIT_STOP(this->instance);
+
+	uint8_t nack = 0x00;
+	if((events & EVT_ERR) == EVT_ERR) {
+		nack = 0x01;
+	}
 
 	// Release I2C device
 	if(tx_mutex_put(&this->mutex) != TX_SUCCESS) {
@@ -178,11 +185,13 @@ Status I2C::TransferAsync(uint16_t addr, const uint8_t *txBuf, uint16_t txLen, u
 		if((Time::GetUs() - timestamp) > TIMEOUT_BUSY_US) {
 			// Wait for Busy timeout
 			tx_mutex_put(&this->mutex);
+			this->stats.timeouts = this->stats.timeouts + 1;
 			return Status::Busy;
 		}
 	}
 
 	// Clear event flags
+	this->transferHasError = false;
 	tx_event_flags_set(&this->event, 0, TX_AND);
 
 	// Prepare internal transfer variables
@@ -193,8 +202,8 @@ Status I2C::TransferAsync(uint16_t addr, const uint8_t *txBuf, uint16_t txLen, u
 	this->rxLength = rxLen;
 
 	uint32_t transferMode;
-	if (this->rxLength > 0 && this->txLength > 0) {
-		// TX followed by RX, use  Repeated Start (SoftEnd)
+	if(this->rxLength > 0 && this->txLength > 0) {
+		// TX followed by RX, use Repeated Start (SoftEnd)
 		transferMode = LL_I2C_MODE_SOFTEND;
 		LL_I2C_EnableIT_TC(this->instance);
 	}
@@ -226,16 +235,18 @@ Status I2C::TransferWait(uint32_t timeoutTicks) {
 	UINT status = tx_event_flags_get(&this->event, EVT_TRANS_CPLT | EVT_ERR, TX_OR_CLEAR, &events, timeoutTicks);
 
 	if(status != TX_SUCCESS) {
+		this->stats.timeouts = this->stats.timeouts + 1;
 		this->TransferAbort();
 		return Status::Timeout;
 	}
 
-	if((events & EVT_ERR) == EVT_ERR) {
+	if((events & EVT_ERR) == EVT_ERR || this->transferHasError == true) {
 		// Transfer error occurred
 		this->TransferAbort();
 		return Status::Error;
 	}
 
+	this->stats.completedTransfers = this->stats.completedTransfers + 1;
 	tx_mutex_put(&this->mutex);
 	return Status::Ok;
 }
@@ -244,14 +255,15 @@ Status I2C::TransferAbort() {
 	// Disable interrupts
 	LL_I2C_DisableIT_TX(this->instance);
 	LL_I2C_DisableIT_RX(this->instance);
+	LL_I2C_DisableIT_TC(this->instance);
 	LL_I2C_DisableIT_STOP(this->instance);
 	LL_I2C_DisableIT_NACK(this->instance);
 	// LL_I2C_DisableIT_ERR(this->instance);
 
 	// Stop current transfer if any
-	if (LL_I2C_IsActiveFlag_BUSY(this->instance) == 0x01) {
-        LL_I2C_GenerateStopCondition(this->instance);
-    }
+	if(LL_I2C_IsActiveFlag_BUSY(this->instance) == 0x01) {
+		LL_I2C_GenerateStopCondition(this->instance);
+	}
 
 	// Disable peripheral
 	LL_I2C_Disable(this->instance);
@@ -267,7 +279,7 @@ Status I2C::TransferAbort() {
 	LL_I2C_Enable(this->instance);
 
 	// Signal event flags and release mutex
-	tx_event_flags_set(&this->event, EVT_TRANS_CPLT, TX_OR);
+	tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
 	tx_mutex_put(&this->mutex);
 
 	return Status::Ok;
@@ -278,9 +290,31 @@ Status I2C::TransferAbort() {
 // ---------------------------------------------------------
 
 void I2C::InterruptHandler() {
+	// Handle Bus Errors (BERR, ARLO, OVR)
+	if(LL_I2C_IsActiveFlag_BERR(this->instance) || LL_I2C_IsActiveFlag_ARLO(this->instance)) {
+		this->transferHasError = true;
+		this->stats.busErrors = this->stats.busErrors + 1;
+
+		LL_I2C_DisableIT_TX(this->instance);
+		LL_I2C_DisableIT_RX(this->instance);
+		LL_I2C_DisableIT_TC(this->instance);
+
+		tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
+		LL_I2C_ClearFlag_BERR(this->instance);
+		LL_I2C_ClearFlag_ARLO(this->instance);
+		return;
+	}
+
 	// Handle NACK
 	if(LL_I2C_IsActiveFlag_NACK(this->instance) == 0x01) {
 		// NACK received, stop transaction and flag error
+		this->transferHasError = true;
+		this->stats.nackErrors = this->stats.nackErrors + 1;
+
+		LL_I2C_DisableIT_TX(this->instance);
+		LL_I2C_DisableIT_RX(this->instance);
+		LL_I2C_DisableIT_TC(this->instance);
+
 		LL_I2C_GenerateStopCondition(this->instance);
 		tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
 		LL_I2C_ClearFlag_NACK(this->instance);
@@ -306,7 +340,7 @@ void I2C::InterruptHandler() {
 
 	// Handle Transfer Complete (TC)
 	if(LL_I2C_IsEnabledIT_TC(this->instance) == 0x01 && LL_I2C_IsActiveFlag_TC(this->instance) == 0x01) {
-		if (this->rxLength > 0) {
+		if(this->rxLength > 0) {
 			// Generate REPEATED START for Reading
 			LL_I2C_HandleTransfer(this->instance, this->address, LL_I2C_ADDRSLAVE_7BIT, this->rxLength, LL_I2C_MODE_AUTOEND, LL_I2C_GENERATE_START_READ);
 			
@@ -323,7 +357,13 @@ void I2C::InterruptHandler() {
 	if(LL_I2C_IsActiveFlag_STOP(this->instance) == 0x01) {
 		LL_I2C_DisableIT_TX(this->instance);
 		LL_I2C_DisableIT_RX(this->instance);
-		tx_event_flags_set(&this->event, EVT_TRANS_CPLT, TX_OR);
+		LL_I2C_DisableIT_TC(this->instance);
+		LL_I2C_DisableIT_STOP(this->instance);
+		LL_I2C_DisableIT_NACK(this->instance);
+
+		if(this->transferHasError == false) {
+			tx_event_flags_set(&this->event, EVT_TRANS_CPLT, TX_OR);
+		}
 		LL_I2C_ClearFlag_STOP(this->instance);
 	}
 }

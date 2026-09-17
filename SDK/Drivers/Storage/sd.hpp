@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/Drivers/Storage/sd.hpp
- * Author:  NotBlackMagic
- * Brief:   SD Card driver class for STM32N6.
+ * File:	SDK/Drivers/Storage/sd.hpp
+ * Author:	NotBlackMagic
+ * Brief:	SD Card driver class for STM32N6.
  */
 
 #pragma once
@@ -79,6 +79,20 @@ class SD {
 										// ACMD53: For SD I/O card only, reserved for security specification.
 		};
 
+		/// @brief SD card transfer metrics and latency statistics.
+		struct Statistics {
+			uint64_t sectorsRead = 0;
+			uint64_t sectorsWritten = 0;
+			uint32_t readErrors = 0;
+			uint32_t writeErrors = 0;
+
+			// Microsecond latency profiling
+			uint32_t lastReadTimeUs = 0;
+			uint32_t maxReadTimeUs = 0;
+			uint32_t lastWriteTimeUs = 0;
+			uint32_t maxWriteTimeUs = 0; // Captures worst-case internal card flash GC stall
+		};
+
 		/// @brief SD card states.
 		enum class CardState : uint8_t {
 			Idle = 0,
@@ -95,9 +109,9 @@ class SD {
 
 		/// @brief SD bus configuration structure.
 		struct Config {
-			bool use4BitMode;       ///< True: Switch to 4-bit bus (ACMD6) after init.
+			bool use4BitMode;		///< True: Switch to 4-bit bus (ACMD6) after init.
 			bool use1V8Level;		///< True: Switch to 1.8 V if supported by card.
-			bool useHighSpeed;      ///< True: Switch to High Speed (50MHz) if supported by card.
+			bool useHighSpeed;		///< True: Switch to High Speed (50MHz) if supported by card.
 			bool useUHS;			///< True: Switch to Ultra-High Speed if supported by card.
 			GPIO* vioSelectPin;		///< GPIO that controls the Voltage selection switch, if exist.
 		};
@@ -136,8 +150,7 @@ class SD {
 		SD(SDMMC& sdmmc);
 
 		/// @brief Initializes the card.
-		/// @details Performs the full Power-On -> Idle -> Ready -> Transfer sequence.
-		///          Negotiates voltage, bus width, and speed.
+		/// @details Performs the full Power-On -> Idle -> Ready -> Transfer sequence. Negotiates voltage, bus width, and speed.
 		/// @param config SD card configuration.
 		/// @return Status::Ok if initialization succeeded, or Status::Error if the config was invalid.
 		Status Init(const Config &config);
@@ -176,23 +189,30 @@ class SD {
 
 		/// @brief Gets the current card state (Transfer, Programming, etc.) via CMD13.
 		/// @return Current card state.
-        CardState GetCardState(void);
+		CardState GetCardState(void);
 
 		/// @brief Checks if the card is currently busy (Programming/Receiving).
-        /// @return True if busy, False if ready for commands.
-        bool IsCardBusy(void);
+		/// @return True if busy, False if ready for commands.
+		bool IsCardBusy(void);
 
 		/// @brief Helper to wait for card not busy, with timeout and yielding to RTOS´
 		/// @param timeoutMs Max wait time in ms.
 		bool WaitCardBusy(uint32_t timeoutMs);
+
+		/// @brief Returns SD block transfer statistics.
+		Statistics GetStatistics() const { return this->stats; }
+
+		/// @brief Resets SD block transfer statistics.
+		void ResetStatistics() { this->stats = {}; }
 
 	private:
 		SDMMC& bus;
 		Config config;
 		CardInfo cardInfo;
 
-		uint16_t RCA;           ///< Relative Card Address (Assigned by card during init)
+		uint16_t RCA;			///< Relative Card Address (Assigned by card during init)
 		bool isInitialized;
+		Statistics stats = {};
 		__attribute__((aligned(32))) uint32_t statusBuf[16];
 
 		/// @brief Sends an Application Command (ACMD).

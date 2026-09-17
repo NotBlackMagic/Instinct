@@ -1,3 +1,12 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:	Instinct/Modules/System/shell.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Console shell, with distributed shell command registry.
+ */
+
 #pragma once
 
 #include <stdarg.h>

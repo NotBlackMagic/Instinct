@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/i2c.hpp
- * Author:  NotBlackMagic
- * Brief:   I2C driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
+ * File:	SDK/MCU/i2c.hpp
+ * Author:	NotBlackMagic
+ * Brief:	I2C driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
 #pragma once
@@ -23,9 +23,17 @@
 #include "tx_api.h"
 
 /// @brief Driver for the I2C peripheral supporting Blocking and Async (Interrupt) modes.
-/// @note  This driver integrates with ThreadX mutexes for thread safety.
+/// @note This driver integrates with ThreadX mutexes for thread safety.
 class I2C {
 	public:
+		/// @brief Low-level I2C hardware and bus event statistics.
+		struct Statistics {
+			uint32_t completedTransfers;
+			uint32_t nackErrors;
+			uint32_t busErrors;
+			uint32_t timeouts;
+		};
+		
 		/// @brief Defines the I2C bus speed.
 		enum class Mode {
 			Standard,		///< 100kHz (Standard Mode)
@@ -58,13 +66,13 @@ class I2C {
 		uint8_t Probe(uint16_t addr);
 		
 		/// @brief Starts a non-blocking transaction (Write, Read, or Write-then-Read).
-		/// @note  This function blocks momentarily if the BUS is busy, then returns.
+		/// @note This function blocks momentarily if the BUS is busy, then returns.
 		/// @details Returns immediately. Use TransferWait() to synchronize completion.
-		/// @param addr   7-bit slave address.
-		/// @param txBuf  Pointer to data to write (need to be kept until end of transfer).
-		/// @param txLen  Number of bytes to write.
-		/// @param rxBuf  Pointer to buffer for read data.
-		/// @param rxLen  Number of bytes to read.
+		/// @param addr		7-bit slave address.
+		/// @param txBuf	Pointer to data to write (need to be kept until end of transfer).
+		/// @param txLen	Number of bytes to write.
+		/// @param rxBuf	Pointer to buffer for read data.
+		/// @param rxLen	Number of bytes to read.
 		/// @return Status::Ok if the transfer started, or Status::Busy if the I2C is locked by another thread.
 		Status TransferAsync(uint16_t addr, const uint8_t *txBuf, uint16_t txLen, uint8_t *rxBuf, uint16_t rxLen);
 		
@@ -77,6 +85,12 @@ class I2C {
 		/// @return Status::Ok
 		Status TransferAbort();
 
+		/// @brief Returns I2C bus statistics.
+		Statistics GetStatistics() const { return this->stats; }
+
+		/// @brief Resets I2C bus statistics counters.
+		void ResetStatistics() { this->stats = {}; }
+
 		/// @brief Interrupt Service Routine handler.
 		/// @warning This function is called by the NVIC. Do not call manually.
 		void InterruptHandler();
@@ -87,6 +101,8 @@ class I2C {
 		uint8_t irqPriority;
 
 		bool isInitialized;
+		volatile bool transferHasError;
+		Statistics stats{};
 
 		// Transaction Context
 		uint8_t address;
@@ -104,6 +120,6 @@ class I2C {
 		static constexpr uint32_t EVT_ERR = 0x02;
 
 		// Timeout defines
-		static constexpr uint32_t TIMEOUT_BUSY_US = 25;
+		static constexpr uint32_t TIMEOUT_BUSY_US = 1500;
 		static constexpr uint32_t TIMEOUT_MUTEX = TX_WAIT_FOREVER;
 };

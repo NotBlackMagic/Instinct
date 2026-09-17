@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/usb.cpp
+ * File:	SDK/MCU/usb.cpp
  */
 
 #include "usb.hpp"
@@ -29,8 +29,8 @@ Status USB::Init(const Config &config) {
 		USB1_HS_PHYC->USBPHYC_CR &= ~(0x7 << 0x4);
 
 		USB1_HS_PHYC->USBPHYC_CR |= (0x1 << 16) |
-									(0x1 << 4)  |
-									(0x1 << 2)  |
+									(0x1 << 4) |
+									(0x1 << 2) |
 										0x1U;
 	}
 	else if(this->instance == USB2_OTG_HS) {
@@ -643,6 +643,7 @@ void USB::HandleEpInInterrupt() {
 
 			// Timeout
 			if((epInt & USB_OTG_DIEPINT_TOC) == USB_OTG_DIEPINT_TOC) {
+				this->stats.txTimeouts = this->stats.txTimeouts + 1;
 				// Clear flag
 				WRITE_REG(inEp->DIEPINT, USB_OTG_DIEPINT_TOC);
 			}
@@ -1056,6 +1057,7 @@ void USB::InterruptHandler() {
 
 	// Handle Start of Frame (SOF)
 	if(((this->irqStatus & USB_OTG_GINTSTS_SOF) == USB_OTG_GINTSTS_SOF)) {
+		this->stats.sofCount = this->stats.sofCount + 1;
 		// Clear flags
 		WRITE_REG(this->instance->GINTSTS, USB_OTG_GINTSTS_SOF);
 		
@@ -1067,6 +1069,7 @@ void USB::InterruptHandler() {
 
 	// Handle Incomplete Isochronous IN Transfer (IISOIXFR)
 	if(((this->irqStatus & USB_OTG_GINTSTS_IISOIXFR) == USB_OTG_GINTSTS_IISOIXFR)) {
+		this->stats.isoIncomplete = this->stats.isoIncomplete + 1;
 		// Clear flags
 		WRITE_REG(this->instance->GINTSTS, USB_OTG_GINTSTS_IISOIXFR);
 
@@ -1086,12 +1089,14 @@ void USB::InterruptHandler() {
 
 	// Handle Incomplete Isochronous OUT Transfer (PXFR_INCOMPISOOUT)
 	if(((this->irqStatus & USB_OTG_GINTSTS_PXFR_INCOMPISOOUT) == USB_OTG_GINTSTS_PXFR_INCOMPISOOUT)) {
+		this->stats.isoIncomplete = this->stats.isoIncomplete + 1;
 		// Clear flags
 		WRITE_REG(this->instance->GINTSTS, USB_OTG_GINTSTS_PXFR_INCOMPISOOUT);
 	}
 
 	// Handle Bus Reset (USBRST)
 	if(((this->irqStatus & USB_OTG_GINTSTS_USBRST) == USB_OTG_GINTSTS_USBRST)) {
+		this->stats.busResets = this->stats.busResets + 1;
 		// Clear flags
 		WRITE_REG(this->instance->GINTSTS, USB_OTG_GINTSTS_USBRST);
 
@@ -1177,6 +1182,7 @@ void USB::InterruptHandler() {
 
 	// Handle Suspend (USBSUSP) and Resume (WKUINT)
 	if(((this->irqStatus & USB_OTG_GINTSTS_WKUINT) == USB_OTG_GINTSTS_WKUINT)) {
+		this->stats.resumeEvents = this->stats.resumeEvents + 1;
 		// Clear flags
 		WRITE_REG(this->instance->GINTSTS, USB_OTG_GINTSTS_WKUINT);
 		if(this->config.EventCallback != nullptr) {
@@ -1184,6 +1190,7 @@ void USB::InterruptHandler() {
 		}
 	}
 	if(((this->irqStatus & USB_OTG_GINTSTS_USBSUSP) == USB_OTG_GINTSTS_USBSUSP)) {
+		this->stats.suspendEvents = this->stats.suspendEvents + 1;
 		// Clear flags
 		WRITE_REG(this->instance->GINTSTS, USB_OTG_GINTSTS_USBSUSP);
 		if(this->config.EventCallback != nullptr) {

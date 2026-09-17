@@ -2,14 +2,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/System/shellCommands.cpp
+ * File:	Instinct/Modules/System/shellCommands.cpp
  */
 
 #include "shellModules.hpp"
 
 extern char _stext[], _etext[];
 extern char _sdata[], _edata[];
-extern char _sbss[],  _ebss[];
+extern char _sbss[], _ebss[];
 extern char _estack[];
 // extern char __snoncacheable[], __enoncacheable[];
 extern char _srom[], _erom[];
@@ -113,7 +113,7 @@ static bool CommandMemory(const char* args) {
 
 	// Dynamic memory stuff
 	uint32_t stackTotal = (uint32_t)_estack - (uint32_t)_ebss;
-	uint32_t stackUsed  = (uint32_t)_estack - __get_MSP();
+	uint32_t stackUsed = (uint32_t)_estack - __get_MSP();
 
 	// External memory stuff
 	uint32_t psramUsed = externalPSRAM.GetUsedSize();
@@ -201,7 +201,7 @@ static bool CommandRTOS(const char* args) {
 
 	//Iterate through thread list
 	TX_THREAD* startThread = thread;
-    char buffer[128];
+	char buffer[128];
 
 	do {		
 		uint32_t stackSize = thread->tx_thread_stack_size;
@@ -236,7 +236,7 @@ static bool CommandRTOS(const char* args) {
 			(unsigned long)usagePercent,
 			(unsigned long)thread->tx_thread_run_count,
 			(unsigned long)(cpuPercent / 10), 
-            (unsigned long)(cpuPercent % 10)
+			(unsigned long)(cpuPercent % 10)
 		);
 
 		Logger::Instance().Write(buffer);
@@ -297,7 +297,7 @@ static const Shell::CommandEntry systemCommands[] {
 	{ "clear",CommandClear,	"Clear terminal" },
 
 	// System status commands
-	{"info",		CommandInfo, "Board & FW info" },
+	{ "info",		CommandInfo, "Board & FW info" },
 	{ "version",	CommandVersion,"Firmware info" },
 	{ "status",	CommandStatus,	"System stats" },
 	{ "ps",		CommandRTOS,	"Thread status" },
@@ -317,5 +317,5 @@ static const Shell::CommandEntry systemCommands[] {
 static Shell::CommandList systemShellNode;
 
 void RegisterSystemCommands() {
-    Shell::RegisterCommands(&systemShellNode, systemCommands); //Register the table defined below
+	Shell::RegisterCommands(&systemShellNode, systemCommands); //Register the table defined below
 }

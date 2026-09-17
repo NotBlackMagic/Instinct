@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/System/loggerThread.cpp
+ * File:	Instinct/Modules/System/loggerThread.cpp
  */
 
 #include "loggerThread.hpp"

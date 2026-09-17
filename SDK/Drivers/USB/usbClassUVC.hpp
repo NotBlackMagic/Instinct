@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/Drivers/USB/usbClassUVC.hpp
- * Author:  NotBlackMagic
- * Brief:   UVC (USB Video Class) Class Driver
+ * File:	SDK/Drivers/USB/usbClassUVC.hpp
+ * Author:	NotBlackMagic
+ * Brief:	UVC (USB Video Class) Class Driver
  */
 
 #pragma once
@@ -20,6 +20,17 @@
 
 class USBClassUVC : public USBClass {
 	public:
+		/// @brief UVC streaming and frame drain statistics.
+		struct Statistics {
+			uint32_t submittedFrames = 0;
+			uint32_t completedFrames = 0;
+			uint32_t droppedFrames = 0;
+			uint64_t transferredBytes = 0;
+			uint32_t lastFrameBytes = 0;
+			uint32_t lastDrainTimeUs = 0;
+			uint32_t maxDrainTimeUs = 0;	// Peak time USB host took to drain a frame
+		};
+
 		/// @brief Processing Unit Controls (Image Adjustments)
 		struct PUControl {
 			static constexpr uint32_t None					= 0;
@@ -48,21 +59,21 @@ class USBClassUVC : public USBClass {
 		struct PUSelector {
 				static constexpr uint8_t BacklightCompensation	= 0x01;
 				static constexpr uint8_t Brightness				= 0x02;
-				static constexpr uint8_t Contrast               = 0x03;
-				static constexpr uint8_t Gain                   = 0x04;
-				static constexpr uint8_t PowerLineFrequency     = 0x05;
-				static constexpr uint8_t Hue                    = 0x06;
-				static constexpr uint8_t Saturation             = 0x07;
-				static constexpr uint8_t Sharpness              = 0x08;
-				static constexpr uint8_t Gamma                  = 0x09;
-				static constexpr uint8_t WhiteBalanceTemp       = 0x0A; // Matches Manual slider
-				static constexpr uint8_t WhiteBalanceTempAuto   = 0x0B; // THIS WAS 0x0F - FIX IT
-				static constexpr uint8_t WhiteBalanceComponent  = 0x0C; // THIS WAS 0x0B - FIX IT
-				static constexpr uint8_t WhiteBalanceCompAuto   = 0x0D; // THIS WAS 0x10 - FIX IT
-				static constexpr uint8_t DigitalMultiplier      = 0x0E;
+				static constexpr uint8_t Contrast				= 0x03;
+				static constexpr uint8_t Gain					= 0x04;
+				static constexpr uint8_t PowerLineFrequency		= 0x05;
+				static constexpr uint8_t Hue					= 0x06;
+				static constexpr uint8_t Saturation				= 0x07;
+				static constexpr uint8_t Sharpness				= 0x08;
+				static constexpr uint8_t Gamma					= 0x09;
+				static constexpr uint8_t WhiteBalanceTemp		= 0x0A; // Matches Manual slider
+				static constexpr uint8_t WhiteBalanceTempAuto	= 0x0B; // THIS WAS 0x0F - FIX IT
+				static constexpr uint8_t WhiteBalanceComponent	= 0x0C; // THIS WAS 0x0B - FIX IT
+				static constexpr uint8_t WhiteBalanceCompAuto	= 0x0D; // THIS WAS 0x10 - FIX IT
+				static constexpr uint8_t DigitalMultiplier		= 0x0E;
 				static constexpr uint8_t DigitalMultiplierLimit = 0x0F;
-				static constexpr uint8_t HueAuto                = 0x10;
-				static constexpr uint8_t ContrastAuto           = 0x11;
+				static constexpr uint8_t HueAuto				= 0x10;
+				static constexpr uint8_t ContrastAuto			= 0x11;
 		};
 
 		/// @brief Input Terminal Controls (Sensor/Lens Adjustments)
@@ -92,26 +103,26 @@ class USBClassUVC : public USBClass {
 
 		/// @brief Input Terminal Control Selectors (Used in Setup Packets)
 		struct ITSelector {
-			static constexpr uint8_t ScanningMode           = 0x01;
-			static constexpr uint8_t AutoExposureMode       = 0x02;
-			static constexpr uint8_t AutoExposurePriority   = 0x03;
-			static constexpr uint8_t ExposureTimeAbsolute   = 0x04;
-			static constexpr uint8_t ExposureTimeRelative   = 0x05;
-			static constexpr uint8_t FocusAbsolute          = 0x06;
-			static constexpr uint8_t FocusRelative          = 0x07;
-			static constexpr uint8_t IrisAbsolute           = 0x08;
-			static constexpr uint8_t IrisRelative           = 0x09;
-			static constexpr uint8_t ZoomAbsolute           = 0x0A;
-			static constexpr uint8_t ZoomRelative           = 0x0B;
-			static constexpr uint8_t PanTiltAbsolute        = 0x0C;
-			static constexpr uint8_t PanTiltRelative        = 0x0D;
-			static constexpr uint8_t RollAbsolute           = 0x0E;
-			static constexpr uint8_t RollRelative           = 0x0F;
-			static constexpr uint8_t FocusAuto              = 0x11;
-			static constexpr uint8_t Privacy                = 0x12;
-			static constexpr uint8_t FocusSimple            = 0x13;
-			static constexpr uint8_t Window                 = 0x14;
-			static constexpr uint8_t RegionOfInterest       = 0x15;
+			static constexpr uint8_t ScanningMode			= 0x01;
+			static constexpr uint8_t AutoExposureMode		= 0x02;
+			static constexpr uint8_t AutoExposurePriority	= 0x03;
+			static constexpr uint8_t ExposureTimeAbsolute	= 0x04;
+			static constexpr uint8_t ExposureTimeRelative	= 0x05;
+			static constexpr uint8_t FocusAbsolute			= 0x06;
+			static constexpr uint8_t FocusRelative			= 0x07;
+			static constexpr uint8_t IrisAbsolute			= 0x08;
+			static constexpr uint8_t IrisRelative			= 0x09;
+			static constexpr uint8_t ZoomAbsolute			= 0x0A;
+			static constexpr uint8_t ZoomRelative			= 0x0B;
+			static constexpr uint8_t PanTiltAbsolute		= 0x0C;
+			static constexpr uint8_t PanTiltRelative		= 0x0D;
+			static constexpr uint8_t RollAbsolute			= 0x0E;
+			static constexpr uint8_t RollRelative			= 0x0F;
+			static constexpr uint8_t FocusAuto				= 0x11;
+			static constexpr uint8_t Privacy				= 0x12;
+			static constexpr uint8_t FocusSimple			= 0x13;
+			static constexpr uint8_t Window					= 0x14;
+			static constexpr uint8_t RegionOfInterest		= 0x15;
 		};
 
 		/// @brief UVC Probe/Commit Negotiation Structure.
@@ -175,7 +186,7 @@ class USBClassUVC : public USBClass {
 			uint32_t itControls;		///< Supported/implemented Input Terminal Controls
 
 			UVCControlState* puControlRegistry;		///< Pointer to the application's array of PU controls
-			uint8_t numPUControls;       			///< Number of controls in the array
+			uint8_t numPUControls;					///< Number of controls in the array
 
 			UVCControlState* itControlRegistry;		///< Pointer to the application's array of IT controls
 			uint8_t numITControls;					///< Number of controls in the array
@@ -281,6 +292,12 @@ class USBClassUVC : public USBClass {
 		/// @return Status::Ok if successfully submitted, Status::Busy if still transmitting previous frame.
 		Status SubmitFrame(const VisionFrame* frame, const VisionFrame* frameHeader = nullptr);
 
+		/// @brief Returns UVC driver statistics.
+		Statistics GetStatistics() const { return this->stats; }
+
+		/// @brief Resets UVC driver statistics counters.
+		void ResetStatistics() { this->stats = {}; }
+
 	private:
 		// Dynamically assigned resources
 		uint8_t commInterface;
@@ -296,6 +313,9 @@ class USBClassUVC : public USBClass {
 		uint8_t pendingRequestType;
 		__attribute__((aligned(32))) uint8_t controlPayload[32]; // Buffer for getting/setting camera control data
 		uint8_t frameIdToggle;
+		Statistics stats = {};
+		uint64_t frameStartUs = 0;
+		bool eofPacketSent = false;
 
 		// 26-byte UVC 1.0 Probe/Commit control structure
 		__attribute__((aligned(32))) uint8_t probeCommitBytes[64];

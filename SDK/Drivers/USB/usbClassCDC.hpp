@@ -17,6 +17,15 @@
 
 class USBClassCDC : public USBClass {
 	public:
+		/// @brief USB CDC (Virtual COM Port) throughput and buffer statistics.
+		struct Statistics {
+			uint64_t txBytes = 0;
+			uint64_t rxBytes = 0;
+			uint32_t txDroppedBytes = 0;
+			uint32_t txBufferWatermark = 0;    // Peak bytes queued in TX ring buffer
+			uint32_t rxBufferWatermark = 0;    // Peak bytes queued in RX ring buffer
+		};
+
 		/// @brief Defines the USB CDC (Virtual COM) data width.
 		enum class DataBits : uint8_t {
 			DataBits_5 = 0,
@@ -139,6 +148,12 @@ class USBClassCDC : public USBClass {
 		/// @brief Get number of bytes available to read from internal ring buffer.
 		/// @return Number of bytes read.
 		uint32_t Available();
+
+		/// @brief Returns CDC driver statistics.
+		Statistics GetStatistics() const { return this->stats; }
+
+		/// @brief Resets CDC driver statistics counters.
+		void ResetStatistics() { this->stats = {}; }
 		
 	private:
 		// Dynamically assigned resources
@@ -147,6 +162,7 @@ class USBClassCDC : public USBClass {
 		uint8_t intInEp;
 		uint8_t bulkInEp;
 		uint8_t bulkOutEp;
+		Statistics stats = {};
 
 		// Device state
 		// Minimum EP0 size that can be used is 64 bytes, ensure enough buffer size to no overwrite next variables in memory (CRITICAl in DMA mode)

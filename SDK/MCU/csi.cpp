@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/csi.cpp
+ * File:	SDK/MCU/csi.cpp
  */
 
 #include "csi.hpp"
@@ -200,7 +200,7 @@ Status Csi::ConfigureVirtualChannel(VirtualChannel vc, MIPIDataType dataType) {
 	// Data type formats:
 	// 0x0: (BPP6) 6-bit words (for example RAW6, RGB666)
 	// 0x1: (BPP7) 7-bit words (for example RAW7)
-	// 0x2: (BPP8) 8-bit words (for example  RAW8, YUV 8 bits, RGB888, RGB444, RGB555, RGB565, JPEG)
+	// 0x2: (BPP8) 8-bit words (for example RAW8, YUV 8 bits, RGB888, RGB444, RGB555, RGB565, JPEG)
 	// 0x3: (BPP10) 10-bit words (for example RAW10, YUV 10 bits)
 	// 0x0: (BPP12) 12-bit words (for example RAW12)
 	// 0x5: (BPP14) 14-bit words (for example RAW14)
@@ -382,36 +382,52 @@ void Csi::InterruptHandler() {
 
 	// Handle End Of Frame
 	if(((sr0 & CSI_SR0_EOF3F) == CSI_SR0_EOF3F) && ((ier0 & CSI_IER0_EOF3IE) == CSI_IER0_EOF3IE)) {
+		this->stats.lastEOFTimestamp = Time::GetUs();
+		this->stats.frameDurationUs= static_cast<uint32_t>(this->stats.lastEOFTimestamp - this->stats.lastSOFTimestamp);
+		this->stats.frameCount++;
 		// Clear Interrupt
 		WRITE_REG(this->instance->FCR0, CSI_SR0_EOF3F);
 	}
 	if(((sr0 & CSI_SR0_EOF2F) == CSI_SR0_EOF2F) && ((ier0 & CSI_IER0_EOF2IE) == CSI_IER0_EOF2IE)) {
+		this->stats.lastEOFTimestamp = Time::GetUs();
+		this->stats.frameDurationUs= static_cast<uint32_t>(this->stats.lastEOFTimestamp - this->stats.lastSOFTimestamp);
+		this->stats.frameCount++;
 		// Clear Interrupt
 		WRITE_REG(this->instance->FCR0, CSI_SR0_EOF2F);
 	}
 	if(((sr0 & CSI_SR0_EOF1F) == CSI_SR0_EOF1F) && ((ier0 & CSI_IER0_EOF1IE) == CSI_IER0_EOF1IE)) {
+		this->stats.lastEOFTimestamp = Time::GetUs();
+		this->stats.frameDurationUs= static_cast<uint32_t>(this->stats.lastEOFTimestamp - this->stats.lastSOFTimestamp);
+		this->stats.frameCount++;
 		// Clear Interrupt
 		WRITE_REG(this->instance->FCR0, CSI_SR0_EOF1F);
 	}
 	if(((sr0 & CSI_SR0_EOF0F) == CSI_SR0_EOF0F) && ((ier0 & CSI_IER0_EOF0IE) == CSI_IER0_EOF0IE)) {
+		this->stats.lastEOFTimestamp = Time::GetUs();
+		this->stats.frameDurationUs= static_cast<uint32_t>(this->stats.lastEOFTimestamp - this->stats.lastSOFTimestamp);
+		this->stats.frameCount++;
 		// Clear Interrupt
 		WRITE_REG(this->instance->FCR0, CSI_SR0_EOF0F);
 	}
 
 	// Handle Start Of Frame
 	if(((sr0 & CSI_SR0_SOF3F) == CSI_SR0_SOF3F) && ((ier0 & CSI_IER0_SOF3IE) == CSI_IER0_SOF3IE)) {
+		this->stats.lastSOFTimestamp = Time::GetUs();
 		// Clear Interrupt
 		WRITE_REG(this->instance->FCR0, CSI_SR0_SOF3F);
 	}
 	if(((sr0 & CSI_SR0_SOF2F) == CSI_SR0_SOF2F) && ((ier0 & CSI_IER0_SOF2IE) == CSI_IER0_SOF2IE)) {
+		this->stats.lastSOFTimestamp = Time::GetUs();
 		// Clear Interrupt
 		WRITE_REG(this->instance->FCR0, CSI_SR0_SOF2F);
 	}
 	if(((sr0 & CSI_SR0_SOF1F) == CSI_SR0_SOF1F) && ((ier0 & CSI_IER0_SOF1IE) == CSI_IER0_SOF1IE)) {
+		this->stats.lastSOFTimestamp = Time::GetUs();
 		// Clear Interrupt
 		WRITE_REG(this->instance->FCR0, CSI_SR0_SOF1F);
 	}
 	if(((sr0 & CSI_SR0_SOF0F) == CSI_SR0_SOF0F) && ((ier0 & CSI_IER0_SOF0IE) == CSI_IER0_SOF0IE)) {
+		this->stats.lastSOFTimestamp = Time::GetUs();
 		// Clear Interrupt
 		WRITE_REG(this->instance->FCR0, CSI_SR0_SOF0F);
 	}
@@ -436,6 +452,7 @@ void Csi::InterruptHandler() {
 
 	// Handle Synchronization error
 	if(((sr0 & CSI_SR0_SYNCERRF) == CSI_SR0_SYNCERRF) && ((ier0 & CSI_IER0_SYNCERRIE) == CSI_IER0_SYNCERRIE)) {
+		this->stats.syncErrors++;
 		// Disable the interrupt
 		CLEAR_BIT(this->instance->IER0, CSI_IER0_SYNCERRIE);
 		// Clear Interrupt
@@ -462,18 +479,21 @@ void Csi::InterruptHandler() {
 
 	// Handle corrected ECC error
 	if(((sr0 & CSI_SR0_CECCERRF) == CSI_SR0_CECCERRF) && ((ier0 & CSI_IER0_CECCERRIE) == CSI_IER0_CECCERRIE)) {
+		this->stats.eccErrors++;
 		// Clear Interrupt
 		WRITE_REG(this->instance->FCR0, CSI_SR0_CECCERRF);
 	}
 
 	// Handle ECC error
 	if(((sr0 & CSI_SR0_ECCERRF) == CSI_SR0_ECCERRF) && ((ier0 & CSI_IER0_ECCERRIE) == CSI_IER0_ECCERRIE)) {
+		this->stats.eccErrors++;
 		// Clear Interrupt
 		WRITE_REG(this->instance->FCR0, CSI_SR0_ECCERRF);
 	}
 
 	// Handle CRC error
 	if(((sr0 & CSI_SR0_CRCERRF) == CSI_SR0_CRCERRF) && ((ier0 & CSI_IER0_CRCERRIE) == CSI_IER0_CRCERRIE)) {
+		this->stats.crcErrors++;
 		// Clear Interrupt
 		WRITE_REG(this->instance->FCR0, CSI_SR0_CRCERRF);
 	}

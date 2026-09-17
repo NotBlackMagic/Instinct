@@ -272,7 +272,7 @@ int main(void) {
 	System::InitSysTick();
 	tx_kernel_enter();
 
-	// We should never get here as control is now taken by the scheduler
+	// Should never get here as scheduler should now be running
 	while (1) {
 		ledRed.Toggle();
 		Time::Delay(200);

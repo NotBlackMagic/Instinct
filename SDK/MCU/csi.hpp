@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/csi.hpp
- * Author:  NotBlackMagic
- * Brief:   MIPI CSI-2 receiver driver class for STM32N6 using direct register access.
+ * File:	SDK/MCU/csi.hpp
+ * Author:	NotBlackMagic
+ * Brief:	MIPI CSI-2 receiver driver class for STM32N6 using direct register access.
  */
 
 #pragma once
@@ -18,6 +18,17 @@
 
 class Csi {
 	public:
+		/// @brief CSI driver statistics.
+		struct Statistics {
+			uint32_t frameCount = 0;
+			uint32_t crcErrors = 0;
+			uint32_t eccErrors = 0;
+			uint32_t syncErrors = 0;
+			uint64_t lastSOFTimestamp = 0;
+			uint64_t lastEOFTimestamp = 0;
+			uint32_t frameDurationUs = 0;
+		};
+
 		/// @brief Number of active data lanes.
 		enum class LaneCount : uint8_t {
 			One = 1,
@@ -106,6 +117,9 @@ class Csi {
 		/// @return Status::Ok.
 		Status GetLastPacketInfo(VirtualChannel& vc, MIPIDataType& dataType, uint16_t& data);
 
+		/// @brief Returns driver performance statistics.
+		Statistics GetStatistics() const { return stats; }
+
 		/// @brief Interrupt Service Routine handler for CSI (Line errors, ECC, CRC, etc.).
 		void InterruptHandler();
 
@@ -116,6 +130,7 @@ class Csi {
 
 		Config config;
 		bool isInitialized;
+		Statistics stats;
 
 		// Internal helper to write to the Synopsys PHY test registers
 		void WritePhyRegister(uint32_t regMsb, uint32_t regLsb, uint32_t val);

@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/System/storageThread.hpp
- * Author:  NotBlackMagic
- * Brief:   Handles storage systems i.e. the SD card and FileX for it.
+ * File:	Instinct/Modules/System/storageThread.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Handles storage systems i.e. the SD card and FileX for it.
  */
 
 #pragma once

@@ -18,15 +18,20 @@
 
 #include "system_stm32n6xx.h"
 #include "tx_thread.h"
+#include "fx_api.h"
 
 // Core System
 void RegisterSystemCommands();
 
 // Hardware Peripherals
 void RegisterI2CCommands();
+void RegisterI3CCommands();
 void RegisterGPIOCommands();
 void RegisterSerialCommands();
 void RegisterCameraCommands();
 void RegisterPWMCommands();
 void RegisterFlashCommands();
 void RegisterPubSubCommands();
+void RegisterStorageCommands();
+void RegisterVisionCommands();
+void RegisterUSBCommands();

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/i3c.cpp
+ * File:	SDK/MCU/i3c.cpp
  */
 
 #include "i3c.hpp"
@@ -111,6 +111,46 @@ Status I3C::Init(const Config &config) {
 	return Status::Ok;
 }
 
+uint8_t I3C::Probe(uint8_t addr) {
+	if(tx_mutex_get(&this->mutex, TIMEOUT_MUTEX) != TX_SUCCESS) {
+		return 0x00;
+	}
+
+	// Clear any previous frame status flags
+	LL_I3C_ClearFlag_FC(this->instance);
+	LL_I3C_ClearFlag_ERR(this->instance);
+
+	// Frame a 0-byte legacy I2C write with STOP condition
+	LL_I3C_ControllerHandleMessage(this->instance, addr, 0, LL_I3C_DIRECTION_WRITE, LL_I3C_CONTROLLER_MTYPE_LEGACY_I2C, LL_I3C_GENERATE_STOP);
+	LL_I3C_RequestTransfer(this->instance);
+
+	uint64_t timestamp = Time::GetUs();
+	while((READ_REG(this->instance->EVR) & (I3C_EVR_FCF | I3C_EVR_ERRF)) == 0U) {
+		if((Time::GetUs() - timestamp) > TIMEOUT_TRANSFER_US) {
+			this->stats.timeouts = this->stats.timeouts + 1;
+			LL_I3C_RequestTxFIFOFlush(this->instance);
+			LL_I3C_RequestRxFIFOFlush(this->instance);
+			tx_mutex_put(&this->mutex);
+			return 0x00;
+		}
+	}
+
+	uint8_t ack = 0x00;
+	if(LL_I3C_IsActiveFlag_ERR(this->instance) == 0x01) {
+		LL_I3C_ClearFlag_ERR(this->instance);
+		LL_I3C_RequestTxFIFOFlush(this->instance);
+		LL_I3C_RequestRxFIFOFlush(this->instance);
+		ack = 0x00;
+	}
+	else if(LL_I3C_IsActiveFlag_FC(this->instance) == 0x01) {
+		LL_I3C_ClearFlag_FC(this->instance);
+		ack = 0x01;
+	}
+
+	tx_mutex_put(&this->mutex);
+	return ack;
+}
+
 uint8_t I3C::AssignDynamicAddress() {
 	// Try lock I2C device
 	if(tx_mutex_get(&this->mutex, TIMEOUT_MUTEX) != TX_SUCCESS) {
@@ -174,7 +214,7 @@ uint8_t I3C::AssignDynamicAddress() {
 	return 0x00;
 }
 
-Status I3C::SendCommandAsync(BroadcastCCC ccc, uint8_t *txBuf, uint16_t txLen) {
+Status I3C::SendCommandAsync(BroadcastCCC ccc, const uint8_t *txBuf, uint16_t txLen) {
 	// Try lock I2C device
 	if(tx_mutex_get(&this->mutex, TIMEOUT_MUTEX) != TX_SUCCESS) {
 		return Status::Timeout;
@@ -194,6 +234,7 @@ Status I3C::SendCommandAsync(BroadcastCCC ccc, uint8_t *txBuf, uint16_t txLen) {
 
 		if((Time::GetUs() - timestamp) > timeoutUs) {
 			// Wait for Busy timeout
+			this->stats.timeouts = this->stats.timeouts + 1;
 			tx_mutex_put(&this->mutex);
 			return Status::Busy;
 		}
@@ -243,6 +284,7 @@ Status I3C::SendCommandAsync(BroadcastCCC ccc, uint8_t *txBuf, uint16_t txLen) {
 
 	// Release I2C device
 	if(tx_mutex_put(&this->mutex) != TX_SUCCESS) {
+		this->stats.timeouts = this->stats.timeouts + 1;
 		return Status::Error;
 	}
 
@@ -273,7 +315,7 @@ Status I3C::SendCommandAsync(DirectCCC ccc, uint8_t addr, uint8_t *buf, uint16_t
 	return Status::Ok;
 }
 
-Status I3C::TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_t txLen, uint8_t *rxBuf, uint16_t rxLen) {
+Status I3C::TransferAsync(uint8_t addr, TargetType type, const uint8_t *txBuf, uint16_t txLen, uint8_t *rxBuf, uint16_t rxLen) {
 	// Try lock I2C device
 	if(tx_mutex_get(&this->mutex, TIMEOUT_MUTEX) != TX_SUCCESS) {
 		return Status::Timeout;
@@ -319,15 +361,31 @@ Status I3C::TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_
 		LL_I3C_RequestTransfer(this->instance);
 
 		// LL_I3C_EnableIT_TXFNF(this->instance);
+		uint64_t timestamp = Time::GetUs();
 		do {
 			if(this->txLength > 0 && LL_I3C_IsActiveFlag_TXFNF(this->instance) == 0x01) {
 				LL_I3C_TransmitData8(this->instance, *this->txBuffer);
 				this->txBuffer = this->txBuffer + 1;
 				this->txLength = this->txLength - 1;
 			}
+			if((Time::GetUs() - timestamp) > TIMEOUT_TRANSFER_US) {
+				this->stats.timeouts = this->stats.timeouts + 1;
+				LL_I3C_RequestTxFIFOFlush(this->instance);
+				LL_I3C_RequestRxFIFOFlush(this->instance);
+				tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
+				tx_mutex_put(&this->mutex);
+				return Status::Timeout;
+			}
 		} while((READ_REG(this->instance->EVR) & (I3C_EVR_FCF | I3C_EVR_ERRF)) == 0U);
 
 		if(LL_I3C_IsActiveFlag_ERR(this->instance) == 0x01) {
+			if(LL_I3C_IsActiveFlag_ANACK(this->instance) == 0x01) {
+				this->stats.nackErrors = this->stats.nackErrors + 1;
+				// LL_I3C_ClearFlag_ANACK(this->instance);
+			}
+			else {
+				this->stats.busErrors = this->stats.busErrors + 1;
+			}
 			// volatile uint32_t errorStatus = READ_REG(this->instance->SER);
 			LL_I3C_ClearFlag_ERR(this->instance);
 
@@ -358,15 +416,31 @@ Status I3C::TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_
 
 		LL_I3C_RequestTransfer(this->instance);
 
+		uint64_t timestamp = Time::GetUs();
 		do {
 			if(LL_I3C_IsActiveFlag_RXFNE(this->instance) == 0x01) {
 				*this->rxBuffer = LL_I3C_ReceiveData8(this->instance);
 				this->rxBuffer = this->rxBuffer + 1;
 				this->rxLength = this->rxLength - 1;
 			}
+			if((Time::GetUs() - timestamp) > TIMEOUT_TRANSFER_US) {
+				this->stats.timeouts = this->stats.timeouts + 1;
+				LL_I3C_RequestTxFIFOFlush(this->instance);
+				LL_I3C_RequestRxFIFOFlush(this->instance);
+				tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
+				tx_mutex_put(&this->mutex);
+				return Status::Timeout;
+			}
 		} while((READ_REG(this->instance->EVR) & (I3C_EVR_FCF | I3C_EVR_ERRF)) == 0U);
 
 		if(LL_I3C_IsActiveFlag_ERR(this->instance) == 0x01) {
+			if(LL_I3C_IsActiveFlag_ANACK(this->instance) == 0x01) {
+				this->stats.nackErrors = this->stats.nackErrors + 1;
+				// LL_I3C_ClearFlag_ANACK(this->instance);
+			}
+			else {
+				this->stats.busErrors = this->stats.busErrors + 1;
+			}
 			// volatile uint32_t errorStatus = READ_REG(this->instance->SER);
 			LL_I3C_ClearFlag_ERR(this->instance);
 
@@ -375,6 +449,7 @@ Status I3C::TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_
 			LL_I3C_RequestRxFIFOFlush(this->instance);
 
 			tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
+			tx_mutex_put(&this->mutex);
 			return Status::Error;
 		}
 
@@ -396,11 +471,14 @@ Status I3C::TransferWait(uint32_t timeoutTicks) {
 	tx_mutex_put(&this->mutex);
 
 	if(status != TX_SUCCESS) {
+		this->stats.timeouts = this->stats.timeouts + 1;
 		return Status::Timeout;
 	}
 	if((events & EVT_ERR) != 0) {
 		return Status::Error;
 	}
+
+	this->stats.completedTransfers = this->stats.completedTransfers + 1;
 	return Status::Ok;
 }
 

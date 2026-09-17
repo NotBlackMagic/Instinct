@@ -25,6 +25,16 @@
 
 class SDMMC {
 	public:
+		/// @brief SDMMC low-level hardware bus statistics.
+		struct Statistics {
+			uint32_t cmdCRCErrors = 0;
+			uint32_t cmdTimeouts = 0;
+			uint32_t dataCRCErrors = 0;
+			uint32_t dataTimeouts = 0;
+			uint32_t dmaErrors = 0;
+			uint32_t transferErrors = 0;
+		};
+
 		/// @brief Data lines used.
 		enum class BusWidth : uint32_t {
 			Lines_1 = (0x00000000U),						// 1-bit (Default at boot)
@@ -161,6 +171,12 @@ class SDMMC {
 		/// @brief Helper to get last error
 		Error GetLastError() const { return this->lastError; }
 
+		/// @brief Returns SDMMC hardware statistics.
+		Statistics GetStatistics() const { return this->stats; }
+
+		/// @brief Resets SDMMC statistics counters.
+		void ResetStatistics() { this->stats = {}; }
+
 		/// @brief Interrupt Service Routine handler.
 		/// @warning This function is called by the NVIC. Do not call manually.
 		void InterruptHandler(void);
@@ -173,6 +189,7 @@ class SDMMC {
 
 		bool isInitialized;
 		uint32_t sourceClockHz;
+		Statistics stats = {};
 
 		// Transaction Context
 		volatile Error lastError;

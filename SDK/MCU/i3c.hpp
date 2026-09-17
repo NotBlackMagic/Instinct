@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/i3c.hpp
- * Author:  NotBlackMagic
- * Brief:   I3C driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
+ * File:	SDK/MCU/i3c.hpp
+ * Author:	NotBlackMagic
+ * Brief:	I3C driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
 #pragma once
@@ -24,6 +24,14 @@
 
 class I3C {
 	public:
+		/// @brief Low-level I3C hardware and bus event statistics.
+		struct Statistics {
+			uint32_t completedTransfers;
+			uint32_t nackErrors;
+			uint32_t busErrors;
+			uint32_t timeouts;
+		};
+		
 		/// @brief Defines the I3C bus speed for Mixed Mode operation
 		enum class Mode {
 			Legacy_Fast,		///< Only 400kHz (I2C Fast Mode)
@@ -105,40 +113,51 @@ class I3C {
 		/// @return Status::Ok if initialization succeeded, or Status::Error if the config was invalid.
 		Status Init(const Config &config);
 
+		/// @brief Probes a 7-bit legacy I2C target address to verify ACK.
+		/// @param addr The 7-bit slave address to check.
+		/// @return 1 (True) if the device acknowledges (ACK), 0 if NACK.
+		uint8_t Probe(uint8_t addr);
+
 		/// @brief Assigns dynamic addresses to all I3C devices on the bus (ENTDAA).
 		/// @return Number of I3C devices successfully enumerated.
 		uint8_t AssignDynamicAddress();
 
 		/// @brief Starts a non-blocking broadcast common command transaction
-		/// @param ccc The broadcast common command code.
-		/// @param txBuf Pointer to data to write (optional payload for common command)
-		/// @param txLen Number of bytes to write (optional payload length).
+		/// @param ccc		The broadcast common command code.
+		/// @param txBuf	Pointer to data to write (optional payload for common command)
+		/// @param txLen	Number of bytes to write (optional payload length).
 		/// @return Status::Ok if the command was started, or Status::Busy if the I3C is locked by another thread.
-		Status SendCommandAsync(BroadcastCCC ccc, uint8_t *txBuf, uint16_t txLen);
+		Status SendCommandAsync(BroadcastCCC ccc, const uint8_t *txBuf, uint16_t txLen);
 
 		/// @brief Starts a non-blocking direct common command transaction
-		/// @param ccc The direct common command code.
-		/// @param addr The 7-bit address of the target
-		/// @param buf Pointer to data to write (for SET commands) or buffer to fill (for GET commands).
-		/// @param len Length of the payload in bytes.
+		/// @param ccc	The direct common command code.
+		/// @param addr	The 7-bit address of the target
+		/// @param buf	Pointer to data to write (for SET commands) or buffer to fill (for GET commands).
+		/// @param len	Length of the payload in bytes.
 		/// @return Status::Ok if the command was started, or Status::Busy if the I3C is locked by another thread.
 		Status SendCommandAsync(DirectCCC ccc, uint8_t addr, uint8_t *buf, uint16_t len);
 
 		/// @brief Starts a non-blocking transaction (Write, Read, or Write-then-Read).
-		/// @note  Uses the hardware Command Queue to ensure atomic Repeated Starts for legacy sensors.
-		/// @param addr The 7-bit address (Static for Legacy, Dynamic for I3C).
-		/// @param type Specifies if the target is Legacy or I3C (affects framing).
-		/// @param txBuf Pointer to data to write (need to be kept until end of transfer).
-		/// @param txLen Number of bytes to write.
-		/// @param rxBuf Pointer to buffer for read data.
-		/// @param rxLen Number of bytes to read.
+		/// @note Uses the hardware Command Queue to ensure atomic Repeated Starts for legacy sensors.
+		/// @param addr		The 7-bit address (Static for Legacy, Dynamic for I3C).
+		/// @param type		Specifies if the target is Legacy or I3C (affects framing).
+		/// @param txBuf	Pointer to data to write (need to be kept until end of transfer).
+		/// @param txLen	Number of bytes to write.
+		/// @param rxBuf	Pointer to buffer for read data.
+		/// @param rxLen	Number of bytes to read.
 		/// @return Status::Ok if the transfer started, or Status::Busy if the I3C is locked by another thread.
-		Status TransferAsync(uint8_t addr, TargetType type, uint8_t *txBuf, uint16_t txLen, uint8_t *rxBuf, uint16_t rxLen);
+		Status TransferAsync(uint8_t addr, TargetType type, const uint8_t *txBuf, uint16_t txLen, uint8_t *rxBuf, uint16_t rxLen);
 
 		/// @brief Blocks the current thread until the Async transfer completes.
 		/// @param timeoutTicks Max wait time in OS ticks.
 		/// @return Status::Ok if the transfer completed successfully, Status::Timeout if it expired, or Status::Error on hardware faults.
 		Status TransferWait(uint32_t timeoutTicks);
+
+		/// @brief Returns I3C bus statistics.
+		Statistics GetStatistics() const { return this->stats; }
+
+		/// @brief Resets I3C bus statistics counters.
+		void ResetStatistics() { this->stats = {}; }
 
 		/// @brief Interrupt Service Routine handler.
 		/// @warning This function is called by the NVIC. Do not call manually.
@@ -148,6 +167,8 @@ class I3C {
 		I3C_TypeDef *instance;
 		IRQn_Type irqCall;
 		uint8_t irqPriority;
+
+		Statistics stats{};
 
 		// Transaction Context
 		uint8_t address;
@@ -166,9 +187,10 @@ class I3C {
 
 		// Timeout defines
 		static constexpr uint32_t TIMEOUT_MUTEX = TX_WAIT_FOREVER;
+		static constexpr uint32_t TIMEOUT_TRANSFER_US = 50000;
 
 		/// @brief Checks if a Direct CCC requires a Read phase (GET command).
-		/// @note  Based on MIPI I3C Spec v1.1 command ranges.
+		/// @note Based on MIPI I3C Spec v1.1 command ranges.
 		static constexpr bool IsReadCommand(DirectCCC ccc) {
 			uint8_t code = static_cast<uint8_t>(ccc);
 			// GET commands are generally in the range 0x8B - 0x95, plus 0x99 (GETXTIME)

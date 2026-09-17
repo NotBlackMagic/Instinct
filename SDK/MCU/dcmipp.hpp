@@ -21,6 +21,17 @@
 /// @brief Driver for the DCMIPP peripheral.
 class Dcmipp {
 	public:
+		/// @brief DCMIPP driver statistics.
+		struct Statistics {
+			uint32_t frameCount = 0;
+			uint32_t overrunErrors = 0;
+			uint32_t lineEvents = 0;
+			uint64_t lastVsyncTimestamp = 0;
+			uint64_t lastLineTimestamp = 0;
+			uint64_t lastFrameTimestamp = 0;
+			uint32_t sliceDurationUs = 0;
+		};
+
 		/// @brief Available processing pipes in the DCMIPP.
 		enum class PipeID : uint8_t {
 			Dump = 0,		// Main dump pipe
@@ -137,6 +148,9 @@ class Dcmipp {
 		/// @return Status::Ok if the capture completed successfully, Status::Timeout if it expired, or Status::Error on hardware faults.
 		Status CaptureWait(PipeID pipe, uint32_t timeoutTicks);
 
+		/// @brief Returns driver performance statistics.
+		Statistics GetPipeStatistics(PipeID pipe) const { return stats[static_cast<uint8_t>(pipe)]; }
+
 		/// @brief Interrupt Service Routine handler for DCMIPP (Frame End, Limit, Overrun).
 		void InterruptHandler();
 
@@ -146,6 +160,7 @@ class Dcmipp {
 		uint8_t irqPriority;
 		
 		bool isInitialized;
+		Statistics stats[3];
 
 		// Synchronization
 		TX_MUTEX mutex;

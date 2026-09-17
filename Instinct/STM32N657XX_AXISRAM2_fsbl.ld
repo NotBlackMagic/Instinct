@@ -35,8 +35,8 @@ MEMORY
 	ROM     (xrw)   : ORIGIN = 0x34180400,  LENGTH = 280K
 	RAM     (xrw)   : ORIGIN = 0x341C6400,  LENGTH = 231K
 	*/
-	ROM     (xrw)   : ORIGIN = 0x34180400,  LENGTH = 350K
-    RAM     (xrw)   : ORIGIN = 0x341D7C00,  LENGTH = 161K
+	ROM     (xrw)   : ORIGIN = 0x34180400,  LENGTH = 358K
+	RAM     (xrw)   : ORIGIN = 0x341D9C00,  LENGTH = 153K
 }
 
 /* Memories definition (Run in XIP mode from HyperFlash/XSPI2) */

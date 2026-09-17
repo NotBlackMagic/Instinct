@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/sdmmc.cpp
+ * File:	SDK/MCU/sdmmc.cpp
  */
 
 #include "sdmmc.hpp"
@@ -111,11 +111,11 @@ Status SDMMC::DeInit(void) {
 	}
 
 	// Abort RTOS waits/blocks and clean up RTOS Resources
-	if (tx_event_flags_delete(&this->event) != TX_SUCCESS) {
+	if(tx_event_flags_delete(&this->event) != TX_SUCCESS) {
 		// Something went wrong...
 	}
 
-	if (tx_mutex_delete(&this->mutex) != TX_SUCCESS) {
+	if(tx_mutex_delete(&this->mutex) != TX_SUCCESS) {
 		// Something went wrong...
 	}
 
@@ -135,9 +135,9 @@ Status SDMMC::SetClock(uint32_t freqHz) {
 	}
 
 	// Hardware constraint: DDR mode strictly requires CLKDIV > 0
-	if ((clockDiv == 0) && ((this->instance->CLKCR & SDMMC_CLKCR_DDR) == SDMMC_CLKCR_DDR)) {
-        clockDiv = 1;
-    }
+	if((clockDiv == 0) && ((this->instance->CLKCR & SDMMC_CLKCR_DDR) == SDMMC_CLKCR_DDR)) {
+		clockDiv = 1;
+	}
 
 	MODIFY_REG(this->instance->CLKCR, SDMMC_CLKCR_CLKDIV, clockDiv);
 	return Status::Ok;
@@ -196,7 +196,7 @@ SDMMC::CommandResponse SDMMC::Command(uint8_t cmd, uint32_t args, ResponseType r
 	// Clear static flags
 	WRITE_REG(this->instance->ICR, SDMMC_STATIC_CMD_FLAGS);
 
-	// Wait for CPSM  clear (command and data state machine idle)
+	// Wait for CPSM clear (command and data state machine idle)
 	while(((this->instance->STA & (SDMMC_STA_CPSMACT)) == SDMMC_STA_CPSMACT));
 
 	// Prepare data trigger logic (DPSM_ENABLE vs CMDTRANS)
@@ -206,11 +206,11 @@ SDMMC::CommandResponse SDMMC::Command(uint8_t cmd, uint32_t args, ResponseType r
 		// Used for SCR (ACMD51), SwitchFunc (CMD6), SDStatus (ACMD13)
 		MODIFY_REG(this->instance->DCTRL, SDMMC_DPSM_ENABLE, SDMMC_DPSM_ENABLE);
 	}
-	else if (mode == TransferMode::Auto) {
+	else if(mode == TransferMode::Auto) {
 		// Automatic/synchronized Trigger: Set CMDTRANS bit. hardware enables DPSM automatically after response.
 		// Used for ReadBlocks/WriteBlocks
 		cmdTrans = SDMMC_CMD_CMDTRANS;
-    }
+	}
 	
 	// Set command arguments
 	WRITE_REG(this->instance->ARG, args);
@@ -240,12 +240,13 @@ SDMMC::CommandResponse SDMMC::Command(uint8_t cmd, uint32_t args, ResponseType r
 			WRITE_REG(this->instance->ICR, SDMMC_FLAG_CTIMEOUT);
 			resp.error = Error::CmdTimeout;
 			this->lastError = resp.error;
+			this->stats.cmdTimeouts = this->stats.cmdTimeouts + 1;
 			return resp;
 		}
 
 		if((status & SDMMC_FLAG_CCRCFAIL) != 0x00) {
 			// Clear flag
-            WRITE_REG(this->instance->ICR, SDMMC_FLAG_CCRCFAIL);
+			WRITE_REG(this->instance->ICR, SDMMC_FLAG_CCRCFAIL);
 
 			// Check if we expect CRC or not (ACMD41/CMD1 don't expect CRC so ignore)
 			if(respType == SDMMC::ResponseType::Short_NoCRC) {
@@ -256,6 +257,7 @@ SDMMC::CommandResponse SDMMC::Command(uint8_t cmd, uint32_t args, ResponseType r
 				// Is an error
 				resp.error = Error::CmdCrcFail;
 				this->lastError = resp.error;
+				this->stats.cmdCRCErrors = this->stats.cmdCRCErrors + 1;
 				return resp;
 			}
 		}
@@ -264,6 +266,7 @@ SDMMC::CommandResponse SDMMC::Command(uint8_t cmd, uint32_t args, ResponseType r
 		if((Time::GetMs() - timestamp) > timeoutMs) {
 			resp.error = Error::CmdTimeout;
 			this->lastError = resp.error;
+			this->stats.cmdTimeouts = this->stats.cmdTimeouts + 1;
 			return resp;
 		}
 
@@ -408,18 +411,23 @@ Status SDMMC::TransferWait(uint32_t timeoutTicks) {
 			// Error occurred, check error reason
 			if((this->irqStatus & SDMMC_STA_DCRCFAIL) == SDMMC_STA_DCRCFAIL) {
 				this->lastError = Error::DataCrcFail;
+				this->stats.dataCRCErrors = this->stats.dataCRCErrors + 1;
 			}
 			else if((this->irqStatus & SDMMC_STA_DTIMEOUT) == SDMMC_STA_DTIMEOUT) {
 				this->lastError = Error::DataTimeout;
+				this->stats.dataTimeouts = this->stats.dataTimeouts + 1;
 			}
 			else if((this->irqStatus & SDMMC_STA_TXUNDERR) == SDMMC_STA_TXUNDERR) {
 				this->lastError = Error::TxUnderrun;
+				this->stats.dmaErrors = this->stats.dmaErrors + 1;
 			}
 			else if((this->irqStatus & SDMMC_STA_RXOVERR) == SDMMC_STA_RXOVERR) {
 				this->lastError = Error::RxOverrun;
+				this->stats.dmaErrors = this->stats.dmaErrors + 1;
 			}
 			else {
 				this->lastError = Error::Hardware;
+				this->stats.transferErrors = this->stats.transferErrors + 1;
 			}
 			result = false;
 		}
@@ -427,6 +435,7 @@ Status SDMMC::TransferWait(uint32_t timeoutTicks) {
 	else {
 		// OS Timeout
 		this->lastError = Error::DataTimeout;
+		this->stats.dataTimeouts = this->stats.dataTimeouts + 1;
 		result = false;
 	}
 
@@ -463,8 +472,8 @@ Status SDMMC::SwitchTo1V8(void (*callback)(void*), void* context) {
 	resp = this->Command(11, 0, ResponseType::Short_CRC);
 	if(resp.error != Error::None) {
 		// Disable VSWITCHEN on error
-        MODIFY_REG(this->instance->POWER, SDMMC_POWER_VSWITCHEN, 0);
-        return Status::Error;
+		MODIFY_REG(this->instance->POWER, SDMMC_POWER_VSWITCHEN, 0);
+		return Status::Error;
 	}
 
 	// Wait for CKSTOP

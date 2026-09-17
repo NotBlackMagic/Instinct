@@ -107,13 +107,13 @@ Status Venc::EncodeFrame(const FrameBuffer& params, uint32_t& generatedBytes, Fr
 	if(this->config.codec == Codec::H264) {
 		// Dynamically compute Frame Coding Type sequence rules
 		if(params.frameType == FrameType::Intra || (config.rateControl.gopLen > 0 && (this->frameCount % config.rateControl.gopLen) == 0x00)) {
-			h264EncIn.timeIncrement = 0;
 			h264EncIn.codingType = H264ENC_INTRA_FRAME;
 		}
 		else {
-			h264EncIn.timeIncrement = 1;
 			h264EncIn.codingType = H264ENC_PREDICTED_FRAME;
 		}
+
+		h264EncIn.timeIncrement = (this->frameCount == 0) ? 0 : 1;
 
 		h264EncIn.ipf = H264ENC_REFERENCE_AND_REFRESH;
 		h264EncIn.ltrf = H264ENC_REFERENCE;
@@ -134,6 +134,10 @@ Status Venc::EncodeFrame(const FrameBuffer& params, uint32_t& generatedBytes, Fr
 		switch(ret) {
 			case H264ENC_FRAME_READY:
 				if(h264EncOut.streamSize > 0) {
+					// Update frame byte statistics
+					this->stats.lastFrameBytes = h264EncOut.streamSize;
+					this->stats.encodedFrames++;
+					
 					generatedBytes = h264EncOut.streamSize;
 					outFrameType = (h264EncIn.codingType == H264ENC_INTRA_FRAME) ? FrameType::Intra : FrameType::Predicted;
 					this->frameCount++;
@@ -142,6 +146,10 @@ Status Venc::EncodeFrame(const FrameBuffer& params, uint32_t& generatedBytes, Fr
 					}
 					status = Status::Ok;
 				}
+				break;
+			case H264ENC_OUTPUT_BUFFER_OVERFLOW:
+				LOG_ERR("VENC: Output buffer overflow! Frame exceeded %lu bytes\n", params.outBufSize);
+				status = Status::Error;
 				break;
 			case H264ENC_SYSTEM_ERROR:
 				if(config.EventCallback != nullptr) {
@@ -210,6 +218,7 @@ Status Venc::EncodeFrame(const FrameBuffer& params, uint32_t& generatedBytes, Fr
 }
 
 Status Venc::Stop(uint32_t* outBuffer, uint32_t outBufSize, uint32_t& generatedBytes) {
+	(void)outBufSize;
 	// Lock VENC device
 	if(tx_mutex_get(&this->mutex, TIMEOUT_MUTEX) != TX_SUCCESS) {
 		return Status::Timeout;
@@ -244,6 +253,173 @@ void Venc::Reset() {
 
 }
 
+Status Venc::SetBitrate(uint32_t bps) {
+	if(this->config.codec != Codec::H264 || this->h264Encoder == nullptr) {
+		return Status::Error;
+	}
+	if(tx_mutex_get(&this->mutex, TIMEOUT_MUTEX) != TX_SUCCESS) {
+		return Status::Timeout;
+	}
+
+	H264EncRateCtrl rateCtrl;
+	H264EncRet ret = H264EncGetRateCtrl(this->h264Encoder, &rateCtrl);
+	if(ret == H264ENC_OK) {
+		rateCtrl.bitPerSecond = bps;
+		rateCtrl.pictureRc = 1;
+		ret = H264EncSetRateCtrl(this->h264Encoder, &rateCtrl);
+		if(ret == H264ENC_OK) {
+			this->config.rateControl.bitPerSecond = bps;
+			this->config.rateControl.enablePictureRc = true;
+		}
+	}
+
+	tx_mutex_put(&this->mutex);
+	return (ret == H264ENC_OK) ? Status::Ok : Status::Error;
+}
+
+Status Venc::SetQPBounds(uint32_t min, uint32_t max, int32_t fixed) {
+	if(this->config.codec != Codec::H264 || this->h264Encoder == nullptr) {
+		return Status::Error;
+	}
+	if(tx_mutex_get(&this->mutex, TIMEOUT_MUTEX) != TX_SUCCESS) {
+		return Status::Timeout;
+	}
+
+	H264EncRateCtrl rateCtrl;
+	H264EncRet ret = H264EncGetRateCtrl(this->h264Encoder, &rateCtrl);
+	if(ret == H264ENC_OK) {
+		rateCtrl.qpMin = min;
+		rateCtrl.qpMax = max;
+		if(fixed >= 0 && fixed <= 51) {
+			rateCtrl.pictureRc = 0;
+			rateCtrl.mbRc = 0;
+			rateCtrl.qpHdr = fixed;
+		}
+		else {
+			rateCtrl.pictureRc = 1;
+			rateCtrl.mbRc = 1;
+		}
+		ret = H264EncSetRateCtrl(this->h264Encoder, &rateCtrl);
+		if(ret == H264ENC_OK) {
+			this->config.rateControl.qpMin = min;
+			this->config.rateControl.qpMax = max;
+			if(fixed >= 0) {
+				this->config.rateControl.enablePictureRc = false;
+				this->config.rateControl.qpHdr = static_cast<uint32_t>(fixed);
+			}
+		}
+	}
+
+	tx_mutex_put(&this->mutex);
+	return (ret == H264ENC_OK) ? Status::Ok : Status::Error;
+}
+
+Status Venc::SetGOPLength(uint32_t len) {
+	if(this->config.codec != Codec::H264 || this->h264Encoder == nullptr) {
+		return Status::Error;
+	}
+	if(tx_mutex_get(&this->mutex, TIMEOUT_MUTEX) != TX_SUCCESS) {
+		return Status::Timeout;
+	}
+
+	H264EncRateCtrl rateCtrl;
+	H264EncRet ret = H264EncGetRateCtrl(this->h264Encoder, &rateCtrl);
+	if(ret == H264ENC_OK) {
+		rateCtrl.gopLen = len;
+		ret = H264EncSetRateCtrl(this->h264Encoder, &rateCtrl);
+		if(ret == H264ENC_OK) {
+			this->config.rateControl.gopLen = len;
+		}
+	}
+
+	tx_mutex_put(&this->mutex);
+	return (ret == H264ENC_OK) ? Status::Ok : Status::Error;
+}
+
+Status Venc::SetSEIUserData(const uint8_t* data, uint32_t size) {
+	if(this->config.codec != Codec::H264 || this->h264Encoder == nullptr || data == nullptr || size == 0) {
+		return Status::Error;
+	}
+	if(tx_mutex_get(&this->mutex, TIMEOUT_MUTEX) != TX_SUCCESS) {
+		return Status::Timeout;
+	}
+
+	// Embeds SEI user data for the immediately following frame encode
+	H264EncRet ret = H264EncSetSeiUserData(this->h264Encoder, data, size);
+
+	tx_mutex_put(&this->mutex);
+	return (ret == H264ENC_OK) ? Status::Ok : Status::Error;
+}
+
+Status Venc::SetROI(uint32_t top, uint32_t left, uint32_t bottom, uint32_t right, int32_t delta) {
+	if(this->config.codec != Codec::H264 || this->h264Encoder == nullptr) {
+		return Status::Error;
+	}
+	if(tx_mutex_get(&this->mutex, TIMEOUT_MUTEX) != TX_SUCCESS) {
+		return Status::Timeout;
+	}
+
+	H264EncCodingCtrl codingCtrl;
+	H264EncRet ret = H264EncGetCodingCtrl(this->h264Encoder, &codingCtrl);
+	if(ret == H264ENC_OK) {
+		codingCtrl.roi1Area.enable = 1;
+		codingCtrl.roi1Area.top = top;
+		codingCtrl.roi1Area.left = left;
+		codingCtrl.roi1Area.bottom = bottom;
+		codingCtrl.roi1Area.right = right;
+		codingCtrl.roi1DeltaQp = delta;
+		ret = H264EncSetCodingCtrl(this->h264Encoder, &codingCtrl);
+	}
+
+	tx_mutex_put(&this->mutex);
+	return (ret == H264ENC_OK) ? Status::Ok : Status::Error;
+}
+
+Status Venc::ReconfigureStream(uint32_t sliceSize, uint32_t gdrDuration, bool denoise, uint32_t* outNewHeaders, uint32_t outBufSize, uint32_t& outHeaderBytes) {
+	if(this->config.codec != Codec::H264 || this->h264Encoder == nullptr) {
+		return Status::Error;
+	}
+	if(tx_mutex_get(&this->mutex, TIMEOUT_MUTEX) != TX_SUCCESS) {
+		return Status::Timeout;
+	}
+
+	// Temporarily stop active stream
+	H264EncStrmEnd(this->h264Encoder, &this->h264EncIn, &this->h264EncOut);
+
+	// Apply structural coding controls while in idle state
+	H264EncCodingCtrl codingCtrl;
+	H264EncGetCodingCtrl(this->h264Encoder, &codingCtrl);
+	codingCtrl.sliceSize = sliceSize;
+	codingCtrl.gdrDuration = gdrDuration;
+	codingCtrl.noiseReductionEnable = denoise ? 1 : 0;
+	H264EncSetCodingCtrl(this->h264Encoder, &codingCtrl);
+
+	// Restart stream and emit new SPS/PPS
+	this->h264EncIn.pOutBuf = outNewHeaders;
+	this->h264EncIn.busOutBuf = reinterpret_cast<uint32_t>(outNewHeaders);
+	this->h264EncIn.outBufSize = outBufSize;
+
+	H264EncRet ret = H264EncStrmStart(this->h264Encoder, &this->h264EncIn, &this->h264EncOut);
+	if(ret == H264ENC_OK) {
+		outHeaderBytes = this->h264EncOut.streamSize;
+		this->config.codingControl.sliceSize = sliceSize;
+		// Next frame must be an IDR to sync decoders with new headers
+		this->frameCount = 0; 
+	}
+
+	tx_mutex_put(&this->mutex);
+	return (ret == H264ENC_OK) ? Status::Ok : Status::Error;
+}
+
+Venc::Config Venc::GetConfig() {
+	Config cfgCopy = this->config;
+	if(tx_mutex_get(&this->mutex, TIMEOUT_MUTEX) == TX_SUCCESS) {
+		cfgCopy = this->config;
+		tx_mutex_put(&this->mutex);
+	}
+	return cfgCopy;
+}
+
 // ---------------------------------------------------------
 // IRQ Handler
 // ---------------------------------------------------------
@@ -258,14 +434,24 @@ void Venc::InterruptHandler() {
 	}
 
 	if(irqStatus != 0U) {
+		uint64_t now = Time::GetUs();
+
 		// Clear slice ready and IRQ line flags in hardware
 		LL_VENC_WriteRegister(1UL, ASIC_STATUS_SLICE_READY | ASIC_IRQ_LINE);
 		
 		// Signal waiting thread via RTOS event flag
 		if((irqStatus & (ASIC_STATUS_FRAME_READY | ASIC_STATUS_SLICE_READY)) != 0U) {
+			this->stats.lastSliceEndTimestamp = now;			
 			tx_event_flags_set(&this->event, EVT_SLICE_RDY, TX_OR);
 		}
+
+		if((irqStatus & ASIC_STATUS_FRAME_READY) != 0U) {
+			this->stats.lastFrameEndTimestamp = now;
+			this->stats.lastSliceEndTimestamp = now;
+		}
+
 		if((irqStatus & (ASIC_STATUS_HW_TIMEOUT | ASIC_STATUS_ERROR)) != 0U) {
+			this->stats.hwErrors++;
 			tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
 		}
 	}
@@ -487,7 +673,7 @@ Status Venc::SetRateControl() {
 	// Set standard/safe H.264 Rate Control defaults (matching STM's tested config)
 	rateCtrl.pictureSkip = 0;			// Don't let the encoder drop frames randomly
 	rateCtrl.mbRc = 1;					// Enable Macroblock-level rate control for better quality
-	rateCtrl.hrd = 1;					// Enable Hypothetical Reference Decoder (strict bitrate constraint)
+	rateCtrl.hrd = 0;					// Disable Hypothetical Reference Decoder (Allows dynamic RC updates)
 	rateCtrl.hrdCpbSize = 0;			// 0 = Auto-calculate Max CPB size for the active H.264 Level
 	rateCtrl.intraQpDelta = -3;			// Slightly higher quality for I-Frames
 	rateCtrl.fixedIntraQp = 0;			// Let rate controller dynamically pick the best I-Frame QP
@@ -514,6 +700,9 @@ void Venc::SliceReadyCallback(H264EncSliceReady* sliceReady) {
 		// Save it to the instance so your app can read it right after the event fires
 		venc->lastSliceOffset = offset;
 		venc->lastSliceSize = sliceReady->sliceSizes[sliceReady->slicesReady - 1];
+
+		// Update the slice byte stat
+		venc->stats.lastSliceBytes = venc->lastSliceSize;
 
 		if(venc->config.EventCallback != nullptr) {
 			venc->config.EventCallback(venc->config.callbackContext, Event::SliceReady);
@@ -628,6 +817,10 @@ int32_t Venc::WaitHardwareReady(uint32_t* slicesReady) {
 	return EWL_OK;
 }
 
+EWLHwConfig_t Venc::GetHWCapabilities() {
+	return EWLReadAsicConfig();
+}
+
 extern "C" {
 	u32 EWLReadAsicID(void) {
 		return LL_VENC_ReadRegister(0UL);
@@ -708,10 +901,12 @@ extern "C" {
 	}
 
 	i32 EWLRelease(const void* inst) {
+		(void)inst;
 		return EWL_OK;
 	}
 
 	void EWLWriteReg(const void* inst, u32 offset, u32 val) {
+		(void)inst;
 		LL_VENC_WriteRegister(offset >> 2, val);
 	}
 
@@ -724,6 +919,7 @@ extern "C" {
 	}
 
 	u32 EWLReadReg(const void* inst, u32 offset) {
+		(void)inst;
 		return LL_VENC_ReadRegister(offset >> 2);
 	}
 
@@ -749,6 +945,7 @@ extern "C" {
 	}
 
 	i32 EWLReserveHw(const void* inst) {
+		(void)inst;
 		return EWL_OK;
 	}
 

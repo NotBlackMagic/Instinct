@@ -2,16 +2,18 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/System/shellCamera.cpp
+ * File:	Instinct/Modules/System/shellCamera.cpp
  */
 
 #include "shellModules.hpp"
 
-#include "cameraDCMI.hpp"
+static void PrintHelp() {
+	Logger::Instance().Write("Usage: cam <target> <action> [val]\r\n");
+}
 
 static bool CommandCam(const char* args) {
-	if (args == nullptr || args[0] == '\0') {
-		Logger::Instance().Write("Usage: cam <target> <action> [val]\r\n");
+	if(args == nullptr || args[0] == '\0') {
+		PrintHelp();
 		return true;
 	}
 
@@ -19,11 +21,10 @@ static bool CommandCam(const char* args) {
 	char action[16] = {0};
 	int val = 0;
 
-	// Parse target, action, and an optional integer value
+	// Parse target, action, and an optional parameter value(s)
 	int count = sscanf(args, "%9s %15s %d", target, action, &val);
-
 	if(count < 2) {
-		Logger::Instance().Write("Usage: cam <target> <action> [val]\r\n");
+		PrintHelp();
 		return true;
 	}
 
@@ -53,8 +54,10 @@ static bool CommandCam(const char* args) {
 			Logger::Instance().Write("[MIPI/OV5645] Fetching info...\r\n");
 			// Fetch MIPI info here
 		}
+		return true;
 	}
-	else if(strcmp(action, "start") == 0) {
+	
+	if(strcmp(action, "start") == 0) {
 		if(routeDcmi == true) {
 			/* cameraDcmi.Start(); */ 
 			Logger::Instance().Write("DCMI Camera started.\r\n");
@@ -63,8 +66,10 @@ static bool CommandCam(const char* args) {
 			/* cameraMipi.Start(); */
 			Logger::Instance().Write("MIPI Camera started.\r\n");
 		}
+		return true;
 	}
-	else if(strcmp(action, "stop") == 0) {
+	
+	if(strcmp(action, "stop") == 0) {
 		if(routeDcmi == true) {
 			/* cameraDcmi.Stop(); */
 			Logger::Instance().Write("DCMI Camera stopped.\r\n");
@@ -73,8 +78,10 @@ static bool CommandCam(const char* args) {
 			/* cameraMipi.Stop(); */
 			Logger::Instance().Write("MIPI Camera stopped.\r\n");
 		}
+		return true;
 	}
-	else if(strcmp(action, "brightness") == 0 && count >= 3) {
+	
+	if(strcmp(action, "brightness") == 0 && count >= 3) {
 		if(routeDcmi == true) {
 			cameraSD.GetSensor().SetBrightness((int8_t)val);
 			Logger::Instance().Printf("DCMI Brightness set to %d.\r\n", (int8_t)val);
@@ -82,14 +89,18 @@ static bool CommandCam(const char* args) {
 		if(routeMipi == true) {
 			// cameraMipi.GetSensor().SetBrightness((int8_t)val);
 		}
+		return true;
 	}
-	else if(strcmp(action, "contrast") == 0 && count >= 3) {
+	
+	if(strcmp(action, "contrast") == 0 && count >= 3) {
 		if(routeDcmi == true) {
 			cameraSD.GetSensor().SetContrast((uint8_t)val);
 			Logger::Instance().Printf("DCMI Contrast set to %u.\r\n", (uint8_t)val);
 		}
+		return true;
 	}
-	else if(strcmp(action, "flicker") == 0 && count >= 3) {
+	
+	if(strcmp(action, "flicker") == 0 && count >= 3) {
 		// Map integer input to the OV7670::BandingFilter enum
 		OV7670::BandingFilter filter = OV7670::BandingFilter::Off;
 		const char* filterName = "Off";
@@ -111,17 +122,20 @@ static bool CommandCam(const char* args) {
 			cameraSD.GetSensor().SetBandingFilter(filter);
 			Logger::Instance().Printf("DCMI Flicker filter set to %s.\r\n", filterName);
 		}
+		return true;
 	}
-	else if(strcmp(action, "test") == 0 && count >= 3) {
+
+	if(strcmp(action, "test") == 0 && count >= 3) {
 		bool enable = (val > 0);
 		if(routeDcmi == true) {
 			cameraSD.GetSensor().SetTestPattern(enable);
 			Logger::Instance().Printf("DCMI Test pattern %s.\r\n", enable ? "ENABLED" : "DISABLED");
 		}
+		return true;
 	}
-	else {
-		Logger::Instance().Printf("Error: Invalid action or missing value for '%s'.\r\n", action);
-	}
+	
+	Logger::Instance().Printf("Error: Unknown action '%s'.\r\n", action);
+	PrintHelp();
 
 	return true;
 }

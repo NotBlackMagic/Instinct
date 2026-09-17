@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/usb.hpp
- * Author:  NotBlackMagic
- * Brief:   USB peripheral driver for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
+ * File:	SDK/MCU/usb.hpp
+ * Author:	NotBlackMagic
+ * Brief:	USB peripheral driver for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
 #pragma once
@@ -21,6 +21,16 @@
 
 class USB {
 	public:
+		/// @brief Low-level USB hardware and bus event statistics.
+		struct Statistics {
+			uint32_t busResets = 0;
+			uint32_t suspendEvents = 0;
+			uint32_t resumeEvents = 0;
+			uint32_t sofCount = 0;
+			uint32_t isoIncomplete = 0;
+			uint32_t txTimeouts = 0;
+		};
+
 		/// @brief Bus speed.
 		enum class BusSpeed {
 			Full = 0,	// USB-FS/USB 1.0 (12 Mbps)
@@ -160,6 +170,12 @@ class USB {
 
 		/// @brief Start/prepare the EP0 for a new transfer.
 		void StartEp0Setup();
+
+		/// @brief Returns USB bus statistics.
+		Statistics GetStatistics() const { return this->stats; }
+
+		/// @brief Resets USB bus statistics counters.
+		void ResetStatistics() { this->stats = {}; }
 		
 		/// @brief Interrupt Service Routine handler.
 		/// @warning This function is called by the NVIC. Do not call manually.
@@ -174,6 +190,7 @@ class USB {
 
 		Config config;
 		bool isInitialized;
+		Statistics stats = {};
 
 		__attribute__((aligned(32))) uint8_t setupPacketBytes[32];
 		SetupPacket setupPacket;

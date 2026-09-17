@@ -69,6 +69,12 @@ class CameraMIPI {
 		/// @return Camera instance.
 		OV5645& GetSensor() { return sensor; }
 
+		/// @brief Retrieve hardware-level timing statistics for a specific pipe.
+		Dcmipp::Statistics GetPipeStatistics(Dcmipp::PipeID pipe) const { return dcmiPPInterface.GetPipeStatistics(pipe); }
+
+		/// @brief Retrieve hardware-level timing statistics for the CSI interface.
+		Csi::Statistics GetCSIStatistics() const { return csiInterface.GetStatistics(); }
+
 	private:
 		Csi& csiInterface;
 		Dcmipp& dcmiPPInterface;

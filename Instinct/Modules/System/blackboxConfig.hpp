@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/System/blackboxConfig.hpp
- * Author:  NotBlackMagic
- * Brief:   Centralized configuration for Blackbox SD logging rates and topic selection.
+ * File:	Instinct/Modules/System/blackboxConfig.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Centralized configuration for Blackbox SD logging rates and topic selection.
  */
 
 #pragma once

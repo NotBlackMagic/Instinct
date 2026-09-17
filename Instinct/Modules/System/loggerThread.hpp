@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/System/loggerThread.hpp
- * Author:  NotBlackMagic
- * Brief:   Thread handling writing log buffers to SD card.
+ * File:	Instinct/Modules/System/loggerThread.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Thread handling writing log buffers to SD card.
  */
 
 #pragma once

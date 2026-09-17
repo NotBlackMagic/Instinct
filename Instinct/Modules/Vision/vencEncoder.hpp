@@ -58,6 +58,23 @@ class VENCEncoder {
 		/// @return Status::Ok
 		Status EncodeAbort();
 
+		/// Forward VENC configuration to underlying instance
+		Status SetBitrate(uint32_t bitPerSecond) { return this->vencInstance.SetBitrate(bitPerSecond); }
+		Status SetFixedQP(uint32_t qp) { return this->vencInstance.SetQPBounds(0, 51, static_cast<int32_t>(qp)); }
+		Status SetAutoQP(uint32_t minQp = 10, uint32_t maxQp = 48) { return this->vencInstance.SetQPBounds(minQp, maxQp, -1); }
+		Status SetGOPLength(uint32_t gopLen) { return this->vencInstance.SetGOPLength(gopLen); }
+		Status InjectTelemetry(const uint8_t* telemetryPayload, uint32_t sizeBytes) { return this->vencInstance.SetSEIUserData(telemetryPayload, sizeBytes); }
+		Status SetROI(uint32_t top, uint32_t left, uint32_t bottom, uint32_t right, int32_t delta = -8) { return this->vencInstance.SetROI(top, left, bottom, right, delta); }
+
+		/// @brief Structural reconfiguration requiring SPS/PPS regeneration (called by pipeline coordinator)
+		Status ReconfigureStreamParameters(uint32_t sliceSize, uint32_t gdrDuration, bool denoise, VisionFrame& headerFrame);
+
+		/// @brief Retrieve active configuration snapshot without touching low-level driver.
+		Venc::Config GetConfig() { return this->vencInstance.GetConfig(); }
+
+		/// @brief Retrieve hardware-level timing and byte statistics from the VENC driver.
+		Venc::Statistics GetStatistics() const { return vencInstance.GetStatistics(); }
+
 	private:
 		Venc& vencInstance;
 		VisionCodec codec;

@@ -177,7 +177,7 @@ Status SD::Init(const Config &config) {
 		// UHS (1.8V) speed settings
 		// Basic UHS speed mode (SDR25)
 		targetSpeed = SDMMC::BusSpeed::UHS_SDR25;
-		targetFreq  = 50000000;
+		targetFreq = 50000000;
 
 		// Higher Speeds (SDR50/104) require Tuning (CMD19)
 		// TODO
@@ -187,7 +187,7 @@ Status SD::Init(const Config &config) {
 		// Check for High Speed Support (Spec v1.1+)
 		if(config.useHighSpeed && this->cardInfo.specVersion >= 1) {
 			targetSpeed = SDMMC::BusSpeed::HighSpeed;
-			targetFreq  = 50000000;
+			targetFreq = 50000000;
 		}
 	}
 
@@ -248,6 +248,8 @@ Status SD::ReadBlocks(uint32_t lba, uint8_t *buf, uint32_t blockCount) {
 		return Status::Error;
 	}
 
+	uint64_t startUs = Time::GetUs();
+
 	// Wait for card to be ready
 	if(WaitCardBusy(100) == false) {
 		return Status::Timeout;
@@ -263,6 +265,7 @@ Status SD::ReadBlocks(uint32_t lba, uint8_t *buf, uint32_t blockCount) {
 	// Prepare data transfer
 	Status status = this->bus.TransferAsync(buf, blockCount * 512, 512, true);
 	if(status != Status::Ok) {
+		this->stats.readErrors = this->stats.readErrors + 1;
 		return status;
 	}
 
@@ -276,12 +279,14 @@ Status SD::ReadBlocks(uint32_t lba, uint8_t *buf, uint32_t blockCount) {
 	}
 
 	if(resp.error != SDMMC::Error::None) {
+		this->stats.readErrors = this->stats.readErrors + 1;
 		return Status::Error;
 	}
 
 	// Wait for data
 	status = bus.TransferWait(1000 * blockCount);
 	if(status != Status::Ok) {
+		this->stats.readErrors = this->stats.readErrors + 1;
 		return status;
 	}
 
@@ -289,9 +294,18 @@ Status SD::ReadBlocks(uint32_t lba, uint8_t *buf, uint32_t blockCount) {
 	if(blockCount > 1) {
 		resp = bus.Command(static_cast<uint8_t>(Command::StopTransmission), 0, SDMMC::ResponseType::Short_CRC);
 		if(resp.error != SDMMC::Error::None) {
+			this->stats.readErrors = this->stats.readErrors + 1;
 			return Status::Error;
 		}
 	}
+
+	// Update statistics on success
+	uint32_t durationUs = static_cast<uint32_t>(Time::GetUs() - startUs);
+	this->stats.lastReadTimeUs = durationUs;
+	if(durationUs > this->stats.maxReadTimeUs) {
+		this->stats.maxReadTimeUs = durationUs;
+	}
+	this->stats.sectorsRead = this->stats.sectorsRead + blockCount;
 	
 	return Status::Ok;
 }
@@ -306,8 +320,11 @@ Status SD::WriteBlocks(uint32_t lba, const uint8_t *buf, uint32_t blockCount) {
 		return Status::Error;
 	}
 
+	uint64_t startUs = Time::GetUs();
+
 	// Wait for card to be ready
 	if(WaitCardBusy(100) == false) {
+		this->stats.writeErrors = this->stats.writeErrors + 1;
 		return Status::Timeout;
 	}
 
@@ -330,6 +347,7 @@ Status SD::WriteBlocks(uint32_t lba, const uint8_t *buf, uint32_t blockCount) {
 	// Prepare data transfer
 	Status status = this->bus.TransferAsync((uint8_t*)buf, blockCount * 512, 512, false);
 	if(status != Status::Ok) {
+		this->stats.writeErrors = this->stats.writeErrors + 1;
 		return status;
 	}
 
@@ -343,12 +361,14 @@ Status SD::WriteBlocks(uint32_t lba, const uint8_t *buf, uint32_t blockCount) {
 	}
 
 	if(resp.error != SDMMC::Error::None) {
+		this->stats.writeErrors = this->stats.writeErrors + 1;
 		return Status::Error;
 	}
 
 	// Wait for data transmission
 	status = bus.TransferWait(1000 * blockCount);
 	if(status != Status::Ok) {
+		this->stats.writeErrors = this->stats.writeErrors + 1;
 		return status;
 	}
 
@@ -356,6 +376,7 @@ Status SD::WriteBlocks(uint32_t lba, const uint8_t *buf, uint32_t blockCount) {
 	if(blockCount > 1) {
 		resp = bus.Command(static_cast<uint8_t>(Command::StopTransmission), 0, SDMMC::ResponseType::Short_CRC);
 		if(resp.error != SDMMC::Error::None) {
+			this->stats.writeErrors = this->stats.writeErrors + 1;
 			return Status::Error;
 		}
 	}
@@ -363,11 +384,20 @@ Status SD::WriteBlocks(uint32_t lba, const uint8_t *buf, uint32_t blockCount) {
 	// Wait for programming to finish
 	status = this->bus.WaitBusyD0(1000);
 	if(status != Status::Ok) {
+		this->stats.writeErrors = this->stats.writeErrors + 1;
 		return status;
 	}
 	// if(WaitCardBusy(1000) == false) {
 	// 	return false;
 	// }
+
+	// Update statistics on success
+	uint32_t durationUs = static_cast<uint32_t>(Time::GetUs() - startUs);
+	this->stats.lastWriteTimeUs = durationUs;
+	if(durationUs > this->stats.maxWriteTimeUs) {
+		this->stats.maxWriteTimeUs = durationUs;
+	}
+	this->stats.sectorsWritten = this->stats.sectorsWritten + blockCount;
 
 	return Status::Ok;
 }
@@ -431,7 +461,7 @@ SD::CardState SD::GetCardState(void) {
 	}
 
 	// Status Register Response (R1)
-    // Bits 12-9 represent CURRENT_STATE
+	// Bits 12-9 represent CURRENT_STATE
 	uint8_t state = (resp.resp[0] >> 9) & 0x0F;
 
 	return static_cast<CardState>(state);
@@ -494,7 +524,7 @@ void SD::ParseCID(uint32_t *cidRaw) {
 
 	// Product Name (PNM) - 5 ASCII Characters (Bits 103:64)
 	// Bits 103:96 are in cidRaw[0] (Lowest 8 bits)
-	// Bits 95:64  are in cidRaw[1] (All 32 bits)
+	// Bits 95:64 are in cidRaw[1] (All 32 bits)
 	this->cardInfo.cardName[0] = (char)(cidRaw[0] & 0xFF);
 	this->cardInfo.cardName[1] = (char)((cidRaw[1] >> 24) & 0xFF);
 	this->cardInfo.cardName[2] = (char)((cidRaw[1] >> 16) & 0xFF);
@@ -511,7 +541,7 @@ void SD::ParseCID(uint32_t *cidRaw) {
 	// Manufacturing Date (MDT) - 12 bits [19:8]
 	// Format: 8 bits Year (Offset from 2000), 4 bits Month
 	uint16_t mdt = (cidRaw[3] >> 8) & 0xFFF;
-	this->cardInfo.mfgYear  = 2000 + ((mdt >> 4) & 0xFF);
+	this->cardInfo.mfgYear = 2000 + ((mdt >> 4) & 0xFF);
 	this->cardInfo.mfgMonth = (mdt & 0x0F);
 }
 
@@ -584,7 +614,7 @@ bool SD::GetSCR(void) {
 	uint8_t* pScr = (uint8_t*)this->statusBuf;
 
 	// Byte 0: [63:56] Structure, Spec
-	this->cardInfo.specVersion  = pScr[0] & 0x0F;
+	this->cardInfo.specVersion = pScr[0] & 0x0F;
 
 	// Byte 1: [55:48] ... Bus Widths
 	// Bit 0 if support 1-Bit width, Bit 2 if support 4-Bit width

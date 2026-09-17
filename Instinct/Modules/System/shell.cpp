@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/System/shell.cpp
+ * File:	Instinct/Modules/System/shell.cpp
  */
 
 #include "shell.hpp"
@@ -26,7 +26,6 @@ void Shell::Input(uint8_t* data, uint16_t len) {
 		if(c == 127 || c == 8) {
 			if(lineIndex > 0) {
 				lineIndex -= 1;
-
 				// Echo backspace
 				Logger::Instance().Write("\b \b");
 			}
@@ -37,15 +36,10 @@ void Shell::Input(uint8_t* data, uint16_t len) {
 		if(c == '\r' || c == '\n') {
 			if(lineIndex > 0) {
 				lineBuffer[lineIndex] = 0;
-
 				// Newline
 				Logger::Instance().Write("\r\n");
-
 				Execute();
 				lineIndex = 0;
-			}
-			else {
-				Logger::Instance().Write("\r\n");
 			}
 			continue;
 		}
@@ -53,7 +47,6 @@ void Shell::Input(uint8_t* data, uint16_t len) {
 		// Else fill to buffer
 		if(lineIndex < (bufferSize - 1) && c >= 32 && c <= 126) {
 			lineBuffer[lineIndex++] = c;
-
 			// Echo read byte/char
 			Logger::Instance().Write((char*)&c, 1);
 		}
@@ -62,24 +55,42 @@ void Shell::Input(uint8_t* data, uint16_t len) {
 
 void Shell::Execute() {
 	// Split command and arguments
-
 	char* cmd = lineBuffer;
 	char* args = nullptr;
 
-	// Find first space (after command name)
-	char* space = strchr(lineBuffer, ' ');
-	if(space) {
+	// Skip leading whitespace in the command
+	while(*cmd == ' ') {
+		cmd++;
+	}
+
+	if(*cmd == '\0') {
+		return; // Empty line entered
+	}
+
+	// Find boundary (space character) between command and arguments
+	char* space = strchr(cmd, ' ');
+	if(space != nullptr) {
 		*space = '\0'; 		// Null terminate the command
 		args = space + 1; 	// Args start after space
 		
-		//Skip extra spaces in args
-		while (*args == ' ') {
+		// Skip leading whitespace in arguments
+		while(*args == ' ') {
 			args++;
 		}
-	}
 
-	if(strlen(cmd) == 0) {
-		return;
+		// Trim trailing whitespace from arguments
+		if(*args != '\0') {
+			char* end = args + strlen(args) - 1;
+			while(end > args && *end == ' ') {
+				*end = '\0';
+				end--;
+			}
+		}
+
+		// Normalize empty arguments to nullptr
+		if(*args == '\0') {
+			args = nullptr;
+		}
 	}
 
 	// Iterate through command list (modules) where each item is itself a list of commands
@@ -90,9 +101,9 @@ void Shell::Execute() {
 		const CommandEntry* entry = currentList->commandGroup;
 
 		while(entry->name != nullptr) {
-			if (strcmp(cmd, entry->name) == 0) {
+			if(strcmp(cmd, entry->name) == 0) {
 				// Found! Run it.
-				if (!entry->handler(args)) {
+				if(!entry->handler(args)) {
 					Logger::Instance().Write("Command Error\r\n");
 				}
 				return;
@@ -107,10 +118,10 @@ void Shell::Execute() {
 }
 
 void Shell::RegisterCommands(CommandList *list, const CommandEntry *array) {
-	//Setup new command group/array node
+	// Setup new command group/array node
 	list->commandGroup = array;
 
-	//Update overall list i.e. add new command to front of list
+	// Update overall list i.e. add new command to front of list
 	list->next = head;
 	head = list;
 }

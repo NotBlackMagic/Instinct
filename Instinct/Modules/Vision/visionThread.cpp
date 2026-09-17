@@ -1,9 +1,11 @@
 #include "visionThread.hpp"
 
-#define USE_LINE_MODE						1	// 1 = Hardware line mode (64 lines), 0 = Full-frame ping-pong
-
 TX_THREAD VisionThread::threadPtr;
 uint8_t VisionThread::threadStack[8196];
+
+TX_MUTEX VisionThread::mutex;
+VisionThread::Statistics VisionThread::stats = {};
+uint32_t VisionThread::pipelineRestartCounter = 0;
 
 static VisionFrame rawFrameBuffer[2];
 static VisionFrame processedFrameBuffer;
@@ -66,8 +68,28 @@ void VisionThread::OnUVCStreamState(USBClassUVC::StreamEvent event) {
 	}
 }
 
+void VisionThread::GetStatistics(Statistics& out) {
+	if(tx_mutex_get(&mutex, TX_WAIT_FOREVER) == TX_SUCCESS) {
+		out = stats;
+		tx_mutex_put(&mutex);
+	}
+}
+
+void VisionThread::ResetStatistics() {
+	if(tx_mutex_get(&mutex, TX_WAIT_FOREVER) == TX_SUCCESS) {
+		stats = {};
+		pipelineRestartCounter = 0;
+		tx_mutex_put(&mutex);
+	}
+}
+
 void VisionThread::Init() {
-	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Vision"),
+	uint32_t status = tx_mutex_create(&mutex, const_cast<char*>("VisionMutex"), TX_INHERIT);
+	if(status != TX_SUCCESS) {
+		LOG_ERR("ThreadX Vision Thread Mutex Create Failed.");
+	}
+
+	status = tx_thread_create(&threadPtr,	const_cast<char*>("Vision"),
 													VisionThread::Run, 0,
 													threadStack, sizeof(threadStack),
 													5, 0,
@@ -155,7 +177,7 @@ void VisionThread::Run(ULONG input) {
 	vencConfig.lineWrap = static_cast<Venc::LineCount>(lineWrap);
 	vencConfig.lineTrigger = static_cast<Venc::LineCount>(lineTrigger);
 	// 64 lines = 4 MB rows per slice
-	vencConfig.codingControl.sliceSize = 0;	// 0 = encode whole frame as one slice
+	vencConfig.codingControl.sliceSize = 4;	// 0 = encode whole frame as one slice
 #else
 	vencConfig.enableStreamingMode = false;
 	vencConfig.codingControl.sliceSize = 0;	// 0 = encode whole frame as one slice
@@ -244,13 +266,15 @@ void VisionThread::Run(ULONG input) {
 		}
 	}
 
-	uint32_t frameCount = 0;
-	uint32_t uvcDropedCount = 0;
+	uint32_t epochFrameCount = 0;
+	uint32_t epochUVCDroppedCount = 0;
 	uint32_t startupBurstCounter = 3;
-	uint64_t timestamp = Time::GetMs();
-	uint64_t deltaTime = 0;
-	uint32_t timeCap, timeConvMCU, timeEnc, timeIO;
-	uint64_t timeCapSum, timeConvMCUSum, timeEncSum, timeIOSum;
+
+	uint64_t epochStartMs = Time::GetUs();
+	uint64_t timestamp = Time::GetUs();
+
+	uint32_t timeCap = 0, timeConvMCU = 0, timeEnc = 0, timeIO = 0;
+	uint64_t timeCapSum = 0, timeConvMCUSum = 0, timeEncSum = 0, timeIOSum = 0;
 
 #if USE_LINE_MODE
 	uint32_t timeSliceCap = 0, timeSliceEnc = 0;
@@ -259,6 +283,13 @@ void VisionThread::Run(ULONG input) {
 
 	uint8_t rawBufIx = 0;	// The active index for MCU to read from
 	uint8_t jpegBufIx = 0;	// The active index for hardware to write to
+
+	// Hardware Tracking Variables
+	uint32_t encRawBytes = 0;
+	uint32_t encOutBytes = 0;
+	uint64_t epochEncBytesSum = 0;
+	float compressionRatio = 0.0f;
+	float compressionRatioSum = 0.0f;
 
 	bool isRecording = false;
 	uint32_t recordedFrames = 0;
@@ -271,16 +302,13 @@ void VisionThread::Run(ULONG input) {
 #if USE_LINE_MODE
 	// Start continuous hardware line-wrapping capture
 	status = cameraHD.CaptureAsync(rawFrameBuffer[0], lineTrigger, lineWrap);
-	if(status != Status::Ok) {
-		LOG_ERR("Failed to start line-mode HD-CAM capture.");
-	}
 #else
 	// Start hardware continuous capture
 	status = cameraHD.CaptureAsync(rawFrameBuffer[0], rawFrameBuffer[1]);
-	if(status != Status::Ok) {
-		LOG_ERR("Failed to start continuous HD-CAM capture.");
-	}
 #endif
+	if(status != Status::Ok) {
+		LOG_ERR("Failed to start HD-CAM capture.");
+	}
 
 	while(1) {
 		// Process pending UVC camera control updates
@@ -335,6 +363,7 @@ void VisionThread::Run(ULONG input) {
 			}
 		}
 
+		// Measure IO/Idle Overhead
 		timeIO = Time::GetUs() - timestamp;
 		timeIOSum = timeIOSum + timeIO;
 		timestamp = Time::GetUs();
@@ -354,19 +383,17 @@ void VisionThread::Run(ULONG input) {
 #else
 				VisionFrame& currentRaw = rawFrameBuffer[rawBufIx];
 				VisionFrame& currentJpeg = jpegFrameBuffer[jpegBufIx];
-
-				// Toggles the buffer index for the next loop iteration (Ping-Pong)
 				rawBufIx = 1 - rawBufIx;
 				jpegBufIx = 1 - jpegBufIx;
+
+				timeCap = static_cast<uint32_t>(Time::GetUs() - timestamp);
+				timeCapSum += timeCap;
 #endif
 
 				currentRaw.timestampUs = Time::GetUs();
 
-#if !USE_LINE_MODE
-				timeCap = Time::GetUs() - timestamp;
-				timeCapSum = timeCapSum + timeCap;
-#endif
-				timestamp = Time::GetUs();
+				// Request a keyframe for the first 3 frames
+				bool requestIFrame = (startupBurstCounter > 0);
 
 				// Pass through image processor to transfor to MCU blocks
 				// status = ImageProcessor::ConvertToMCU(rawFrameBuffer, processedFrameBuffer);
@@ -375,32 +402,61 @@ void VisionThread::Run(ULONG input) {
 				timeConvMCU = timeConvMCU + timeConvMCU;
 				timestamp = Time::GetUs();
 
-				// Request a keyframe for the first 3 frames
-				bool requestIFrame = (startupBurstCounter > 0);
-
 				// Compress Raw Frame to JPEG
 				// status = jpegEncoder.EncodeAsync(processedFrameBuffer, jpegBuf, 80);
 				status = vencEncoder.EncodeAsync(currentRaw, currentJpeg, requestIFrame);
 				if(status == Status::Ok) {
 					// status = jpegEncoder.EncodeWait(1000);	// Encoding takes about 6ms
 					status = vencEncoder.EncodeWait(1000);
-				
 					currentJpeg.timestampUs = Time::GetUs();
-					timeEnc = Time::GetUs() - timestamp;
-					timeEncSum = timeEncSum + timeEnc;
 #if USE_LINE_MODE
-					// In line mode, frame capture and encoding occur concurrently in lockstep.
-					// The duration spent during EncodeWait is the full concurrent frame time.
-					timeCap = timeEnc;
+					// Exact HW time: DCMIPP and VENC frame complete timestamps. The delta is exactly how long VENC took to chew the final lines.
+					uint64_t dcmippStart = cameraHD.GetPipeStatistics(Dcmipp::PipeID::Main).lastVsyncTimestamp;
+					uint64_t dcmippDone = cameraHD.GetPipeStatistics(Dcmipp::PipeID::Main).lastFrameTimestamp;
+					uint64_t vencDone = vencEncoder.GetStatistics().lastFrameEndTimestamp;
+					
+					timeSliceEnc = static_cast<uint32_t>(vencDone - dcmippDone);
+					timeSliceEncSum += timeSliceEnc;
+
+					// Total HW frame time (from VSYNC to VENC done)
+					timeEnc = static_cast<uint32_t>(vencDone - dcmippStart);
+					timeEncSum += timeEnc;
+
+					// Total OS block time for the concurrent capture/encode
+					timeCap = Time::GetUs() - timestamp; 
 					timeCapSum += timeCap;
 
-					// Per-slice metrics for line mode
+					// Estimated OS Cap time per slice
 					timeSliceCap = static_cast<uint32_t>(static_cast<float>(timeCap) / numSlices);
-					timeSliceEnc = static_cast<uint32_t>(static_cast<float>(timeEnc) / numSlices);
 					timeSliceCapSum += timeSliceCap;
-					timeSliceEncSum += timeSliceEnc;
+
+					// Fetch byte counts
+					encOutBytes = vencEncoder.GetStatistics().lastFrameBytes;					
+#else
+					// Exact HW time VENC spent encoding the full frame
+					uint64_t dcmippDone = cameraHD.GetPipeStatistics(Dcmipp::PipeID::Main).lastFrameTimestamp;
+					uint64_t vencDone = vencEncoder.GetStatistics().lastFrameEndTimestamp;
+					
+					timeEnc = static_cast<uint32_t>(vencDone - dcmippDone);
+					timeEncSum += timeEnc;
+
+					timeCap = Time::GetUs() - timestamp; 
+					timeCapSum += timeCap;
+
+					// Fetch byte counts
+					encOutBytes = vencEncoder.GetStatistics().lastFrameBytes;
 #endif
 					timestamp = Time::GetUs();
+
+					// Compute compression ratio
+					encRawBytes = (currentRaw.format == PixelFormat::YUV420_NV12) 
+								? ((currentRaw.width * currentRaw.height * 3) / 2) 
+								: (currentRaw.width * currentRaw.height * 2);
+					if(encOutBytes > 0) {
+						compressionRatio = static_cast<float>(encRawBytes) / static_cast<float>(encOutBytes);
+						compressionRatioSum += compressionRatio;
+						epochEncBytesSum += encOutBytes;
+					}
 
 					if(status == Status::Ok) {
 						if(startupBurstCounter > 0) {
@@ -415,7 +471,7 @@ void VisionThread::Run(ULONG input) {
 							// jpegBufIx = 1 - jpegBufIx;	// Ping-pong buffer indexing
 						}
 						else {
-							uvcDropedCount += 1;
+							epochUVCDroppedCount = epochUVCDroppedCount + 1;
 							// LOG_WARN("UVC Frame Drop.");
 						}
 
@@ -510,11 +566,12 @@ void VisionThread::Run(ULONG input) {
 							// }
 						}
 
-						frameCount += 1;
-						if(deltaTime < Time::GetMs()) {
-							// Only calculate and report FPS every 1s
-							float fps = frameCount / 5.0f;
-							LOG_INFO("HD-CAM: %.1f FPS (UVC Drop %d/%d)", fps, uvcDropedCount, frameCount);
+						epochFrameCount = epochFrameCount + 1;
+
+						// Periodic Snapshot Publication (Every 1000ms)
+						uint64_t currentMs = Time::GetMs();
+						uint64_t elapsedMs = currentMs - epochStartMs;
+						if(elapsedMs >= 1000) {
 							// Performance values for VGA 640x480 on "Legacy" JPEG Encoder:
 							// From AN4996 (STM32H7+SDRAM@100M): To MCU 58 ms, Enc 4 ms, TOTAL 62 ms
 
@@ -540,42 +597,62 @@ void VisionThread::Run(ULONG input) {
 							// HD-CAM & Venc Pool in SRAM, rest in HyperRAM & Code in SRAM:						Cap 47329 us, To YUYV  15705 us, Enc 3602 us
 							// HD-CAM & Venc Pool, Proc. Buffer in SRAM, rest in HyperRAM & Code in SRAM:		Cap 45085 us, To YUYV  18887 us, Enc 2661 us
 
-							// Calculate averages safely
-							uint32_t avgCap = (frameCount > 0) ? (timeCapSum / frameCount) : 0;
-							uint32_t avgConv = (frameCount > 0) ? (timeConvMCUSum / frameCount) : 0;
-							uint32_t avgEnc = (frameCount > 0) ? (timeEncSum / frameCount) : 0;
-							uint32_t avgIO = (frameCount > 0) ? (timeIOSum / frameCount) : 0;
+							if(tx_mutex_get(&mutex, 5) == TX_SUCCESS) {
+								stats.fps = (epochFrameCount * 1000.0f) / static_cast<float>(elapsedMs);
+								stats.totalFrames += epochFrameCount;
+								stats.uvcDroppedCount += epochUVCDroppedCount;
+								stats.pipelineRestarts = pipelineRestartCounter;
+
+								// Latencies
+								stats.lastCapTimeUs = timeCap;
+								stats.avgCapTimeUs = (epochFrameCount > 0) ? static_cast<uint32_t>(timeCapSum / epochFrameCount) : 0;
+								stats.lastEncTimeUs = timeEnc;
+								stats.avgEncTimeUs = (epochFrameCount > 0) ? static_cast<uint32_t>(timeEncSum / epochFrameCount) : 0;
+								stats.lastIOTimeUs = timeIO;
+								stats.avgIOTimeUs = (epochFrameCount > 0) ? static_cast<uint32_t>(timeIOSum / epochFrameCount) : 0;
 
 #if USE_LINE_MODE
-							uint32_t avgSliceCap = (frameCount > 0) ? (timeSliceCapSum / frameCount) : 0;
-							uint32_t avgSliceEnc = (frameCount > 0) ? (timeSliceEncSum / frameCount) : 0;
-
-							LOG_INFO("HD-CAM: Cap %lu, Enc %lu, I/O %lu [us] | Per Slice (%lu lines): Cap %lu, Enc %lu [us]", 
-										timeCap, timeEnc, timeIO, wrapLines, timeSliceCap, timeSliceEnc);
-							LOG_INFO("HD-CAM: Avg Cap %lu, Enc %lu, I/O %lu [us] | Avg Slice: Cap %lu, Enc %lu [us]", 
-										avgCap, avgEnc, avgIO, avgSliceCap, avgSliceEnc);
-#else
-							LOG_INFO("HD-CAM: Cap %d, Conv %d, Enc %d, I/O %d [us]", timeCap, timeConvMCU, timeEnc, timeIO);
-							LOG_INFO("HD-CAM: Avg Cap %lu, Conv %lu, Enc %ld, I/O %lu [us]", avgCap, avgConv, avgEnc, avgIO);
+								stats.lastSliceCapUs = timeSliceCap;
+								stats.avgSliceCapUs = (epochFrameCount > 0) ? static_cast<uint32_t>(timeSliceCapSum / epochFrameCount) : 0;
+								stats.lastSliceEncUs = timeSliceEnc;
+								stats.avgSliceEncUs = (epochFrameCount > 0) ? static_cast<uint32_t>(timeSliceEncSum / epochFrameCount) : 0;
 #endif
 
+								// Throughput & Compression
+								stats.lastFrameBytes = encOutBytes;
+								stats.bitrateBPS = static_cast<uint32_t>((epochEncBytesSum * 8000ULL) / elapsedMs);
+								stats.compressionRatio = compressionRatio;
+								stats.avgCompressionRatio = (epochFrameCount > 0) ? (compressionRatioSum / static_cast<float>(epochFrameCount)) : 0.0f;
+
+								// Hardware driver structures
+								stats.csi = cameraHD.GetCSIStatistics();
+								stats.dcmipp = cameraHD.GetPipeStatistics(Dcmipp::PipeID::Main);
+								stats.venc = vencEncoder.GetStatistics();
+
+								tx_mutex_put(&mutex);
+							}
+
 							// Reset accumulators
+							epochFrameCount = 0;
+							epochUVCDroppedCount = 0;
+							epochEncBytesSum = 0;
 							timeCapSum = 0;
 							timeConvMCUSum = 0;
 							timeEncSum = 0;
 							timeIOSum = 0;
+							compressionRatioSum = 0.0f;
 #if USE_LINE_MODE
 							timeSliceCapSum = 0;
 							timeSliceEncSum = 0;
 #endif
-							frameCount = 0;
-							uvcDropedCount = 0;
-							deltaTime = Time::GetMs() + 5000;
+							epochStartMs = currentMs;
 						}
 					}
 				}
 			}
 			else {
+				// Pipeline error handling
+				pipelineRestartCounter = pipelineRestartCounter + 1;
 				LOG_WARN("HD-CAM Frame Drop / Error. Restarting Pipeline...");
 
 #if USE_LINE_MODE

@@ -104,6 +104,8 @@ void USBDevice::EventHandler(USB::Event event, uint8_t epAddr, uint32_t len) {
 void USBDevice::HandleSetup(uint8_t epNum) {
 	(void)epNum;
 
+	this->stats.setupPackets = this->stats.setupPackets + 1;
+
 	// Get setup packet from peripheral driver
 	USB::SetupPacket setup = *this->bus.GetSetupPacket();
 
@@ -488,6 +490,7 @@ void USBDevice::SetConfiguration(const USB::SetupPacket& setup) {
 	else {
 		// Activate configuration 1
 		this->state = State::Configured;
+		this->stats.configChanges = this->stats.configChanges + 1;
 
 		// Initialize ALL class driver
 		bool allInitSuccess = true;
@@ -607,6 +610,8 @@ void USBDevice::ControlACK() {
 }
 
 void USBDevice::ControlStall() {
+	this->stats.controlStalls = this->stats.controlStalls + 1;
+
 	this->bus.StallEndpoint(0x80); // Stall EP0 IN
 	this->bus.StallEndpoint(0x00); // Stall EP0 OUT
 

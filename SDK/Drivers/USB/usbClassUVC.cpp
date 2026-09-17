@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/Drivers/USB/usbClassUVC.cpp
+ * File:	SDK/Drivers/USB/usbClassUVC.cpp
  */
 
 #include "usbClassUVC.hpp"
@@ -625,6 +625,18 @@ Status USBClassUVC::OnDataIn(USB& usb, uint8_t epNum) {
 
 	if(epNum == (videoInEp & 0x7F)) {
 		this->txBusy = false;
+
+		// If the packet that completed was the EOF packet, the frame is fully drained
+		if(this->eofPacketSent == true) {
+			this->eofPacketSent = false;
+			this->stats.completedFrames++;
+
+			uint32_t drainTime = static_cast<uint32_t>(Time::GetUs() - this->frameStartUs);
+			this->stats.lastDrainTimeUs = drainTime;
+			if(drainTime > this->stats.maxDrainTimeUs) {
+				this->stats.maxDrainTimeUs = drainTime;
+			}
+		}
 		
 		// Push the next chunk of the current frame
 		this->StartTX();
@@ -720,8 +732,13 @@ Status USBClassUVC::OnDataOut(USB& usb, uint8_t epNum, uint32_t len) {
 Status USBClassUVC::OnError(USB& usb, uint8_t epNum) {
 	(void)usb;
 	if(epNum == (videoInEp & 0x7F)) {
-		// The hardware missed a frame. Drop the busy lock.
+		// Reset busy flag and flush any leftover frame chunks to prevent deadlock
 		this->txBusy = false;
+		this->eofPacketSent = false;
+		this->frameBufferRemaining = 0;
+		this->frameHeaderRemaining = 0;
+		this->frameBuffer = nullptr;
+		this->frameHeaderBuffer = nullptr;
 	}
 	return Status::Ok;
 }
@@ -748,18 +765,32 @@ const FrameFormat* USBClassUVC::GetActiveFormat() const {
 
 Status USBClassUVC::SubmitFrame(const VisionFrame* frame, const VisionFrame* frameHeader) {
 	if(this->bus == nullptr || this->isStreaming == false) {
+		this->stats.droppedFrames = this->stats.droppedFrames + 1;
 		return Status::Error;
+	}
+
+	// If hardware is not busy but bytes were left behind (e.g., missed EOF or aborted transfer), flush them
+	if(this->txBusy == false && (this->frameBufferRemaining > 0 || this->frameHeaderRemaining > 0)) {
+		this->frameBufferRemaining = 0;
+		this->frameHeaderRemaining = 0;
 	}
 
 	// Prevent overwriting a frame that is currently in progress
 	if(this->frameBufferRemaining > 0|| this->frameHeaderRemaining > 0) {
+		this->stats.droppedFrames = this->stats.droppedFrames + 1;
 		return Status::Busy;
 	}
 
 	// Validate the incoming frame token
 	if(frame == nullptr || frame->startAddress == nullptr || frame->payloadSize == 0) {
+		this->stats.droppedFrames = this->stats.droppedFrames + 1;
 		return Status::Error;
 	}
+
+	// Record submission stats & timestamp
+	this->stats.submittedFrames++;
+	this->stats.lastFrameBytes = frame->payloadSize + (frameHeader ? frameHeader->payloadSize : 0);
+	this->frameStartUs = Time::GetUs();
 
 	// Set up the tracking variables for the new frame
 	this->frameIdToggle = (this->frameIdToggle == 0) ? 1 : 0;
@@ -818,6 +849,7 @@ void USBClassUVC::StartTX() {
 	else {
 		// This packet will finish the current frame
 		headerInfo |= 0x02; // Set the EOF bit
+		this->eofPacketSent = true;
 	}
 
 	// Pack UVC Payload Header
@@ -841,7 +873,7 @@ void USBClassUVC::StartTX() {
 	this->epInBuffer[11] = static_cast<uint8_t>((usbSofToken >> 8) & 0xFF);
 
 	uint8_t* destPtr = &this->epInBuffer[headerLength];
-    uint32_t bytesLeftToCopy = bytesToSend;
+	uint32_t bytesLeftToCopy = bytesToSend;
 
 	// Copy from header prefix buffer first
 	if(this->frameHeaderRemaining > 0) {
@@ -865,6 +897,7 @@ void USBClassUVC::StartTX() {
 	// Lock the pipeline and hand the buffer to driver
 	this->txBusy = true;
 	uint32_t totalBytes = bytesToSend + headerLength;
+	this->stats.transferredBytes += totalBytes;
 	this->bus->Transmit(this->videoInEp, this->epInBuffer, totalBytes);
 }
 

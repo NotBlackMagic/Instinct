@@ -7,9 +7,13 @@
 
 #include "shellModules.hpp"
 
+static void PrintHelp() {
+	Logger::Instance().Write("Usage: gpio <read|write|toggle> <port> <pin> [val]\r\n");
+}
+
 static bool CommandGPIO(const char* args) {
 	if (args == nullptr || args[0] == '\0') {
-		Logger::Instance().Write("Usage: gpio <read|write|toggle> <port> <pin> [val]\r\n");
+		PrintHelp();
 		return true;
 	}
 	return true;
