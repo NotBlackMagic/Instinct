@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/hyperbus.hpp
- * Author:  NotBlackMagic
- * Brief:   HyperBus driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
+ * File:	SDK/MCU/hyperbus.hpp
+ * Author:	NotBlackMagic
+ * Brief:	HyperBus driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
 #pragma once
@@ -26,9 +26,9 @@
 class HyperBus {
 	public:
 		/// @brief Defines if accessing the memory array or the registers.
-		/// @note  HyperBus Protocol Bit 46 (0 = Memory, 1 = Register).
+		/// @note HyperBus Protocol Bit 46 (0 = Memory, 1 = Register).
 		enum class AddressSpace : uint32_t {
-			Memory   = 0,
+			Memory = 0,
 			Register = 1 
 		};
 
@@ -156,7 +156,7 @@ class HyperBus {
 		// Timeout defines
 		static constexpr uint32_t TIMEOUT_MUTEX = TX_WAIT_FOREVER;
 #else
-        static constexpr uint32_t TIMEOUT_MUTEX = 0xFFFFFFFF;
+		static constexpr uint32_t TIMEOUT_MUTEX = 0xFFFFFFFF;
 #endif
 		
 		// Internal helpers

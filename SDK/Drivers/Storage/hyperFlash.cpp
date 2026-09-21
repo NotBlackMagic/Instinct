@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/Drivers/Storage/hyperFlash.cpp
+ * File:	SDK/Drivers/Storage/hyperFlash.cpp
  */
 
 #include "hyperFlash.hpp"
@@ -91,13 +91,13 @@ Status HyperFlash::ReadID(uint16_t *manID, uint16_t *famID, uint64_t *uniqueID) 
 	uint8_t flashData[4];
 
 	Status status = this->UnlockSequence();
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->WriteCommand(static_cast<uint32_t>(CMD_ADDR_UNLOCK_1), 0x90);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
@@ -105,14 +105,14 @@ Status HyperFlash::ReadID(uint16_t *manID, uint16_t *famID, uint64_t *uniqueID) 
 	// this->WriteCommand(static_cast<uint32_t>(CMD_ADDR_UNLOCK_1), 0x98);
 
 	// Manufacturer ID (Infineon: 0x0034)
-	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x800 << 1), HyperBus::AddrSize::Width_32,  HyperBus::BusWidth::Lines_8, flashData, 2, true);
-	if (status != Status::Ok) {
+	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x800 << 1), HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, flashData, 2, true);
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->bus.TransferWait(1000);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
@@ -137,74 +137,74 @@ Status HyperFlash::ReadID(uint16_t *manID, uint16_t *famID, uint64_t *uniqueID) 
 	// idLength = (flashData[1] << 8) | flashData[0];
 
 	// Family ID (HL-T/HS-T Family: 0x0090)
-	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x804 << 1), HyperBus::AddrSize::Width_32,  HyperBus::BusWidth::Lines_8, flashData, 2, true);
-	if (status != Status::Ok) {
+	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x804 << 1), HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, flashData, 2, true);
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->bus.TransferWait(1000);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 	*famID = (flashData[1] << 8) | flashData[0];
 
 	// Unique ID
-	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x200 << 1), HyperBus::AddrSize::Width_32,  HyperBus::BusWidth::Lines_8, flashData, 2, true);
-	if (status != Status::Ok) {
+	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x200 << 1), HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, flashData, 2, true);
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->bus.TransferWait(1000);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 	*uniqueID = (uint64_t)((uint64_t)flashData[1] << 8) | flashData[0];
 
-	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x201 << 1), HyperBus::AddrSize::Width_32,  HyperBus::BusWidth::Lines_8, flashData, 2, true);
-	if (status != Status::Ok) {
+	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x201 << 1), HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, flashData, 2, true);
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->bus.TransferWait(1000);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 	*uniqueID |= (uint64_t)((uint64_t)(flashData[1] << 8) | flashData[0]) << 16;
 
-	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x202 << 1), HyperBus::AddrSize::Width_32,  HyperBus::BusWidth::Lines_8, flashData, 2, true);
-	if (status != Status::Ok) {
+	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x202 << 1), HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, flashData, 2, true);
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->bus.TransferWait(1000);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 	*uniqueID |= (uint64_t)((uint64_t)(flashData[1] << 8) | flashData[0]) << 32;
 
-	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x203 << 1), HyperBus::AddrSize::Width_32,  HyperBus::BusWidth::Lines_8, flashData, 2, true);
-	if (status != Status::Ok) {
+	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x203 << 1), HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, flashData, 2, true);
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->bus.TransferWait(1000);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 	*uniqueID |= (uint64_t)((uint64_t)(flashData[1] << 8) | flashData[0]) << 48;
 
 	status = this->WriteCommand(0x00, 0xF0);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
@@ -221,44 +221,44 @@ Status HyperFlash::ReadJEDEC() {
 	uint8_t flashData[4];
 
 	Status status = this->UnlockSequence();
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->WriteCommand(static_cast<uint32_t>(CMD_ADDR_UNLOCK_1), 0x90);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	//JEDEC SFDP Read
-	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, 0x00, HyperBus::AddrSize::Width_32,  HyperBus::BusWidth::Lines_8, flashData, 2, true);
-	if (status != Status::Ok) {
+	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, 0x00, HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, flashData, 2, true);
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->bus.TransferWait(1000);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
-	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x01 << 1), HyperBus::AddrSize::Width_32,  HyperBus::BusWidth::Lines_8, &flashData[2], 2, true);
-	if (status != Status::Ok) {
+	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, (0x01 << 1), HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, &flashData[2], 2, true);
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->bus.TransferWait(1000);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->WriteCommand(0x00, 0xF0);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
@@ -272,14 +272,14 @@ Status HyperFlash::Read(uint32_t addr, uint8_t *buf, uint32_t len) {
 		return Status::Timeout;
 	}
 
-	Status status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, addr, HyperBus::AddrSize::Width_32,  HyperBus::BusWidth::Lines_8, buf, len, true);
-	if (status != Status::Ok) {
+	Status status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, addr, HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, buf, len, true);
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->bus.TransferWait(1000);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
@@ -326,25 +326,25 @@ Status HyperFlash::ChipErase() {
 	}
 
 	Status status = this->UnlockSequence();
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->WriteCommand(static_cast<uint32_t>(CMD_ADDR_UNLOCK_1), static_cast<uint16_t>(CMD_DATA_ERASE));
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->UnlockSequence();
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->WriteCommand(static_cast<uint32_t>(CMD_ADDR_UNLOCK_1), static_cast<uint16_t>(CMD_DATA_CHIP_ERASE));
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
@@ -369,25 +369,25 @@ Status HyperFlash::SectorErase(uint32_t sectorAddr) {
 	}
 
 	Status status = this->UnlockSequence();
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status =this->WriteCommand(static_cast<uint32_t>(CMD_ADDR_UNLOCK_1), static_cast<uint16_t>(CMD_DATA_ERASE));
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 	
 	status =this->UnlockSequence();
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status =this->WriteCommand(sectorAddr, static_cast<uint16_t>(CMD_DATA_SECTOR_ERASE));
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
@@ -417,7 +417,7 @@ Status HyperFlash::WritePage(uint32_t pageAddr, const uint8_t *buf, uint32_t len
 		return Status::Error;
 	}
 
-	if (len % 2 != 0) {
+	if(len % 2 != 0) {
 		this->bus.UnlockBus();
 		return Status::Error;
 	}
@@ -427,19 +427,19 @@ Status HyperFlash::WritePage(uint32_t pageAddr, const uint8_t *buf, uint32_t len
 
 	// Write to Buffer Command	
 	Status status = this->UnlockSequence();
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->WriteCommand(sectorAddr, static_cast<uint16_t>(CMD_DATA_WRITE_BUFFER));
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->WriteCommand(sectorAddr, wordCnt);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
@@ -449,12 +449,12 @@ Status HyperFlash::WritePage(uint32_t pageAddr, const uint8_t *buf, uint32_t len
 	// Write must be within line (page) boundary
 	for(uint32_t i = 0; i < len; i += 2) {		
 		status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, pageAddr + i, HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, (uint8_t*)&buf[i], 2, false);
-		if (status != Status::Ok) {
+		if(status != Status::Ok) {
 			this->bus.UnlockBus();
 			return status;
 		}
-		this->bus.TransferWait(1000);
-		if (status != Status::Ok) {
+		status = this->bus.TransferWait(1000);
+		if(status != Status::Ok) {
 			this->bus.UnlockBus();
 			return status;
 		}
@@ -462,7 +462,7 @@ Status HyperFlash::WritePage(uint32_t pageAddr, const uint8_t *buf, uint32_t len
 
 	// Commit data
 	status = this->WriteCommand(sectorAddr, static_cast<uint16_t>(CMD_DATA_PROG_BUFFER));
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
@@ -484,25 +484,25 @@ Status HyperFlash::ReadRegister(uint32_t wordAddr, uint16_t *value) {
 	}
 
 	Status status = this->UnlockSequence();
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->WriteCommand(static_cast<uint32_t>(CMD_ADDR_UNLOCK_1), 0xC7);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
-	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, wordAddr, HyperBus::AddrSize::Width_32,  HyperBus::BusWidth::Lines_8, (uint8_t*)value, 2, true);
-	if (status != Status::Ok) {
+	status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, wordAddr, HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, (uint8_t*)value, 2, true);
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->bus.TransferWait(1000);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
@@ -517,25 +517,25 @@ Status HyperFlash::WriteRegister(uint32_t wordAddr, uint16_t value) {
 	}
 
 	Status status = this->UnlockSequence();
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->WriteCommand(static_cast<uint32_t>(CMD_ADDR_UNLOCK_1), 0x38);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
-	status= this->bus.TransferAsync(HyperBus::AddressSpace::Memory, wordAddr, HyperBus::AddrSize::Width_32,  HyperBus::BusWidth::Lines_8, (uint8_t*)&value, 2, false);
-	if (status != Status::Ok) {
+	status= this->bus.TransferAsync(HyperBus::AddressSpace::Memory, wordAddr, HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, (uint8_t*)&value, 2, false);
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
 
 	status = this->bus.TransferWait(1000);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		this->bus.UnlockBus();
 		return status;
 	}
@@ -554,12 +554,12 @@ Status HyperFlash::EnterMemoryMappedMode() {
 
 	this->bus.UnlockBus();
 
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		return status;
 	}	
 
 	status = this->bus.EnterMemoryMappedMode();
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		return status;
 	}
 
@@ -578,7 +578,7 @@ Status HyperFlash::ExitMemoryMappedMode() {
 
 Status HyperFlash::WriteCommand(uint32_t addr, uint16_t data) {
 	uint16_t cmdData = data;
-	Status status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, addr, HyperBus::AddrSize::Width_32,  HyperBus::BusWidth::Lines_8, (uint8_t*)&cmdData, 2, false);
+	Status status = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, addr, HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, (uint8_t*)&cmdData, 2, false);
 	if(status == Status::Ok) {
 		status = this->bus.TransferWait(1000);
 	}
@@ -599,7 +599,7 @@ Status HyperFlash::ReadStatus(uint16_t &status) {
 	if(stat != Status::Ok) {
 		return stat;
 	}
-	stat = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, 0, HyperBus::AddrSize::Width_32,  HyperBus::BusWidth::Lines_8, (uint8_t*)&status, 2, true);
+	stat = this->bus.TransferAsync(HyperBus::AddressSpace::Memory, 0, HyperBus::AddrSize::Width_32, HyperBus::BusWidth::Lines_8, (uint8_t*)&status, 2, true);
 	if(stat != Status::Ok) {
 		return stat;
 	}

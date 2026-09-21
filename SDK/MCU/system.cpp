@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/system.cpp
+ * File:	SDK/MCU/system.cpp
  */
 
 #include "system.hpp"
@@ -462,8 +462,8 @@ void Time::DelayNOP(uint32_t count) {
 
 //Handled by ThreadX (??)
 /**
-  * @brief This function handles System tick timer.
-  */
+ * @brief This function handles System tick timer.
+ */
 // extern "C" {
 // 	void SysTick_Handler(void) {
 // 		systickCnt += 1;

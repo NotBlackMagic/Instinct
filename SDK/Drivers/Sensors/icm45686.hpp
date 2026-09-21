@@ -477,7 +477,7 @@ class ICM45686 {
 		Status RunHardwareSelfTest();
 
 		/// @brief Start a non-blocking data transfer request (calls TransferAsync of the underlying bus).
-		/// @details Returns immediately. Use TransferWait() to synchronize completion.
+		/// @details Returns immediately. Use GetData() to synchronize completion.
 		/// @return Status::Ok if the transfer started, or Status::Busy if the bus is locked by another thread.
 		Status RequestData();
 

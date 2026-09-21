@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/uart.hpp
- * Author:  NotBlackMagic
- * Brief:   UART driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
+ * File:	SDK/MCU/uart.hpp
+ * Author:	NotBlackMagic
+ * Brief:	UART driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
 #pragma once
@@ -20,7 +20,7 @@
 #include "tx_api.h"
 
 /// @brief Driver for the UART peripheral supporting Blocking and Async (Interrupt) modes.
-/// @note  This driver integrates with ThreadX mutexes for thread safety.
+/// @note This driver integrates with ThreadX mutexes for thread safety.
 class UART {
 	public:
 		/// @brief Defines the UART data width.

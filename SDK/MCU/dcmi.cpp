@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/dcmi.cpp
+ * File:	SDK/MCU/dcmi.cpp
  */
 
 #include "dcmi.hpp"

@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/Drivers/Storage/hyperFlash.hpp
- * Author:  NotBlackMagic
- * Brief:   HyperFlash driver class for STM32N6.
+ * File:	SDK/Drivers/Storage/hyperFlash.hpp
+ * Author:	NotBlackMagic
+ * Brief:	HyperFlash driver class for STM32N6.
  */
 
 #pragma once
@@ -50,7 +50,7 @@ class HyperFlash {
 
 			// Timing Presets
 			uint32_t sourceClockHz;		///< Peripheral source clock frequency in Hz
-			uint32_t frequencyHz;       ///< Target Bus Frequency
+			uint32_t frequencyHz;		///< Target Bus Frequency
 			uint8_t initialLatency;		///< Clock cycles (latency count)
 			bool fixedLatency;			///< True = Force Fixed, False = Variable (Default)
 			uint8_t rwRecoveryTime;		///< Additional latency after read/write
@@ -72,15 +72,15 @@ class HyperFlash {
 		Status Init(const Config &config);
 
 		/// @brief Reads the Manufacturer, Family IDs and Unique ID
-		/// @param manID    Pointer to be filled with manufacturer ID.
-		/// @param devType  Pointer to be filled with family ID.
+		/// @param manID	Pointer to be filled with manufacturer ID.
+		/// @param devType	Pointer to be filled with family ID.
 		/// @param uniqueID Pointer to be filled with unique ID.
 		/// @return Status::Ok if read succeeded, or Status::Error if failed.
 		Status ReadID(uint16_t *manID, uint16_t *famID, uint64_t *uniqueID);
 		Status ReadJEDEC();
 
 		/// @brief Resets the Flash state machine to Read Array mode.
-		/// @note  Must be called if Program/Erase returns an Error status.
+		/// @note Must be called if Program/Erase returns an Error status.
 		Status Reset();
 
 		/// @brief Reads data from Flash (Memory Mapped or Indirect).
@@ -106,13 +106,13 @@ class HyperFlash {
 
 		/// @brief Reads a device register.
 		/// @param wordAddr Word address of the register to be read.
-		/// @param value    Pointer to be filled with the register value.
+		/// @param value	Pointer to be filled with the register value.
 		/// @return Status::Ok if the read was successful, Status::Timeout if it expired, or Status::Error on hardware faults.
 		Status ReadRegister(uint32_t wordAddr, uint16_t *value);
 
 		/// @brief Writes to a device register.
 		/// @param wordAddr Word address of the register to be written.
-		/// @param value    Value to write to the register.
+		/// @param value	Value to write to the register.
 		/// @return Status::Ok if the write was successful, Status::Timeout if it expired, or Status::Error on hardware faults.
 		Status WriteRegister(uint32_t wordAddr, uint16_t value);
 
@@ -145,7 +145,7 @@ class HyperFlash {
 		static constexpr uint16_t CMD_DATA_CHIP_ERASE = 0x10;
 		static constexpr uint16_t CMD_DATA_SECTOR_ERASE = 0x30;
 		static constexpr uint16_t CMD_DATA_WRITE_BUFFER = 0x25;
-		static constexpr uint16_t CMD_DATA_PROG_BUFFER  = 0x29;
+		static constexpr uint16_t CMD_DATA_PROG_BUFFER = 0x29;
 		static constexpr uint16_t CMD_DATA_STATUS_REG_READ = 0x70;
 
 		Status WritePage(uint32_t pageAddr, const uint8_t *buf, uint32_t len);

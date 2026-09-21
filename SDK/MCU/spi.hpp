@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/spi.hpp
- * Author:  NotBlackMagic
- * Brief:   SPI driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
+ * File:	SDK/MCU/spi.hpp
+ * Author:	NotBlackMagic
+ * Brief:	SPI driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
 #pragma once
@@ -22,7 +22,7 @@
 #include "tx_api.h"
 
 /// @brief Driver for the SPI peripheral supporting Blocking and Async (Interrupt) modes.
-/// @note  This driver integrates with ThreadX mutexes for thread safety.
+/// @note This driver integrates with ThreadX mutexes for thread safety.
 class SPI {
 	public:
 		/// @brief SPI clock polarity, clock idle state.
@@ -72,9 +72,9 @@ class SPI {
 
 		/// @brief Starts a non-blocking transaction (Write, Read, or Write-then-Read).
 		/// @details Returns immediately. Use TransferWait() to synchronize completion.
-		/// @param txBuf  Pointer to data to write (need to be kept until end of transfer).
-		/// @param rxBuf  Pointer to buffer for read data.
-		/// @param len    Number of bytes to write/read.
+		/// @param txBuf	Pointer to data to write (need to be kept until end of transfer).
+		/// @param rxBuf	Pointer to buffer for read data.
+		/// @param len		Number of bytes to write/read.
 		/// @return Status::Ok if the transfer started, or Status::Busy if the SPI is locked by another thread.
 		Status TransferAsync(const uint8_t *txBuf, uint8_t *rxBuf, uint32_t len);
 

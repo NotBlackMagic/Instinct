@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/hyperbus.cpp
+ * File:	SDK/MCU/hyperbus.cpp
  */
 
 #include "hyperbus.hpp"
@@ -188,11 +188,11 @@ Status HyperBus::DeInit(void) {
 
 #if defined (USE_RTOS)
 	// Abort RTOS waits/blocks and clean up RTOS Resources
-	if (tx_event_flags_delete(&this->event) != TX_SUCCESS) {
+	if(tx_event_flags_delete(&this->event) != TX_SUCCESS) {
 		// Something went wrong...
 	}
 
-	if (tx_mutex_delete(&this->mutex) != TX_SUCCESS) {
+	if(tx_mutex_delete(&this->mutex) != TX_SUCCESS) {
 		// Something went wrong...
 	}
 #endif
@@ -233,7 +233,7 @@ Status HyperBus::TransferAsync(AddressSpace space, uint32_t addr, AddrSize addrS
 	}
 	
 	// Enforce 16-bit Alignment and Size
-	if ((len % 2 != 0) || ((uintptr_t)buf % 2 != 0)) {
+	if((len % 2 != 0) || ((uintptr_t)buf % 2 != 0)) {
 		return Status::Error; // Alignment or Size Error
 	}
 	
@@ -313,7 +313,7 @@ Status HyperBus::TransferWait(uint32_t timeoutTicks) {
 		}
 
 		if(timeoutTicks != TIMEOUT_MUTEX) { 
-			if ((Time::GetMs() - startMs) >= timeoutTicks) {
+			if((Time::GetMs() - startMs) >= timeoutTicks) {
 				return Status::Timeout;
 			}
 		}
@@ -380,9 +380,9 @@ Status HyperBus::Command(AddressSpace space, uint32_t addr, AddrSize addrSize, B
 	}
 
 	// Configure the CCR and WCCR registers with the address size and the following configuration:
-    //		- DQS signal enabled (used as RWDS)
-    //		- DTR mode enabled on address and data
-    //		- address and data on 8 or 16 lines
+	//		- DQS signal enabled (used as RWDS)
+	//		- DTR mode enabled on address and data
+	//		- address and data on 8 or 16 lines
 	WRITE_REG(this->instance->CCR, (dqsMode | XSPI_CCR_DDTR | static_cast<uint32_t>(width) | static_cast<uint32_t>(addrSize) | XSPI_CCR_ADDTR | XSPI_CCR_ADMODE_2));
 	WRITE_REG(this->instance->WCCR, (dqsMode | XSPI_WCCR_DDTR | static_cast<uint32_t>(width) | static_cast<uint32_t>(addrSize) | XSPI_WCCR_ADDTR | XSPI_WCCR_ADMODE_2));
 
@@ -442,10 +442,20 @@ Status HyperBus::EnterMemoryMappedMode() {
 
 Status HyperBus::ExitMemoryMappedMode() {
 	Status status = Status::Ok;
-
-	// Wait for busy flag to clear
 	uint32_t timeoutMs = 5;
 	uint32_t timestamp = Time::GetMs();
+
+	// Assert ABORT to stop ongoing memory-mapped prefetches and AHB transfers
+	SET_BIT(this->instance->CR, XSPI_CR_ABORT);
+
+	// Wait for the hardware to clear the ABORT bit
+	while((this->instance->CR & XSPI_CR_ABORT) == XSPI_CR_ABORT) {
+		if((Time::GetMs() - timestamp) > timeoutMs) {
+			return Status::Timeout;
+		}
+	}
+
+	// Wait for busy flag to clear
 	while((this->instance->SR & XSPI_SR_BUSY_Msk) == XSPI_SR_BUSY) {
 		if((Time::GetMs() - timestamp) > timeoutMs) {
 			// Clock stop timeout

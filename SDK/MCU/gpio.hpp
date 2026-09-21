@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/gpio.hpp
- * Author:  NotBlackMagic
- * Brief:   GPIO driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
+ * File:	SDK/MCU/gpio.hpp
+ * Author:	NotBlackMagic
+ * Brief:	GPIO driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
 #pragma once
@@ -17,7 +17,7 @@
 #include "stm32n6xx_ll_gpio.h"
 
 /// @brief Simple C++ GPIO driver for STM32 using LL (Low-Layer) API.
-/// @note  Provides pin configuration, read/write/toggle functions, and optional EXTI interrupt setup without dynamic memory usage.
+/// @note Provides pin configuration, read/write/toggle functions, and optional EXTI interrupt setup without dynamic memory usage.
 class GPIO {
 	public:
 		/// @brief GPIO operating mode.
@@ -56,8 +56,8 @@ class GPIO {
 		};
 
 		/// @brief Construct a GPIO object.
-		/// @param port Pointer to GPIO port (e.g., GPIOA, GPIOB, ...)
-		/// @param pin  Pin number (LL_GPIO_PIN_x)
+		/// @param port	Pointer to GPIO port (e.g., GPIOA, GPIOB, ...)
+		/// @param pin	Pin number (LL_GPIO_PIN_x)
 		GPIO(GPIO_TypeDef *port, uint32_t pin);
 
 		/// @brief Initialize the GPIO pin.
@@ -79,8 +79,8 @@ class GPIO {
 		uint8_t GetPinIndex() const;
 
 		/// @brief Enable EXTI interrupt for this GPIO pin.
-		/// @param trigger      Trigger condition (Rising/Falling/Both)
-		/// @param irqPriority  NVIC priority for the EXTI line
+		/// @param trigger		Trigger condition (Rising/Falling/Both)
+		/// @param irqPriority	NVIC priority for the EXTI line
 		void EnableIRQ(Interrupt trigger, uint8_t irqPriority);
 
 		/// @brief Disable EXTI interrupt for this GPIO pin.

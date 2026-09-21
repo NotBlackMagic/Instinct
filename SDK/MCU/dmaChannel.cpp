@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/dmaChannel.cpp
+ * File:	SDK/MCU/dmaChannel.cpp
  */
 
 #include "dmaChannel.hpp"
@@ -76,7 +76,7 @@ Status DMAChannel::Init(const Config& config) {
 	return Status::Ok;
 }
 
-Status DMAChannel::Transfer(uint32_t srcAddr, uint32_t dstAddr, uint32_t len) {
+Status DMAChannel::TransferAsync(uint32_t srcAddr, uint32_t dstAddr, uint32_t len) {
 	if(len == 0) {
 		return Status::Error;
 	}
@@ -101,8 +101,8 @@ Status DMAChannel::Transfer(uint32_t srcAddr, uint32_t dstAddr, uint32_t len) {
 		if(this->channelIndex >= LL_DMA_CHANNEL_12 && reqSWChunking == false) {
 			// Channel is capable, find a clean divisor that results in an "burstSize" bytes aligned block size
 			uint8_t burstSize = 64;		// Align blocks to maximum 16-beat word burst (upper burst size limit)
-			for (uint32_t i = 1; i <= 2048; i++) {
-				if (len % i == 0 && (len / i) <= 65528 && ((len / i) % burstSize == 0)) {
+			for(uint32_t i = 1; i <= 2048; i++) {
+				if(len % i == 0 && (len / i) <= 65528 && ((len / i) % burstSize == 0)) {
 					this->blockSize = len / i;
 					hwBlockCount = i - 1;
 					this->remainingBytes = 0; // Hardware handles it all
@@ -111,7 +111,7 @@ Status DMAChannel::Transfer(uint32_t srcAddr, uint32_t dstAddr, uint32_t len) {
 			}
 
 			// If no clean divisor is found, we fall back to an error.
-			if (this->blockSize > 65535) {
+			if(this->blockSize > 65535) {
 				return Status::Error; 
 			}
 		}

@@ -119,8 +119,8 @@ Status Csi::Init(const Config &config) {
 	uint8_t hsFreq = 0;
 	uint16_t oscFreq = 0;
 	uint32_t bitrateMbps = config.bitrate / 1000000;
-	for (int i = 0; i < phyParamsTableSize; i++) {
-		if (bitrateMbps <= phyParamsTable[i].maxBitrateMbps) {
+	for(int i = 0; i < phyParamsTableSize; i++) {
+		if(bitrateMbps <= phyParamsTable[i].maxBitrateMbps) {
 			hsFreq = phyParamsTable[i].hsFreqRange;
 			oscFreq = phyParamsTable[i].oscFreqTarget;
 			break;

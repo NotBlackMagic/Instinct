@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/jpeg.hpp
- * Author:  NotBlackMagic
- * Brief:   JPEG hardware codec driver for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
+ * File:	SDK/MCU/jpeg.hpp
+ * Author:	NotBlackMagic
+ * Brief:	JPEG hardware codec driver for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
 #pragma once
@@ -50,7 +50,7 @@ class Jpeg {
 			uint32_t height;
 			ColorSpace colorSpace;
 			Subsampling subsampling;
-			uint32_t quality;       ///< Compression quality (1-100)
+			uint32_t quality;			///< Compression quality (1-100)
 		};
 
 		/// @brief JPEG peripheral hardware configuration.

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/Drivers/Sensors/icp20100.cpp
+ * File:	SDK/Drivers/Sensors/icp20100.cpp
  */
 
 #include "icp20100.hpp"

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/exti.cpp
+ * File:	SDK/MCU/exti.cpp
  */
 
 
@@ -20,7 +20,7 @@ Status EXTIManager::RegisterCallback(uint8_t line, EXTICallback callback, void* 
 
 	if(extiCallbackTable[line].callback != nullptr) {
 		__set_PRIMASK(primaskState);
-        return Status::Error;
+		return Status::Error;
 	}
 	
 	extiCallbackTable[line].callback = callback;

@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/sdmmc.hpp
- * Author:  NotBlackMagic
- * Brief:   SDMMC driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
+ * File:	SDK/MCU/sdmmc.hpp
+ * Author:	NotBlackMagic
+ * Brief:	SDMMC driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
  #pragma once
@@ -132,7 +132,7 @@ class SDMMC {
 		Status SetBusWidth(BusWidth width);
 
 		/// @brief Configures protocol timing (Sampling edge, DDR, etc).
-		/// @note  Does NOT change frequency. Call SetClock() separately.
+		/// @note Does NOT change frequency. Call SetClock() separately.
 		/// @param mode Target bus speed mode.
 		/// @return Status::Ok if change succeeded.
 		Status SetSpeedMode(BusSpeed mode);
@@ -146,7 +146,7 @@ class SDMMC {
 		CommandResponse Command(uint8_t cmd, uint32_t args, ResponseType respType, TransferMode mode = TransferMode::None);
 
 		/// @brief Configures IDMA and starts the Data Path State Machine (Non-blocking).
-		/// @note  You MUST send the associated SD Command (e.g., CMD17/CMD25) after calling this.
+		/// @note You MUST send the associated SD Command (e.g., CMD17/CMD25) after calling this.
 		/// @param buf		Pointer to the data buffer (must be 32-byte aligned for Cache).
 		/// @param len		Number of bytes to transfer.
 		/// @param blkSize	Transfer block size in bytes, must be power 2 from 1 to 512.

@@ -9,6 +9,7 @@
 #include "inertialThread.hpp"
 #include "loggerThread.hpp"
 #include "monitorThread.hpp"
+#include "opticalFlowThread.hpp"
 #include "radioThread.hpp"
 #include "sensorHubThread.hpp"
 #include "storageThread.hpp"
@@ -192,10 +193,11 @@ void tx_application_define(void *first_unused_memory) {
 	// Start application threads
 	MonitorThread::Init();
 	StorageThread::Init();
-	VisionThread::Init();
+	// VisionThread::Init();
 	LoggerThread::Init();
-	// InertialThread::Init();
-	// AuxiliaryThread::Init();
+	InertialThread::Init();
+	AuxiliaryThread::Init();
+	// OpticalFlowThread::Init();
 	// RadioThread::Init();
 	// MavlinkThread::Init();
 	// SensorHubThread::Init();

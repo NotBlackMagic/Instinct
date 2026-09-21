@@ -36,9 +36,11 @@
 #include "ina700.hpp"
 #include "icm45686.hpp"
 #include "icp20100.hpp"
+#include "icu20201.hpp"
 #include "lis2mdl.hpp"
 #include "lsm6dso.hpp"
 #include "rcReceiver.hpp"
+#include "vl53l8ch.hpp"
 
 // Vision sensor and device drivers
 #include "ov5645.hpp"
@@ -123,6 +125,7 @@ extern SDMMC sdmmc2;
 extern SPI spi1;
 extern SPI spi2;
 extern SPI spi4;
+extern SPI spi5;
 
 extern Timer tim2;
 extern PWM pwm1Ch1;
@@ -157,6 +160,9 @@ extern ICP20100 onboardBaro;
 extern ICM45686 ext2IMU;
 extern BMM350 extMag;
 extern BMP581 extBaro;
+
+extern ICU20201 extUltraToF;
+extern VL53L8CH extVL53ToF;
 
 extern RCReceiver mainRC;
 

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/xspi.cpp
+ * File:	SDK/MCU/xspi.cpp
  */
 
 #include "xspi.hpp"

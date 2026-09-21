@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/jpeg.cpp
+ * File:	SDK/MCU/jpeg.cpp
  */
 
 #include "jpeg.hpp"
@@ -288,9 +288,9 @@ Status Jpeg::LoadTables(uint32_t quality) {
 
 	// Chroma Quantization Table (QMEM1)
 	tableAddress = this->instance->QMEM1;
-	for (uint32_t i = 0; i < quantTableSize; i += 4) {
+	for(uint32_t i = 0; i < quantTableSize; i += 4) {
 		uint32_t quantRow = 0;
-		for (uint32_t j = 0; j < 4; j++) {
+		for(uint32_t j = 0; j < 4; j++) {
 			uint32_t quantVal = ((chromaQuantTable[zigzagOrder[i + j]] * scaleFactor) + 50) / 100;
 			if(quantVal == 0) {
 				quantVal = 1;

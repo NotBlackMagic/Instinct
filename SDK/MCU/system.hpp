@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/system.hpp
- * Author:  NotBlackMagic
- * Brief:   XXX
+ * File:	SDK/MCU/system.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Basic system drivers, for configuring clock tree, SRAM region, cache handling, and basic time keeping.
  */
 
 #pragma once

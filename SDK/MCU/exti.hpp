@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/exti.hpp
- * Author:  NotBlackMagic
- * Brief:   EXTI driver class (EXTI interrupt manager) for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
+ * File:	SDK/MCU/exti.hpp
+ * Author:	NotBlackMagic
+ * Brief:	EXTI driver class (EXTI interrupt manager) for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
 #pragma once

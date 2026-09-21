@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/dmaChannel.hpp
- * Author:  NotBlackMagic
- * Brief:   DMA channel driver class (HPDMA and GPDMA) for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
+ * File:	SDK/MCU/dmaChannel.hpp
+ * Author:	NotBlackMagic
+ * Brief:	DMA channel driver class (HPDMA and GPDMA) for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
 #pragma once
@@ -88,7 +88,7 @@ class DMAChannel {
 		/// @param dstAddr	Destinaion address.
 		/// @param len		Number of bytes to transfer.
 		/// @return Status::Ok if the transfer started, or Status::Busy if the DMA channel is locked by another thread.
-		Status Transfer(uint32_t srcAddr, uint32_t dstAddr, uint32_t len);
+		Status TransferAsync(uint32_t srcAddr, uint32_t dstAddr, uint32_t len);
 		
 		// Status Transfer2D(uint32_t srcAddr, uint32_t dstAddr, const Config2D& config);
 		// Status TransferList(LinkedListNode* headNode);

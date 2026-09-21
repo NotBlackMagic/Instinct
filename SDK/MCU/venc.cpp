@@ -471,13 +471,13 @@ Status Venc::InitH264() {
 	uint32_t mbHeight = (this->config.imageParams.height + 15) / 16;
 	uint32_t mbsPerFrame = mbWidth * mbHeight;
 
-	if (mbsPerFrame <= 1620) {
+	if(mbsPerFrame <= 1620) {
 		h264Config.level = H264ENC_LEVEL_3;		// Up to SD (VGA)
 	} 
-	else if (mbsPerFrame <= 3600) {
+	else if(mbsPerFrame <= 3600) {
 		h264Config.level = H264ENC_LEVEL_3_1;	// Up to HD (720p)
 	} 
-	else if (mbsPerFrame <= 8192) {
+	else if(mbsPerFrame <= 8192) {
 		h264Config.level = H264ENC_LEVEL_4_1;	// Up to FHD (1080p)
 	} 
 	else {
@@ -693,7 +693,7 @@ void Venc::SliceReadyCallback(H264EncSliceReady* sliceReady) {
 
 		// Calculate the size and byte offset for the newly finished slice(s)
 		uint32_t offset = 0;
-		for (uint32_t i = 0; i < sliceReady->slicesReadyPrev; i++) {
+		for(uint32_t i = 0; i < sliceReady->slicesReadyPrev; i++) {
 			offset += sliceReady->sliceSizes[i];
 		}
 		

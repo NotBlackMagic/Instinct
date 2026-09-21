@@ -2,12 +2,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/Drivers/Sensors/icp20100.hpp
- * Author:  NotBlackMagic
- * Brief:   ICP-20100 driver class for STM32N6.
+ * File:	SDK/Drivers/Sensors/icp20100.hpp
+ * Author:	NotBlackMagic
+ * Brief:	ICP-20100 driver class for STM32N6.
  */
 
- #pragma once
+#pragma once
 
 #include <stdint.h>
 
@@ -73,15 +73,39 @@ class ICP20100 {
 			OutputDataRate odr;
 		};
 
+		/// @brief Constructor.
+		/// @param i2c	Reference to the low-level bus driver.
+		/// @param addr	Device I2C address.
 		ICP20100(I2C& i2c, uint8_t addr) : bus(i2c), addr(addr) {};
 
+		/// @brief Initializes the ICP-20100 sensor.
+		/// @param config ICP-20100 sensor configuration.
+		/// @return Status::Ok if initialization succeeded, or Status::Error if the config was invalid or failed.
 		Status Init(const Config& config);
+
+		/// @brief Resets the sensor device, using software reset.
+		/// @return Status::Ok if reset succeeded cleanly.
 		Status Reset();
+
+		/// @brief Reads the Manufacturer and Device IDs.
+		/// @param id Device ID, or manufacturer ID.
+		/// @return Status::Ok if read succeeded, or Status::Error if failed.
 		Status ReadID(uint8_t& id);
 
+		/// @brief Sets the barometer/pressure sensor offset value, to be added to the read value.
+		/// @param offsetPressure Offset for pressure value.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
 		Status SetOffset(float offsetPressure);
 
+		/// @brief Start a non-blocking data transfer request (calls TransferAsync of the underlying bus).
+		/// @details Returns immediately. Use GetData() to synchronize completion.
+		/// @return Status::Ok if the transfer started, or Status::Busy if the bus is locked by another thread.
 		Status RequestData();
+
+		/// @brief Blocks the current thread until data transfer completes.
+		/// @param pressure	Pointer to be filled with received pressure data.
+		/// @param temp		Pointer to be filled with received temperature data.
+		/// @return Status::Ok if set succeeded, or Status::Error if failed.
 		Status GetData(float* pressure, float* temp);
 
 	private:

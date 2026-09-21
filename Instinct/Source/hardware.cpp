@@ -129,6 +129,9 @@ extern "C" void SPI2_IRQHandler(void) { spi2.InterruptHandler(); }
 // To IMU header
 SPI spi4(SPI4);
 extern "C" void SPI4_IRQHandler(void) { spi4.InterruptHandler(); }
+// To SD CAM header/flat cable
+SPI spi5(SPI5);
+extern "C" void SPI5_IRQHandler(void) { spi5.InterruptHandler(); }
 
 Timer timer2(TIM2);
 PWM pwm1Ch1(timer2, PWM::Channel::Ch1);
@@ -398,6 +401,9 @@ ICM45686 ext2IMU(spi2);
 BMM350 extMag(i2c4, 0x14);
 BMP581 extBaro(i2c4, 0x47);
 
+ICU20201 extUltraToF(spi5);
+VL53L8CH extVL53ToF(i3c1, 0x00);
+
 OV5645 ov5645(i3c1, 0x3C);
 OV7670 ov7670(i3c1, 0x21);
 OV9281 ov9281(i3c1, 0x00);
@@ -442,7 +448,7 @@ void HardwareInit() {
 	BoardSPI1Init();
 	BoardSPI2Init();
 	BoardSPI4Init();
-	// BoardSPI5Init();
+	BoardSPI5Init();
 	// UART peripherals
 	BoardUART3Init();
 	BoardUART4Init();
@@ -475,6 +481,8 @@ void HardwareInit() {
 	onboardIMUInt.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
 	ext1IMUInt.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
 	ext2IMUInt.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
+	camInt0.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
+	camInt1.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
 
 	ledRed.Write(1);
 	ledGreen.Write(1);
@@ -512,6 +520,8 @@ void HardwareInit() {
 	// Initialize SPIs
 	spi1.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 1000000, .polarity = SPI::ClockPolarity::High, .phase = SPI::ClockPhase::SecondEdge, .bitOrder = SPI::BitOrder::MSBFirst});
 	spi2.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 1000000, .polarity = SPI::ClockPolarity::High, .phase = SPI::ClockPhase::SecondEdge, .bitOrder = SPI::BitOrder::MSBFirst});
+	spi4.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 1000000, .polarity = SPI::ClockPolarity::High, .phase = SPI::ClockPhase::SecondEdge, .bitOrder = SPI::BitOrder::MSBFirst});
+	spi5.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 1000000, .polarity = SPI::ClockPolarity::High, .phase = SPI::ClockPhase::SecondEdge, .bitOrder = SPI::BitOrder::MSBFirst});
 	LOG_INFO("SPIs Init OK.");
 
 	// Initialize Timers

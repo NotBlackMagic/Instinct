@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/timer.hpp
- * Author:  NotBlackMagic
- * Brief:   Timer driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
+ * File:	SDK/MCU/timer.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Timer driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
 #pragma once
@@ -18,14 +18,14 @@
 #include "status.hpp"
 
 /// @brief Driver for STM32 hardware timers acting as a shared timebase.
-/// @note  This class handles the core clocking, prescaler, and auto-reload values.
-///        It provides a foundation for dependent classes like PWM or Input Capture.
+/// @note	This class handles the core clocking, prescaler, and auto-reload values.
+///			It provides a foundation for dependent classes like PWM or Input Capture.
 class Timer {
 	public:
 		/// @brief Configuration structure for the timer base.
 		struct Config {
-			uint32_t sourceClockHz; ///< Peripheral source clock frequency in Hz
-			uint32_t frequencyHz;   ///< Desired timer update frequency
+			uint32_t sourceClockHz;	///< Peripheral source clock frequency in Hz
+			uint32_t frequencyHz;	///< Desired timer update frequency
 		};
 
 		// Delete copy constructors

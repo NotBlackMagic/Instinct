@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    SDK/MCU/pwm.hpp
- * Author:  NotBlackMagic
- * Brief:   PWM driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
+ * File:	SDK/MCU/pwm.hpp
+ * Author:	NotBlackMagic
+ * Brief:	PWM driver class for STM32N6 using LL (Low-Layer) API and direct register access (NO HALL).
  */
 
  #pragma once
@@ -16,7 +16,7 @@
 #include "status.hpp"
 
 /// @brief PWM driver mapped to a specific Timer channel.
-/// @note  Multiple PWM objects can share the same timer instance, but they MUST share the same frequency.
+/// @note Multiple PWM objects can share the same timer instance, but they MUST share the same frequency.
 class PWM {
 	public:
 		/// @brief Defines the Timer Channel.
