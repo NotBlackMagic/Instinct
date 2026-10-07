@@ -21,10 +21,6 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MCU_FLAGS} -Wl,--gc-sect
 # Include toolchain file
 include("../cmake/gcc-arm-none-eabi.cmake")
 
-# Force optimization options that the toolchain might miss
-# add_compile_options(${MCU_FLAGS} -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti)
-# add_link_options(${MCU_FLAGS} -Wl,--gc-sections -Wl,--print-memory-usage)
-
 # Defines
 add_compile_definitions(
 	STM32N657xx
@@ -73,8 +69,10 @@ set(BOARD_SOURCES
 )
 
 set(SDK_SOURCES
-	${PLUMA_SDK_PATH}/MCU/system.cpp
+	${PLUMA_SDK_PATH}/MCU/gpio.cpp
 	${PLUMA_SDK_PATH}/MCU/hyperbus.cpp
+	${PLUMA_SDK_PATH}/MCU/system.cpp
+	${PLUMA_SDK_PATH}/MCU/uart.cpp
 	${PLUMA_SDK_PATH}/Drivers/Storage/hyperFlash.cpp
 	${PLUMA_SDK_PATH}/Drivers/Storage/hyperRAM.cpp
 )
@@ -83,6 +81,7 @@ set(ST_LL_SOURCES
 	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Src/stm32n6xx_ll_gpio.c
 	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Src/stm32n6xx_ll_rcc.c
 	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Src/stm32n6xx_ll_utils.c
+	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Src/stm32n6xx_ll_usart.c
 	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Src/stm32n6xx_hal_xspi.c
 	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Src/stm32n6xx_hal_pwr.c
 	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Src/stm32n6xx_hal_pwr_ex.c

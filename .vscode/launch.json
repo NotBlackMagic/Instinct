@@ -16,8 +16,8 @@
 			"runEntry": "Reset_Handler",
 			// Replace with your .svd path
 			//"svdPath": "C:/ST/STM32CubeCLT_1.19.0/STMicroelectronics_CMSIS_SVD/STM32N657.svd",
-			"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
-			//"svdPath": "C:/ST/STM32CubeProgrammer/SVD/STM32N657.svd",
+			//"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
+			"svdPath": "C:/ST/STM32CubeProgrammer/SVD/STM32N657.svd",
 
 			"serverArgs": [
 				"-m", "1"
@@ -32,8 +32,8 @@
 
 			"imagesAndSymbols": [
 				{
-					"symbolFileName": "${workspaceFolder}/build/Debug/Boot/Boot.elf",
-					"imageFileName": "${workspaceFolder}/build/Debug/Boot/Boot.elf",
+					"symbolFileName": "${workspaceFolder}/build/Debug-XIP/Boot/Boot.elf",
+					"imageFileName": "${workspaceFolder}/build/Debug-XIP/Boot/Boot.elf",
 					"format": "elf"
 				}
 			]
@@ -46,12 +46,14 @@
 			"device": "STM32N657",
 			"deviceCore": "Cortex-M55",
 			"cwd": "${workspaceFolder}",
-			"preBuild": "${command:st-stm32-ide-debug-launch.build}",
+			"preLaunchTask": "DFU Flash and Detach",
+			// "preBuild": "${command:st-stm32-ide-debug-launch.build}",
+			"serverReset": "None",
 			"runEntry": "main",
 			// Replace with your .svd path
 			//"svdPath": "C:/ST/STM32CubeCLT_1.19.0/STMicroelectronics_CMSIS_SVD/STM32N657.svd",
-			"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
-			//"svdPath": "C:/ST/STM32CubeProgrammer/SVD/STM32N657.svd",
+			//"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
+			"svdPath": "C:/ST/STM32CubeProgrammer/SVD/STM32N657.svd",
 
 			"serverArgs": [
 				"-m", "1"
@@ -59,16 +61,18 @@
 			],
 
 			"overrideLaunchCommands": [
-				"-target-download",
-				"monitor reset",
-				"continue"
+				// "-target-download",
+				// "monitor reset",
+				// "continue"
+				"monitor halt",
+				"set variable debugWait = 0"
 			],
 
 			"imagesAndSymbols": [
 				{
-					"symbolFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct.elf",
-					"imageFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct.elf",
-					// "imageFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct_Signed.elf",
+					"symbolFileName": "${workspaceFolder}/build/Debug-SRAM/Instinct/Instinct.elf",
+					// "imageFileName": "${workspaceFolder}/build/Debug-SRAM/Instinct/Instinct.elf",
+					// "imageFileName": "${workspaceFolder}/build/Debug-SRAM/Instinct/Instinct_Signed.elf",
 					"format": "elf"
 				}
 			]
@@ -86,36 +90,36 @@
 			"runEntry": "JumpToApplication",
 			// Replace with your .svd path
 			//"svdPath": "C:/ST/STM32CubeCLT_1.19.0/STMicroelectronics_CMSIS_SVD/STM32N657.svd",
-			"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
-			//"svdPath": "C:/ST/STM32CubeProgrammer/SVD/STM32N657.svd",
+			//"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
+			"svdPath": "C:/ST/STM32CubeProgrammer/SVD/STM32N657.svd",
 
 			"serverArgs": [
 				"-m", "1"
-				//"-el", "${workspaceFolder}/build/Debug/Loader/PlumaLoader.stldr"
 			],
 
 			"overrideLaunchCommands": [
 				"-target-download",
-				"monitor halt"
+				"tbreak JumpToApplication",
+				"continue"
 			],
 
 			"imagesAndSymbols": [
 				{
-					"symbolFileName": "${workspaceFolder}/build/Debug/Boot/Boot.elf",
-					//"imageFileName": "${workspaceFolder}/build/Debug/Boot/Boot_Signed.elf",
+					"symbolFileName": "${workspaceFolder}/build/Debug-XIP/Boot/Boot.elf",
+					"imageFileName": "${workspaceFolder}/build/Debug-XIP/Boot/Boot.elf",
 					"format": "elf"
 				},
 				{
-					"symbolFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct.elf",
-					// "imageFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct.elf",
-					// "imageFileName": "${workspaceFolder}/build/Debug/Instinct/Instinct_Signed.elf",
+					"symbolFileName": "${workspaceFolder}/build/Debug-XIP/Instinct/Instinct.elf",
+					// "imageFileName": "${workspaceFolder}/build/Debug-XIP/Instinct/Instinct_Signed.elf",
 					"format": "elf"
 				}
 			],
 
 			"serverExtLoader": [
 				{
-					"loader": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/ExternalLoader/PlumaN6_Base_ExtLoader.stldr",
+					//"loader": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/ExternalLoader/PlumaN6_Base_ExtLoader.stldr",
+					"loader": "C:/ST/STM32CubeProgrammer/bin/ExternalLoader/PlumaN6_Base_ExtLoader.stldr",
 					"initialize": false
 				}
 			]

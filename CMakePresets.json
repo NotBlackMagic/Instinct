@@ -12,48 +12,50 @@
 			}
 		},
 		{
-			"name": "Debug",
+			"name": "Debug-XIP",
 			"inherits": "default",
-			"displayName": "Config: Debug",
-			"description": "Debug build with symbols",
+			"displayName": "Config: Debug XIP",
+			"binaryDir": "${sourceDir}/build/Debug-XIP",
 			"cacheVariables": {
-				"CMAKE_BUILD_TYPE": "Debug"
+				"CMAKE_BUILD_TYPE": "Debug",
+				"EXEC_TARGET": "XIP"
 			}
 		},
 		{
-			"name": "Release",
+			"name": "Debug-SRAM",
 			"inherits": "default",
-			"displayName": "Config: Release",
-			"description": "Optimized release build",
+			"displayName": "Config: Debug SRAM",
+			"binaryDir": "${sourceDir}/build/Debug-SRAM",
 			"cacheVariables": {
-				"CMAKE_BUILD_TYPE": "Release"
+				"CMAKE_BUILD_TYPE": "Debug",
+				"EXEC_TARGET": "SRAM"
 			}
 		}
 	],
 	"buildPresets": [
 		{
-			"name": "Build-Loader-Debug",
-			"displayName": "Build: Flash Loader (Debug)",
-			"configurePreset": "Debug",
-			"targets": ["PlumaLoader"]
+			"name": "Build-Instinct-XIP",
+			"displayName": "Build: Instinct (XIP Debug)",
+			"configurePreset": "Debug-XIP",
+			"targets": ["Instinct"]
+		},
+		{
+			"name": "Build-Instinct-SRAM",
+			"displayName": "Build: Instinct (SRAM Debug)",
+			"configurePreset": "Debug-SRAM",
+			"targets": ["Instinct"]
 		},
 		{
 			"name": "Build-Boot-Debug",
 			"displayName": "Build: FSBL (Debug)",
-			"configurePreset": "Debug",
-			"targets": ["PlumaBoot"]
+			"configurePreset": "Debug-XIP",
+			"targets": ["Boot"]
 		},
 		{
-			"name": "Build-Firmware-Debug",
-			"displayName": "Build: Instinct (Debug)",
-			"configurePreset": "Debug",
-			"targets": ["Instinct"]
-		},
-		{
-			"name": "Build-Firmware-Release",
-			"displayName": "Build: Instinct (Release)",
-			"configurePreset": "Release",
-			"targets": ["Instinct"]
-		}
+			"name": "Build-Loader-Debug",
+			"displayName": "Build: Flash Loader (Debug)",
+			"configurePreset": "Debug-XIP",
+			"targets": ["Loader"]
+		}			
 	]
 }
