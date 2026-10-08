@@ -8,7 +8,7 @@
 #include "loggerThread.hpp"
 
 TX_THREAD LoggerThread::threadPtr;
-uint8_t LoggerThread::threadStack[4096];
+__attribute__((aligned(32))) uint8_t LoggerThread::threadStack[LoggerThread::threadStackSize];
 
 __attribute__((aligned(32))) uint8_t LoggerThread::writeBuffer[LoggerThread::writeBufferSize];
 
@@ -25,6 +25,7 @@ void LoggerThread::Init() {
 }
 
 void LoggerThread::Run(ULONG input) {
+	(void)input;
 	LOG_INFO("Logger Thread Initialized.");
 
 	FX_FILE logFile;
@@ -34,7 +35,6 @@ void LoggerThread::Run(ULONG input) {
 
 	uint32_t timestamp = Time::GetMs();
 	uint32_t deltaTime = 0;
-	
 	while(1) {
 		// Wait for StorageThread to mount the SD card
 		if(StorageThread::IsReady() == false) {

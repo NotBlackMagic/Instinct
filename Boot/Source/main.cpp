@@ -30,18 +30,18 @@ C:\ST\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe -c port=usb1 -detach
 */
 
 // Flash Layout Offsets
-#define FLASH_OFFSET_FSBL						0x00000000U
-#define FLASH_OFFSET_BOOT_META					0x00040000U
-#define FLASH_OFFSET_CONFIG						0x00080000U
-#define FLASH_OFFSET_APP_SLOT_A					0x00100000U
-#define FLASH_OFFSET_APP_SLOT_B					0x00400000U
-#define FLASH_OFFSET_NPU_MODELS					0x00700000U
+#define FLASH_OFFSET_FSBL						0x00000000U		// FSBL flash area
+#define FLASH_OFFSET_BOOT_META					0x00040000U		// Boot metadata flash area
+#define FLASH_OFFSET_CONFIG						0x00080000U		// General configuration flash area
+#define FLASH_OFFSET_APP_SLOT_A					0x00100000U		// Application/firmware Slot A (main firmware area) flash area
+#define FLASH_OFFSET_APP_SLOT_B					0x00400000U		// Application/firmware Slot B (backup firmware area) flash area
+#define FLASH_OFFSET_NPU_MODELS					0x00700000U		// NPU model area
 
 #define APP_MAX_SIZE							(3U * 1024U * 1024U)	// 3 MB
 #define FSBL_FLASH_SIZE							(256U * 1024U)			// 256 KB
 #define FSBL_DOWNLOAD_RAM_ADDRESS				0x34180000U
 
-// RAM Execution / Staging Bounds
+// RAM Execution/Staging Bounds
 #define AXI_SRAM_BASE							0x24000000U
 #define AXI_SRAM_SIZE							(512U * 1024U)
 #define PSRAM_BASE								0x34000000U
@@ -263,8 +263,6 @@ Status SelfFlashFSBL(const uint8_t *ramSource, uint32_t sizeBytes) {
 		return Status::Error;
 	}
 
-	ledGreen.Write(0);
-
 	// Erase required sectors starting from offset 0
 	uint32_t eraseEnd = sizeBytes - 1;
 	uint32_t blockStart = 0 & ~(sectorSize - 1);
@@ -324,7 +322,6 @@ void EnterRecoveryMode(void) {
 	}
 
 	// Blink Blue LED while waiting for ST-Link upload and button trigger
-	ledGreen.Write(1);
 	LOG_INFO("--------------------------------");
 	LOG_INFO("Recovery Mode:");
 	LOG_INFO("  (1) UART FW flashing");
@@ -390,10 +387,12 @@ void EnterRecoveryMode(void) {
 
 		if(btnPress == true) {
 			LOG_INFO("FSBL self-flashing: Started...");
-			// Flashing in progress: Blue LED solid ON
+			// Flashing in progress: Blue and Green LED solid ON
 			ledBlue.Write(0);
+			ledGreen.Write(0);
 			Status status = SelfFlashFSBL((const uint8_t *)FSBL_DOWNLOAD_RAM_ADDRESS, FSBL_FLASH_SIZE);
-			// Turn Blue LED OFF
+			// Turn Blue and Green LED OFF
+			ledGreen.Write(1);
 			ledBlue.Write(1);
 
 			if(status == Status::Ok) {
@@ -477,13 +476,13 @@ int main(void) {
 	System::ReadOTPHardware(124, tmp);
 	LOG_INFO("    OTP124: 0x%08lX", tmp);
 
-	ledGreen.Write(0);
+	ledBlue.Write(0);
 	Time::Delay(100);
-	ledGreen.Write(1);
+	ledBlue.Write(1);
 	Time::Delay(100);
-	ledGreen.Write(0);
+	ledBlue.Write(0);
 	Time::Delay(100);
-	ledGreen.Write(1);
+	ledBlue.Write(1);
 
 	// Initialize HyperBus, HyperFlash, and HyperRAM.
 	BoardXSPI1Init();
@@ -513,7 +512,7 @@ int main(void) {
 			forceRecovery = true;
 			break;
 		}
-		ledGreen.Toggle();
+		ledBlue.Toggle();
 		Time::Delay(200);
 	}
 	Logger::Instance().Printf("\r\n");
@@ -544,7 +543,7 @@ int main(void) {
 		ledRed.Write(0);
 	}
 
-	// We should never get here as execution is now from user application
+	// Should never get here as execution is now from application/firmware
 	while(1) {
 		__NOP();
 	}

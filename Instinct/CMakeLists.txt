@@ -11,7 +11,7 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
-set(MCU_FLAGS  "-mcpu=cortex-m55 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -mcmse " )
+set(MCU_FLAGS "-mcpu=cortex-m55 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -mcmse " )
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MCU_FLAGS} -Wno-error=incompatible-pointer-types -Wno-incompatible-pointer-types -ffunction-sections -fdata-sections -flax-vector-conversions")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MCU_FLAGS} -Wno-error=incompatible-pointer-types -Wno-incompatible-pointer-types -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti -flax-vector-conversions")
@@ -33,8 +33,8 @@ add_compile_definitions(
 	ARM_MATH_HELIUM
 	DISABLEFLOAT16
 
-	ZENOH_THREADX_STM32=1        # Use the built-in ThreadX memory/time hooks
-	Z_FEATURE_NETWORK_CUSTOM=1   # Disable POSIX sockets, use your custom serial link
+	ZENOH_THREADX_STM32=1		# Use the built-in ThreadX memory/time hooks
+	Z_FEATURE_NETWORK_CUSTOM=1	# Disable POSIX sockets, use your custom serial link
 )
 
 # Generate firmware version info
@@ -105,10 +105,11 @@ include_directories(
 	${PLUMA_SDK_PATH}/Middleware/FileX/common/inc
 	${PLUMA_SDK_PATH}/Middleware/FileX/ports/inc
 	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Inc
+	${PLUMA_SDK_PATH}/Middleware/ST/VL53LMZ_ULD_API/Inc
 	${PLUMA_SDK_PATH}/Middleware/CMSIS/Include
 	${PLUMA_SDK_PATH}/Middleware/CMSIS/Device/ST/STM32N6xx/Include
 	${PLUMA_SDK_PATH}/Middleware/CMSIS/DSP/Include
-    ${PLUMA_SDK_PATH}/Middleware/CMSIS/DSP/PrivateInclude
+	${PLUMA_SDK_PATH}/Middleware/CMSIS/DSP/PrivateInclude
 	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/inc
 	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/src/common
 	${PLUMA_SDK_PATH}/Middleware/VideoEncoder/src/h264
@@ -161,6 +162,12 @@ set(ST_DRIVER_SOURCES
 	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Src/stm32n6xx_ll_dma.c
 	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Src/stm32n6xx_hal_xspi.c
 	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Src/stm32n6xx_ll_i2c.c
+	${PLUMA_SDK_PATH}/Middleware/ST/STM32N6xx_HAL_Driver/Src/stm32n6xx_ll_ucpd.c
+	${PLUMA_SDK_PATH}/Middleware/ST/VL53LMZ_ULD_API/Src/vl53lmz_api.c
+	${PLUMA_SDK_PATH}/Middleware/ST/VL53LMZ_ULD_API/Src/vl53lmz_plugin_cnh.c
+	${PLUMA_SDK_PATH}/Middleware/ST/VL53LMZ_ULD_API/Src/vl53lmz_plugin_detection_thresholds.c
+	${PLUMA_SDK_PATH}/Middleware/ST/VL53LMZ_ULD_API/Src/vl53lmz_plugin_motion_indicator.c
+	${PLUMA_SDK_PATH}/Middleware/ST/VL53LMZ_ULD_API/Src/vl53lmz_plugin_xtalk.c
 )
 
 # ThreadX Sources (C and ASM)
@@ -232,11 +239,19 @@ add_executable(${CMAKE_PROJECT_NAME}
 )
 
 # Linker script
-set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32N657XX_AXISRAM2_fsbl.ld")
-# set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32N657XX_ROMxspi2.ld")
-target_link_options(${CMAKE_PROJECT_NAME} PRIVATE 
-	-T${LINKER_SCRIPT}
-)
+set(EXEC_TARGET "XIP" CACHE STRING "Execution Target: XIP or SRAM")
+
+if(EXEC_TARGET STREQUAL "SRAM")
+	set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32N657XX_AXISRAM2_fsbl.ld")
+	set(targetLoadAddress 0x34180400)
+	add_compile_definitions(EXEC_TARGET_SRAM=1)
+else()
+	set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32N657XX_ROMxspi2.ld")
+	set(targetLoadAddress 0x70100000)
+	add_compile_definitions(EXEC_TARGET_XIP=1)
+endif()
+
+target_link_options(${CMAKE_PROJECT_NAME} PRIVATE -T${LINKER_SCRIPT})
 
 # Signing & Header Generation
 # Following code from: https://community.st.com/t5/stm32-mcus/how-to-add-post-build-commands-in-vs-code/ta-p/827930

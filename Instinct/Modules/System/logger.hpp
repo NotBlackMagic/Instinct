@@ -13,8 +13,11 @@
 #include <stdio.h>
 
 #include "uart.hpp"
+#include "system.hpp"
 
+#if defined (USE_RTOS)
 #include "tx_api.h"
+#endif
 
 class Logger {
 	public:
@@ -36,23 +39,51 @@ class Logger {
 		/// @brief Constructor.
 		static Logger& Instance();
 
+		/// @brief Initializes the logger, creates the mutex.
 		void Init();
+
+		/// @brief Writes a log message, both to the regsitered console, telemetry and SD card. Formatted with added color, timestamp, end-of-line.
+		/// @note Not intended to be used directly but through the helper shortcodes LOG_TRACE, LOG_INFO, etc...
+		/// @param level	Logging level
+		/// @param file		Name of the file calling the logging message
+		/// @param line		Code line of the logging message call
+		/// @param fmt		String format template, can have subsequent arguments
 		void Log(Logger::LogLevel level, const char* file, int line, const char* fmt, ...);
+		
+		/// @brief Writes a string with possible arguments to the registered console only. No added special formatting.
+		/// @param fmt	String format template, can have subsequent arguments (equivalent to a printf)
 		void Printf(const char* fmt, ...);
+
+		/// @brief Writes a simple string to the registered console only. No added special formatting.
+		/// @param str	String to be written
 		void Write(const char* str);
+
+		/// @brief Writes raw bytes to the registered console only.
+		/// @param data	Byte array to write
+		/// @param len	Length of the byte array
 		void Write(const char* data, uint16_t len);
 
-		// Binary logging for PubSub payloads
-		void LogData(uint16_t topicId, const uint8_t* payload, uint8_t len);
+		/// @brief Writes raw bytes to the registered SD card only. Used for binary logging of PubSub messages.
+		/// @param topicID	PubSub message topic ID
+		/// @param payload	Byte array to write
+		/// @param len		Length of the payload
+		void LogData(uint16_t topicID, const uint8_t* payload, uint8_t len);
 
+		/// @brief These functions set the Logging Level, level below messages are written to the respective part.
+		/// @param level	Log level, lower level higher priority/importance
 		void SetConsoleLevel(Logger::LogLevel level);
 		void SetSDLevel(Logger::LogLevel level);
 		void SetTelemLevel(Logger::LogLevel level);
 
+		/// @brief These functions register a logging part i.e. to where logging messages will be written.
 		void RegisterConsole(UART* uart);
 		void RegisterSD();
 		void RegisterTelemetry();
 
+		/// @brief Helper function to read bytes from the SD card, used internally to the logger.
+		/// @param outBuffer	Pointer to write bytes to
+		/// @param maxLen		Maximum number of bytes that can be read to outBuffer
+		/// @return Number of bytes read to outBuffer.
 		uint16_t ReadSDBuffer(uint8_t* outBuffer, uint16_t maxLen);
 
 	private:
@@ -65,7 +96,9 @@ class Logger {
 		Logger::LogLevel telemLevel;
 
 		bool initialized;
+#if defined (USE_RTOS)
 		TX_MUTEX mutex;
+#endif
 
 		// RAM Buffer for SD Card text logging
 		static constexpr uint16_t sdBufferSize = 8192; // 8KB buffer

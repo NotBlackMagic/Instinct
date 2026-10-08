@@ -8,7 +8,7 @@
 #include "console.hpp"
 
 TX_THREAD Console::threadPtr;
-uint8_t Console::threadStack[6144];
+__attribute__((aligned(32))) uint8_t Console::threadStack[Console::threadStackSize];
 
 UART* Console::consolePort = nullptr;
 Shell Console::shell;
@@ -21,7 +21,7 @@ void Console::Init(UART* uart) {
 	// Register all active command modules
 	RegisterSystemCommands();
 	RegisterI2CCommands();
-	// RegisterI3CCommands();
+	RegisterI3CCommands();
 	RegisterGPIOCommands();
 	// RegisterSerialCommands();
 	RegisterCameraCommands();

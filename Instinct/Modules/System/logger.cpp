@@ -15,21 +15,24 @@ Logger& Logger::Instance() {
 	return instance;
 }
 
-Logger::Logger()
-	: 	consolePort(nullptr),
-		consoleMinLevel(Logger::LogLevel::Info), 
-		sdMinLevel(Logger::LogLevel::Info),
-		telemLevel(Logger::LogLevel::Warn),
-		initialized(false) {}
+Logger::Logger() :	consolePort(nullptr),
+					consoleMinLevel(Logger::LogLevel::Info), 
+					sdMinLevel(Logger::LogLevel::Info),
+					telemLevel(Logger::LogLevel::Warn),
+					initialized(false) {}
 
 void Logger::Init() {
 	if(initialized == false) {
-		// Initialize the mutex
+#if defined (USE_RTOS)
+		// Create RTOS objects
 		UINT status = tx_mutex_create(&mutex, const_cast<char*>("log mutex"), TX_NO_INHERIT);
 
 		if(status == TX_SUCCESS) {
 			initialized = true;
 		}
+#else
+		initialized = true;
+#endif
 	}
 }
 
@@ -56,17 +59,20 @@ void Logger::LogData(uint16_t topicId, const uint8_t* payload, uint8_t len) {
 
 	// Lock Logger
 	bool useLock = false;
-	if(initialized == true) {
-		if(tx_thread_identify() == nullptr) {
-			return; // Prevent ISR corruption
-		}
-		useLock = true;
+#if defined (USE_RTOS)
+	if(__get_IPSR() != 0) {
+		// Prevent ISR corruption
+		return;
 	}
-	if(useLock == true) {
+
+	// Only acquire RTOS mutex if scheduler is running and inside an active thread
+	if(initialized == true && (tx_thread_identify() != nullptr)) {
 		if(tx_mutex_get(&mutex, TX_NO_WAIT) != TX_SUCCESS) {
 			return; 
 		}
+		useLock = true;
 	}
+#endif
 
 	uint16_t syncWord = 0x55AA;
 	uint16_t packetSize = 5 + len; // 2(sync) + 2(topic) + 1(len) + payload
@@ -89,9 +95,11 @@ void Logger::LogData(uint16_t topicId, const uint8_t* payload, uint8_t len) {
 		sdCount += packetSize;
 	}
 
+#if defined (USE_RTOS)
 	if(useLock == true) {
 		tx_mutex_put(&mutex);
 	}
+#endif
 }
 
 void Logger::Log(Logger::LogLevel level, const char* file, int line, const char* fmt, ...) {
@@ -102,17 +110,20 @@ void Logger::Log(Logger::LogLevel level, const char* file, int line, const char*
 
 	// Lock Logger
 	bool useLock = false;
-	if(initialized == true) {
-		if(tx_thread_identify() == nullptr) {
-			return; // Prevent ISR corruption
-		}
-		useLock = true;
+#if defined (USE_RTOS)
+	if(__get_IPSR() != 0) {
+		// Prevent ISR corruption
+		return;
 	}
-	if(useLock == true) {
+
+	// Only acquire RTOS mutex if scheduler is running and inside an active thread
+	if(initialized == true && (tx_thread_identify() != nullptr)) {
 		if(tx_mutex_get(&mutex, TX_NO_WAIT) != TX_SUCCESS) {
 			return; 
 		}
+		useLock = true;
 	}
+#endif
 
 	// Allocate extra space for leading (5) and trailing (5) color codes
 	char buffer[maxLogLines + 13];
@@ -161,7 +172,7 @@ void Logger::Log(Logger::LogLevel level, const char* file, int line, const char*
 	index = colorLen;	
 
 	// Add timestamp
-	float timeSec = (float)tx_time_get() / TX_TIMER_TICKS_PER_SECOND;
+	float timeSec = (float)Time::GetMs() / 1000.0f;
 	index += snprintf(&buffer[index], maxLogLines - index, "[%8.3f] ", timeSec);
 
 	// Add tag
@@ -260,14 +271,17 @@ void Logger::Log(Logger::LogLevel level, const char* file, int line, const char*
 		}
 	}
 
+#if defined (USE_RTOS)
 	if(useLock == true) {
 		tx_mutex_put(&mutex);
 	}
+#endif
 }
 
 uint16_t Logger::ReadSDBuffer(uint8_t* outBuffer, uint16_t maxLen) {
 	// Lock Logger
 	bool useLock = false;
+#if defined (USE_RTOS)
 	if(initialized == true) {
 		if(tx_thread_identify() == nullptr) {
 			return 0; // Prevent ISR corruption
@@ -279,6 +293,7 @@ uint16_t Logger::ReadSDBuffer(uint8_t* outBuffer, uint16_t maxLen) {
 			return 0;
 		}
 	}
+#endif
 
 	uint16_t bytesRead = 0;
 
@@ -293,9 +308,11 @@ uint16_t Logger::ReadSDBuffer(uint8_t* outBuffer, uint16_t maxLen) {
 		bytesRead++;
 	}
 
+#if defined (USE_RTOS)
 	if(useLock == true) {
 		tx_mutex_put(&mutex);
 	}
+#endif
 
 	return bytesRead;
 }
@@ -303,17 +320,20 @@ uint16_t Logger::ReadSDBuffer(uint8_t* outBuffer, uint16_t maxLen) {
 void Logger::Printf(const char* fmt, ...) {
 	// Lock Logger
 	bool useLock = false;
-	if(initialized == true) {
-		if(tx_thread_identify() == nullptr) {
-			return; // Prevent ISR corruption
-		}
-		useLock = true;
+#if defined (USE_RTOS)
+	if(__get_IPSR() != 0) {
+		// Prevent ISR corruption
+		return;
 	}
-	if(useLock == true) {
+
+	// Only acquire RTOS mutex if scheduler is running and inside an active thread
+	if(initialized == true && (tx_thread_identify() != nullptr)) {
 		if(tx_mutex_get(&mutex, TX_NO_WAIT) != TX_SUCCESS) {
 			return; 
 		}
+		useLock = true;
 	}
+#endif
 
 	char buffer[maxLogLines];
 
@@ -326,9 +346,11 @@ void Logger::Printf(const char* fmt, ...) {
 		consolePort->Transmit((uint8_t*)buffer, offset);
 	}
 
+#if defined (USE_RTOS)
 	if(useLock == true) {
 		tx_mutex_put(&mutex);
 	}
+#endif
 }
 
 void Logger::Write(const char* str) {
@@ -346,23 +368,28 @@ void Logger::Write(const char* data, uint16_t len) {
 
 	// Lock Logger
 	bool useLock = false;
-	if(initialized == true) {
-		if(tx_thread_identify() == nullptr) {
-			return; // Prevent ISR corruption
-		}
-		useLock = true;
+#if defined (USE_RTOS)
+	if(__get_IPSR() != 0) {
+		// Prevent ISR corruption
+		return;
 	}
-	if(useLock == true) {
+
+	// Only acquire RTOS mutex if scheduler is running and inside an active thread
+	if(initialized == true && (tx_thread_identify() != nullptr)) {
 		if(tx_mutex_get(&mutex, TX_NO_WAIT) != TX_SUCCESS) {
 			return; 
 		}
+		useLock = true;
 	}
+#endif
 
 	if(consolePort != nullptr) {
 		consolePort->Transmit((uint8_t*)data, len);
 	}
 
+#if defined (USE_RTOS)
 	if(useLock == true) {
 		tx_mutex_put(&mutex);
 	}
+#endif
 }

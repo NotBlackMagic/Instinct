@@ -21,7 +21,8 @@ class LoggerThread {
 
 	private:
 		static TX_THREAD threadPtr;
-		static uint8_t threadStack[4096];
+		static const uint16_t threadStackSize = 4096;
+		__attribute__((aligned(32))) static uint8_t threadStack[threadStackSize];
 
 		static constexpr uint16_t writeBufferSize = 4096;
 		__attribute__((aligned(32))) static uint8_t writeBuffer[writeBufferSize];

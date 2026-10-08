@@ -23,7 +23,8 @@ class Console {
 
 	private:
 		static TX_THREAD threadPtr;
-		static uint8_t threadStack[6144];
+		static const uint16_t threadStackSize = 4096;
+		__attribute__((aligned(32))) static uint8_t threadStack[threadStackSize];
 
 		static UART* consolePort;
 		static Shell shell;
