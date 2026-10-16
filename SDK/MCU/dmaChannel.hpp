@@ -60,6 +60,9 @@ class DMAChannel {
 			uint32_t srcBurstLength = 1; 
 			uint32_t dstBurstLength = 1;
 
+			// Transfer completion hook
+			void (*CompleteCallback)(void* ctx, Status status) = nullptr;
+
 			// Multi-block reload hooks for enable/disable DMA requests
 			void (*StateCallback)(void* ctx, bool enable) = nullptr;
 			void* callbackContext = nullptr;

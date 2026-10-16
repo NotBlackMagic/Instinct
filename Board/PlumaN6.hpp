@@ -17,10 +17,10 @@
 #include "stm32n6xx_ll_gpio.h"
 
 void BoardGPIOInit();
-void BoardCAN1Init();
-void BoardCAN2Init();
-void BoardCAN3Init();
 void BoardDCMIInit();
+void BoardFDCAN1Init();
+void BoardFDCAN2Init();
+void BoardFDCAN3Init();
 void BoardI2C1Init();
 void BoardI2C2Init();
 void BoardI2C3Init();

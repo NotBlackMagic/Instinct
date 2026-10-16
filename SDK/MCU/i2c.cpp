@@ -61,7 +61,7 @@ Status I2C::Init(const Config &config) {
 
 	// Configure I2C Interface
 	// Configure the SDA setup, hold time and the SCL high, low period
-	switch (config.mode) {
+	switch(config.mode) {
 		case I2C::Mode::Standard:
 			//I2C Standard Mode (100kHz)
 			LL_I2C_SetTiming(this->instance, 0x10C0ECFF);		//100MHz Clock

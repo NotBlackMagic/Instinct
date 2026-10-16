@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
+ *
+ * File:	Instinct/Source/main.cpp
+ */
+
 #include <cstring>
 #include <stdio.h>
 
@@ -30,7 +37,6 @@
 #define THREADX_BUFFER_POOL_SIZE				16384
 alignas(32) static UCHAR tx_byte_pool_buffer[THREADX_BUFFER_POOL_SIZE];
 static TX_BYTE_POOL threadBytePool;
-static TX_THREAD testThread;
 
 extern void InitZenohSerialTransport(z_owned_session_t* session);
 
@@ -39,11 +45,10 @@ extern "C" {
 	TX_BYTE_POOL* pthreadx_byte_pool = &threadBytePool;
 }
 
-void TestThread(ULONG thread_input) {
+void ZenohThread(ULONG thread_input) {
 	(void)thread_input;
 
-	Status status = Status::Ok;
-	// ZENOH-PICO STUFF!!!!!
+	// ZENOH-PICO
 	// Allocate the config struct and pass its pointer to be initialized
 
 	// z_owned_config_t config;
@@ -67,11 +72,6 @@ void TestThread(ULONG thread_input) {
 	// 	LOG_ERR("Zenoh Config Init Failed!");
 	// }
 
-	// while(1) {
-	// 	ledBlue.Toggle();
-	// 	tx_thread_sleep(100);
-	// }
-
 	// USB-CDC STUFF!!!!!
 	// uint8_t rxBuffer[64];
 	// while(1) {
@@ -93,7 +93,7 @@ void TestThread(ULONG thread_input) {
 	// }
 
 	while(1) {
-		ledBlue.Toggle();
+		ledGreen.Toggle();
 		tx_thread_sleep(100);
 	}
 }
@@ -101,9 +101,6 @@ void TestThread(ULONG thread_input) {
 void tx_application_define(void *first_unused_memory) {
 	(void)first_unused_memory;
 	
-	uint32_t status = TX_SUCCESS;
-	char *pointer;
-
 	Logger::Instance().Init();
 	Logger::Instance().RegisterConsole(&debugUART);
 
@@ -127,27 +124,20 @@ void tx_application_define(void *first_unused_memory) {
 	usbCfg.maxPower = 50;					// 100mA (value * 2mA)
 	usbCfg.selfPowered = false;
 
-	// Define UVC Capabilties/formats
+	// Define UVC Capabilities/formats
 	static const FrameFormat formats[] = {
-		// {
-		// 	.width = 640,
-		// 	.height = 480,
-		// 	.frameInterval = 2000000, // 5 FPS in 100ns units
-		// 	.format = PixelFormat::YUV422_YVYU,
-		// 	.codec = VisionCodec::None
-		// }
 		{
-			.width = 640,
-			.height = 480,
-			.frameInterval = 2000000, // 5 FPS in 100ns units
-			.format = PixelFormat::Unknown,
-			.codec = VisionCodec::H264
+			.width = 256,
+			.height = 256,
+			.frameInterval = 2000000, 			// 5 FPS in 100ns units
+			.format = PixelFormat::Grayscale,	// PixelFormat::Unknown
+			.codec = VisionCodec::None			// VisionCodec::H264
 		}
 	};
 
 	// Register UVC Controls (camera controls over the UVC protocol)
 	USBClassUVC::ControlConfig uvcCtrlConfig;
-	uvcCtrlConfig.puControls = 0;	//USBClassUVC::PUControl::Brightness | USBClassUVC::PUControl::WhiteBalanceTempAuto | USBClassUVC::PUControl::WhiteBalanceTemp;	// Add brightness, more can be added by ORing
+	uvcCtrlConfig.puControls = 0;	//USBClassUVC::PUControl::Brightness | USBClassUVC::PUControl::WhiteBalanceTempAuto | USBClassUVC::PUControl::WhiteBalanceTemp;
 	uvcCtrlConfig.itControls = 0;	//USBClassUVC::ITControl::ExposureTimeAbsolute;
 	uvcCtrlConfig.puControlRegistry = VisionThread::puControlRegistry;
 	uvcCtrlConfig.numPUControls = VisionThread::numPUControls;
@@ -197,11 +187,11 @@ void tx_application_define(void *first_unused_memory) {
 	LoggerThread::Init();
 	InertialThread::Init();
 	AuxiliaryThread::Init();
-	// OpticalFlowThread::Init();
-	// RadioThread::Init();
-	// MavlinkThread::Init();
-	// SensorHubThread::Init();
-	// EstimatorThread::Init();
+	OpticalFlowThread::Init();
+	RadioThread::Init();
+	MavlinkThread::Init();
+	SensorHubThread::Init();
+	EstimatorThread::Init();
 	// ControllerThread::Init();
 	// CommanderThread::Init();
 	// ActuatorThread::Init();
@@ -209,73 +199,71 @@ void tx_application_define(void *first_unused_memory) {
 	// Configure blackbox (data logging to SD card) logging profile
 	// BlackboxConfig::ApplyTuningProfile();
 	// Configure Mavlink stream (telemetry) rates
-	// MavlinkConfig::ApplyStandardProfile();
+	MavlinkConfig::ApplyStandardProfile();
 
 	// Create a byte memory pool from which to allocate the thread stacks
-	status = tx_byte_pool_create(&threadBytePool, const_cast<char*>("Static Thread Byte Pool"), tx_byte_pool_buffer, THREADX_BUFFER_POOL_SIZE);
+	uint32_t status = tx_byte_pool_create(&threadBytePool, const_cast<char*>("Static Thread Byte Pool"), tx_byte_pool_buffer, THREADX_BUFFER_POOL_SIZE);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Create Byte Pool Failed.");
 	}
-
-	// Create the TestThread
-	// Allocate the stack
-	// status = tx_byte_allocate(&threadBytePool, (VOID**) &pointer, 8192, TX_NO_WAIT);
-	// if(status != TX_SUCCESS) {
-	// 	LOG_ERR("ThreadX Stack 0 Allocate Failed.");
-	// }
-	// Create thread
-	// status = tx_thread_create(&testThread, const_cast<char*>("Test Thread"),
-	// 										TestThread, 0,
-	// 										pointer, 8192,
-	// 										0, 0,
-	// 										TX_NO_TIME_SLICE, TX_AUTO_START);
-	// if(status != TX_SUCCESS) {
-	// 	LOG_ERR("ThreadX Test Thread Create Failed.");
-	// }
 }
 
 int main(void) {
 	// Enable debugger in flash run mode
 	System::EnableDebug();
+
+	// Interrupts must be re-enabled in the firmware/application so no ISRs are called during the boot
+	__enable_irq();
 	
 	// Debug Blue LED to see Application loaded
 	LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_ALL);
-	ledBlue.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
-	ledBlue.Write(0);
-	Time::DelayNOP(100000);
-	ledBlue.Write(1);
-	Time::DelayNOP(100000);
-	ledBlue.Write(0);
-	Time::DelayNOP(100000);
-	ledBlue.Write(1);
-	Time::DelayNOP(100000);
-	ledBlue.Write(0);
-	Time::DelayNOP(100000);
+	ledGreen.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
+
+	ledGreen.Write(0);
+	Time::DelayNOP(500000);
+	ledGreen.Write(1);
+	Time::DelayNOP(500000);
+	ledGreen.Write(0);
+	Time::DelayNOP(500000);
+	ledGreen.Write(1);
+	Time::DelayNOP(500000);
+	ledGreen.Write(0);
+	Time::DelayNOP(500000);
+	ledGreen.Write(1);
 
 	// MCU Configuration
 	NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
-	// HAL_Init();
 	LL_AHB3_GRP1_EnableClock(LL_AHB3_GRP1_PERIPH_RIFSC);
-	System::EnableCache();
-
 	SystemCoreClockUpdate();
-	// For when running in Dev mode from internal SRAM use:
-	System::InitClock();
-	// For when running in XIP mode from external HyperFlash/XSPI2 use:
-	// Note: This becase clock must be initiazlied in the Boot/FSBL (calling System::InitClock() there) to have the HyperFlash/XSPI2 already correcly running and can't be changed!
-	// System::InitFWClock();
-
+	if(LL_RCC_HSE_IsReady() == 0x01 && LL_RCC_PLL1_GetSource() == LL_RCC_PLLSOURCE_HSE) {
+		// For when running in XIP mode from external HyperFlash/XSPI2 use:
+		// Note: This because clock must be initialzed in the Boot/FSBL (calling System::InitClock() there) to have the HyperFlash/XSPI2 already correctly running and can't be changed!
+		System::InitFWClock();
+	}
+	else {
+		// For when running in Dev mode from internal SRAM use:
+		System::InitClock();
+	}
+	System::EnableCache();
 	System::EnableAXISRAM();
 	System::EnableVENCSRAM();
 	Time::Init();
 
-	ledBlue.Write(1);
+	// Wait for debugger connection, for USB DFU mode with Hot-Plug connection: Loops until ST-LINK attaches and hardware sets C_DEBUGEN
+	for(uint32_t i = 0; i < 25; i++) {
+		if((CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk) == 1) {
+			break;
+		}
+		ledGreen.Toggle();
+		Time::Delay(200);
+	}
+	ledGreen.Write(1);
 
 	System::InitSysTick();
 	tx_kernel_enter();
 
 	// Should never get here as scheduler should now be running
-	while (1) {
+	while(1) {
 		ledRed.Toggle();
 		Time::Delay(200);
 	}
@@ -285,6 +273,8 @@ int main(void) {
 /// @retval	None
 void Error_Handler(void) {
 	__disable_irq();
-	while (1) {
+	while(1) {
+		ledRed.Toggle();
+		Time::Delay(200);
 	}
 }

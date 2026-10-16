@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	SDK/Drivers/Video/ov5645.hpp
  * Author:	NotBlackMagic
@@ -36,7 +36,7 @@ class OV5645 {
 			FORMAT_MUX_CTRL = 0x501f	// Format MUX Control
 		};
 
-		/// @brief Regsiter value pair, for initialization blocks.
+		/// @brief Register value pair, for initialization blocks.
 		struct RegisterValuePair {
 			OV5645::Register reg;
 			uint8_t value;

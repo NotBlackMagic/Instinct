@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	SDK/Drivers/Video/ov7670.cpp
  */
@@ -640,7 +640,7 @@ Status OV7670::ApplyResolution(InternalResolution resolution) {
 	return this->WriteRegister(OV7670::Register::SCALING_PCLK_DELAY, pclkDly);
 }
 
-Status OV7670::ApplyWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h){
+Status OV7670::ApplyWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
 	Status status = Status::Ok;
 	// OV7670 image sensor array is 656x488, but actually 784x510??, the of which 640x480 are real/active pixels
 	// Offset values from: https://github.com/adafruit/Adafruit_OV7670/blob/master/src/ov7670.c

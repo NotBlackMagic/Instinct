@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	SDK/MCU/spi.cpp
  */
@@ -37,7 +37,7 @@ Status SPI::Init(const Config &config) {
 		return Status::Error;
 	}
 
-	// Enable bus clocks
+	// Enable bus clocks and assign IRQ lines
 	uint32_t fifoThreshold = LL_SPI_FIFO_TH_01DATA; // Default safe fallback
 	if(this->instance == SPI1) {
 		LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SPI1);
@@ -68,6 +68,9 @@ Status SPI::Init(const Config &config) {
 		LL_APB4_GRP1_EnableClock(LL_APB4_GRP1_PERIPH_SPI6);
 		this->irqCall = SPI6_IRQn;
 		fifoThreshold = LL_SPI_FIFO_TH_08DATA;	// SPI1, SPI2, SPI3, and SPI6 have 16-byte FIFO
+	}
+	else {
+		return Status::Error;
 	}
 	this->sourceClockHz = config.sourceClockHz;
 

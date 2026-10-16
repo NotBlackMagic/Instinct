@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
+ *
+ * File:	Instinct/Source/hardware.cpp
+ */
+
 #include "hardware.hpp"
 #include "../../Board/PlumaN6.hpp"
 
@@ -92,6 +99,19 @@ HyperBus hyperBus2 = HyperBus(XSPI2);
 extern "C" void XSPI2_IRQHandler(void) { hyperBus2.InterruptHandler(); }
 HyperFlash externalFlash = HyperFlash(hyperBus2);
 
+// To CAN0 header
+FDCAN fdcan1(FDCAN1);
+extern "C" void FDCAN1_IT0_IRQHandler(void) { fdcan1.InterruptHandler(); }
+// extern "C" void FDCAN1_IT1_IRQHandler(void) { fdcan1.InterruptHandler(); }
+// To CAN1 header
+FDCAN fdcan2(FDCAN2);
+extern "C" void FDCAN2_IT0_IRQHandler(void) { fdcan2.InterruptHandler(); }
+// extern "C" void FDCAN2_IT1_IRQHandler(void) { fdcan1.InterruptHandler(); }
+// To CAN2 header
+FDCAN fdcan3(FDCAN3);
+extern "C" void FDCAN3_IT0_IRQHandler(void) { fdcan3.InterruptHandler(); }
+// extern "C" void FDCAN3_IT1_IRQHandler(void) { fdcan1.InterruptHandler(); }
+
 // To on-board IMU
 I2C i2c1(I2C1);
 extern "C" void I2C1_EV_IRQHandler(void) { i2c1.InterruptHandler(); }
@@ -169,11 +189,14 @@ USBDevice usbDevice(usbHardware);
 USBClassCDC usbCDC;
 USBClassUVC usbUVC;
 
+USBPD usbPD(UCPD1);
+extern "C" void UCPD1_IRQHandler(void) { usbPD.InterruptHandler(); }
+
 DMAChannel csiDMAChannel(HPDMA1, LL_DMA_CHANNEL_3);
 extern "C" void HPDMA1_Channel3_IRQHandler(void) { csiDMAChannel.InterruptHandler(); }
 
-DMAChannel dcmiDMAChannel(HPDMA1, LL_DMA_CHANNEL_2);
-extern "C" void HPDMA1_Channel2_IRQHandler(void) { dcmiDMAChannel.InterruptHandler(); }
+DMAChannel dcmiDMAChannel(HPDMA1, LL_DMA_CHANNEL_15);
+extern "C" void HPDMA1_Channel15_IRQHandler(void) { dcmiDMAChannel.InterruptHandler(); }
 
 DMAChannel jpegEncInDMAChannel(HPDMA1, LL_DMA_CHANNEL_0);
 extern "C" void HPDMA1_Channel0_IRQHandler(void) { jpegEncInDMAChannel.InterruptHandler(); }
@@ -406,12 +429,12 @@ VL53L8CH extVL53ToF(i3c1, 0x00);
 
 OV5645 ov5645(i3c1, 0x3C);
 OV7670 ov7670(i3c1, 0x21);
-OV9281 ov9281(i3c1, 0x00);
+OV9281 ov9281(i3c1, 0x70);
 
 // Radio Links
 RCReceiver mainRC(ldrUART);
 
-CameraDCMI cameraSD(dcmi, ov7670, dcmiDMAChannel);
+CameraDCMI cameraSD(dcmi, ov9281, dcmiDMAChannel);
 CameraMIPI cameraHD(csi, dcmipp, ov5645, csiDMAChannel);
 
 JPEGEncoder jpegEncoder(jpeg, jpegEncInDMAChannel, jpegEncOutDMAChannel);
@@ -430,6 +453,10 @@ void HardwareInit() {
 	// Initialize peripheral specific IO pins
 	// DCMI peripherals
 	BoardDCMIInit();
+	// FDCAN peripherals
+	BoardFDCAN1Init();
+	BoardFDCAN2Init();
+	BoardFDCAN3Init();
 	// I2C peripherals
 	BoardI2C1Init();
 	BoardI2C2Init();
@@ -505,6 +532,10 @@ void HardwareInit() {
 	hdrUART.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 115200, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
 	telem2.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 57600, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false, .swapTxRx = true});
 	LOG_INFO("UARTs Init OK.");
+
+	// Initialize FDCANs
+	fdcan1.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC19), .nominalBaudrate = 500000, .dataBaudrate = 500000, .fdMode = false});
+	LOG_INFO("FDCANs Init OK.");
 
 	// Initialize I2Cs
 	i2c1.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC10), .mode = I2C::Mode::Fast});

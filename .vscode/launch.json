@@ -86,8 +86,8 @@
 			"deviceCore": "Cortex-M55",
 			"serverReset": "None",
 			"cwd": "${workspaceFolder}",
-			"preBuild": "${command:st-stm32-ide-debug-launch.build}",
-			"runEntry": "JumpToApplication",
+			// "preBuild": "${command:st-stm32-ide-debug-launch.build}",
+			// "runEntry": "JumpToApplication",
 			// Replace with your .svd path
 			//"svdPath": "C:/ST/STM32CubeCLT_1.19.0/STMicroelectronics_CMSIS_SVD/STM32N657.svd",
 			//"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
@@ -98,17 +98,17 @@
 			],
 
 			"overrideLaunchCommands": [
-				"-target-download",
-				"tbreak JumpToApplication",
+				// "-target-download",
+				// "tbreak JumpToApplication",
 				"continue"
 			],
 
 			"imagesAndSymbols": [
-				{
-					"symbolFileName": "${workspaceFolder}/build/Debug-XIP/Boot/Boot.elf",
-					"imageFileName": "${workspaceFolder}/build/Debug-XIP/Boot/Boot.elf",
-					"format": "elf"
-				},
+				// {
+				// 	"symbolFileName": "${workspaceFolder}/build/Debug-XIP/Boot/Boot.elf",
+				// 	"imageFileName": "${workspaceFolder}/build/Debug-XIP/Boot/Boot.elf",
+				// 	"format": "elf"
+				// },
 				{
 					"symbolFileName": "${workspaceFolder}/build/Debug-XIP/Instinct/Instinct.elf",
 					// "imageFileName": "${workspaceFolder}/build/Debug-XIP/Instinct/Instinct_Signed.elf",

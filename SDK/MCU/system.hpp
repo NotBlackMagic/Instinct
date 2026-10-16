@@ -18,6 +18,8 @@
 #include "stm32n6xx_ll_tim.h"
 #include "stm32n6xx_ll_utils.h"
 
+#include "status.hpp"
+
 struct System {
 	// Delete constructor.
 	System() = delete;
@@ -58,6 +60,9 @@ struct System {
 		IC15,
 		IC16,
 		IC17,
+		IC18,
+		IC19,
+		IC20,
 		Unknown
 	};
 
@@ -86,6 +91,17 @@ struct System {
 
 	/// @brief Enables the debug interface in flash run mode.
 	static void EnableDebug(void);
+
+	/// @brief Reads an OTP word from the BSEC shadow registers.
+	/// @param wordIndex OTP word number (0 to 383).
+	/// @return 32-bit OTP word value.
+	static uint32_t ReadOTP(uint32_t wordIndex);
+
+	/// @brief Forces a direct physical hardware eFuse read via BSEC state machine.
+	/// @param wordIndex OTP word number.
+	/// @param value Reference to receive the 32-bit fuse value.
+	/// @return Status::Ok on success, Status::Timeout or Status::Error on failure.
+	static Status ReadOTPHardware(uint32_t wordIndex, uint32_t &value);
 	
 	/// @brief Enables the I-Cache and D-Cache of the MCU.
 	static void EnableCache(void);

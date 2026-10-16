@@ -17,10 +17,12 @@ Status UART::Init(const Config &config) {
 		return Status::Error;
 	}
 
+#if defined (USE_RTOS)
 	// Create RTOS objects
 	if(tx_mutex_create(&mutex, const_cast<char*>("uart mutex"), TX_INHERIT) != TX_SUCCESS) {
 		return Status::Error;
 	}
+#endif
 	
 	// Enable bus clocks and identify IRQ lines
 	if(this->instance == USART1) {
@@ -67,6 +69,11 @@ Status UART::Init(const Config &config) {
 		return Status::Error;
 	}
 
+	// Disable peripheral and clear to reset state (required for when come from FSBL or BootROM)
+	LL_USART_Disable(this->instance);
+	while(LL_USART_IsEnabled(this->instance) != 0);
+	LL_USART_DeInit(this->instance);
+
 	// Configure UART Interface
 	LL_USART_SetTransferDirection(this->instance, LL_USART_DIRECTION_TX_RX);
 	LL_USART_SetDataWidth(this->instance, static_cast<uint32_t>(config.dataBits));
@@ -87,6 +94,7 @@ Status UART::Init(const Config &config) {
 	LL_USART_SetOverSampling(this->instance, LL_USART_OVERSAMPLING_16);
 	LL_USART_SetBaudRate(this->instance, config.sourceClockHz, LL_USART_PRESCALER_DIV1, LL_USART_OVERSAMPLING_16, config.baudrate);
 	LL_USART_SetPrescaler(this->instance, LL_USART_PRESCALER_DIV1);
+	LL_USART_DisableAutoBaudRate(this->instance);
 	LL_USART_SetTXFIFOThreshold(this->instance, LL_USART_FIFOTHRESHOLD_1_8);
 	LL_USART_SetRXFIFOThreshold(this->instance, LL_USART_FIFOTHRESHOLD_1_8);
 	LL_USART_DisableFIFO(this->instance);
@@ -115,12 +123,14 @@ Status UART::Init(const Config &config) {
 
 Status UART::Transmit(uint8_t *buf, uint16_t len) {
 	// Lock UART device
+#if defined (USE_RTOS)
 	bool useLock = this->isInitialized && (tx_thread_identify() != nullptr);
 	if(useLock == true) {
 		if(tx_mutex_get(&mutex, TIMEOUT_MUTEX) != TX_SUCCESS) {
 			return Status::Timeout;
 		}
 	}
+#endif
 
 	// Buffer copy (to internal ring buffer)
 	uint16_t tmpHead = txBufHead;
@@ -141,7 +151,9 @@ Status UART::Transmit(uint8_t *buf, uint16_t len) {
 	}
 
 	// Critical section!
+#if defined (USE_RTOS)
 	UINT state = tx_interrupt_control(TX_INT_DISABLE);
+#endif
 	txBufHead = tmpHead;
 
 	if(this->isInitialized == true && txBusy == false) {
@@ -149,12 +161,14 @@ Status UART::Transmit(uint8_t *buf, uint16_t len) {
 		StartTX();
 	}
 	// End of critical section
+#if defined (USE_RTOS)
 	tx_interrupt_control(state);
 
 	// Release UART device
 	if(useLock == true) {
 		tx_mutex_put(&mutex);
 	}
+#endif
 
 	return Status::Ok;
 }
@@ -176,7 +190,7 @@ uint32_t UART::Receive(uint8_t *buf, uint32_t maxLen) {
 		return 0;
 	}
 
-	uint16_t toRead = (available > maxLen) ? maxLen : available;
+	uint32_t toRead = (available > maxLen) ? maxLen : available;
 
 	// Copy data
 	if(tmpHead >= tmpTail) {
@@ -184,14 +198,14 @@ uint32_t UART::Receive(uint8_t *buf, uint32_t maxLen) {
 		rxBufTail = rxBufTail + toRead;
 	}
 	else {
-		uint16_t firstPart = rxBufferSize - tmpTail;
+		uint32_t firstPart = rxBufferSize - tmpTail;
 
 		if(toRead <= firstPart) {
 			memcpy(buf, &rxBuffer[tmpTail], toRead);
 			rxBufTail = rxBufTail + toRead;
 		}
 		else {
-			uint16_t secondPart = toRead - firstPart;
+			uint32_t secondPart = toRead - firstPart;
 			memcpy(buf, &rxBuffer[tmpTail], firstPart);
 			memcpy(buf + firstPart, &rxBuffer[0], secondPart);
 			rxBufTail = secondPart;
@@ -199,6 +213,17 @@ uint32_t UART::Receive(uint8_t *buf, uint32_t maxLen) {
 	}
 
 	return toRead;
+}
+
+void UART::Flush(void) {
+	// Wait until software ring buffer has drained via ISR
+	while(this->txBusy || (this->txBufHead != this->txBufTail)) {
+		__NOP();
+	}
+	// Wait until hardware shift register finishes transmitting (TC = 1)
+	while(LL_USART_IsActiveFlag_TC(this->instance) == 0) {
+		__NOP();
+	}
 }
 
 uint32_t UART::Available() {
@@ -227,17 +252,22 @@ void UART::StartTX() {
 // ---------------------------------------------------------
 
 void UART::InterruptHandler() {
-	// Handle ORE
+	// Handle ORE (Overrun error)
 	if(LL_USART_IsActiveFlag_ORE(instance) == 0x01) {
 		// Clear ORE flag
 		LL_USART_ClearFlag_ORE(instance);
 	}
-	// Handle FE
+	// Handle FE (Framing error)
 	if(LL_USART_IsActiveFlag_FE(instance) == 0x01) {
 		// Clear FE flag
 		LL_USART_ClearFlag_FE(instance);
 	}
-	// Handle NE
+	// Handle PE (Parity error)
+	if(LL_USART_IsActiveFlag_PE(instance) == 0x01) {
+		// Clear PE flag
+		LL_USART_ClearFlag_PE(instance);
+	}
+	// Handle NE (Noise detection flag)
 	if(LL_USART_IsActiveFlag_NE(instance) == 0x01) {
 		// Clear NE flag
 		LL_USART_ClearFlag_NE(instance);

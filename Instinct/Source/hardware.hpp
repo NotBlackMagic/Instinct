@@ -1,3 +1,12 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
+ *
+ * File:	Instinct/Source/hardware.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Global holder of all peripherals.
+ */
+
 #pragma once
 
 // Basic system includes
@@ -10,6 +19,7 @@
 #include "dcmipp.hpp"
 #include "dmaChannel.hpp"
 #include "exti.hpp"
+#include "fdcan.hpp"
 #include "gpio.hpp"
 #include "hyperbus.hpp"
 #include "i2c.hpp"
@@ -22,6 +32,7 @@
 #include "timer.hpp"
 #include "uart.hpp"
 #include "usb.hpp"
+#include "usbpd.hpp"
 #include "venc.hpp"
 
 // Storage device drivers
@@ -108,6 +119,10 @@ extern HyperFlash::Config extFlashConfig;
 extern HyperBus hyperBus2;
 extern HyperFlash externalFlash;
 
+extern FDCAN fdcan1;
+extern FDCAN fdcan2;
+extern FDCAN fdcan3;
+
 extern I2C i2c1;
 extern I2C i2c2;
 extern I2C i2c4;
@@ -186,5 +201,7 @@ extern USB usbHardware;
 extern USBDevice usbDevice;
 extern USBClassCDC usbCDC;
 extern USBClassUVC usbUVC;
+
+extern USBPD usbPD;
 
 void HardwareInit();

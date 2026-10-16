@@ -10,6 +10,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <string.h>
 
 #include "stm32n657xx.h"
 #include "stm32n6xx_ll_bus.h"
@@ -17,7 +18,9 @@
 
 #include "status.hpp"
 
+#if defined (USE_RTOS)
 #include "tx_api.h"
+#endif
 
 /// @brief Driver for the UART peripheral supporting Blocking and Async (Interrupt) modes.
 /// @note This driver integrates with ThreadX mutexes for thread safety.
@@ -81,6 +84,10 @@ class UART {
 		/// @return Number of bytes read.
 		uint32_t Receive(uint8_t *buf, uint32_t maxLen);
 
+		/// @brief Blocks/waits until TX ring buffer is empty and last byte ISR was called.
+		/// @return 
+		void Flush(void);
+
 		/// @brief Get number of bytes available to read from internal ring buffer.
 		/// @return Number of bytes read.
 		uint32_t Available();
@@ -109,15 +116,16 @@ class UART {
 		volatile uint16_t txBufTail;
 		volatile bool txBusy;
 
+#if defined (USE_RTOS)
 		// Synchronization
 		TX_MUTEX mutex;
+		// Timeout defines
+		static constexpr uint32_t TIMEOUT_MUTEX = TX_WAIT_FOREVER;
+#endif
 
 		// Event Flags Definitions
 		static constexpr uint32_t EVT_TRANS_CPLT = 0x01;
 		static constexpr uint32_t EVT_ERR = 0x02;
-
-		// Timeout defines
-		static constexpr uint32_t TIMEOUT_MUTEX = TX_WAIT_FOREVER;
 
 		// Internal helpers
 		void StartTX();

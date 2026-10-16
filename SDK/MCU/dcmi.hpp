@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	SDK/MCU/dcmi.hpp
  * Author:	NotBlackMagic
@@ -43,9 +43,9 @@ class Dcmi {
 
 		/// @brief DCMI peripheral configuration structure.
 		struct Config {
-			SyncPolarity vSyncPolarity;
-			SyncPolarity hSyncPolarity;
-			ClockPolarity pxClkPolarity;
+			SyncPolarity vSyncPolarity;		// When data is NOT valid
+			SyncPolarity hSyncPolarity;		// When data is NOT valid
+			ClockPolarity pxClkPolarity;	// When data is NOT valid
 			bool embeddedSync;
 		};
 
@@ -61,6 +61,20 @@ class Dcmi {
 		/// @param config DCMI configuration.
 		/// @return Status::Ok if initialization succeeded, or Status::Error if the config was invalid.
 		Status Init(const Config &config);
+
+		/// @brief Enables and sets frame crop mode.
+		/// @param x Vertical start line
+		/// @param y Horizontal start line
+		/// @param w Vertical line count (vertical resolution)
+		/// @param h Horizontal capture count (horizontal resolution)
+		/// @return Status::Ok
+		Status ConfigureCrop(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+		
+		/// @brief Enables/disables frame decimation by 2 mode. Only works for 8-bit data width
+		/// @param halfV 	Capture every other line (vertical resolution decimation by 2)
+		/// @param skipCnt	Skip N bytes. For 8-bit pixel data use 1 (skip every other), for 16-bit pixel data use 2 (skip 2 bytes, capture 2 bytes)
+		/// @return Status::Ok
+		Status ConfigureDecimation(bool halfV, uint8_t skipCnt);
 
 		/// @brief Starts capturing frames.
 		/// @param mode: Capturing mode.

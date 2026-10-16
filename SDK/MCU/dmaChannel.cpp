@@ -10,7 +10,7 @@
 DMAChannel::DMAChannel(DMA_TypeDef *instance, uint8_t channelIndex) {
 	this->instance = instance;
 	this->channelIndex = channelIndex & 0x0F; // Limit channel numer to 15
-	this->irqPriority = 0x0E; 	// Lowest priority
+	this->irqPriority = 0x02; 	// High priority
 }
 
 Status DMAChannel::Init(const Config& config) {
@@ -87,10 +87,10 @@ Status DMAChannel::TransferAsync(uint32_t srcAddr, uint32_t dstAddr, uint32_t le
 	// Prepare internal transfer variables
 	this->currentSrc = srcAddr;
 	this->currentDst = dstAddr;
-	this->remainingBytes = len;
+	this->blockSize = len;
+	this->remainingBytes = 0;	// Default: 0 for single-block and hardware 2D transfers
 
 	uint32_t hwBlockCount = 0;
-	this->blockSize = len;
 
 	// Check if can use Hardware chunking (2D transfer) or not
 	bool reqSWChunking = (this->config.StateCallback != nullptr);
@@ -118,6 +118,7 @@ Status DMAChannel::TransferAsync(uint32_t srcAddr, uint32_t dstAddr, uint32_t le
 		else {
 			// Software Chunking (Channels 0-11 OR requires SW toggle)
 			// Pick a safe chunk size aligned to standard burst sizes (65280 also save for JPEG granularity)
+			this->remainingBytes = len;		// Only software chunking tracks remaining bytes
 			uint32_t maxBlkSize = 65280;
 			if(this->remainingBytes > maxBlkSize) {
 				this->blockSize = maxBlkSize;
@@ -175,13 +176,7 @@ Status DMAChannel::TransferWait(uint32_t timeoutTicks) {
 	// Wait for event
 	ULONG events;
 	UINT status = tx_event_flags_get(&this->event, EVT_TRANS_CPLT | EVT_ERR, TX_OR_CLEAR, &events, timeoutTicks);
-
-	if(status != TX_SUCCESS) {
-		volatile uint32_t dmaInCCR = ((DMA_Channel_TypeDef *)((uint32_t)HPDMA1 + LL_DMA_CH_OFFSET_TAB[LL_DMA_CHANNEL_14]))->CCR;
-		volatile uint32_t dmaInCSR = ((DMA_Channel_TypeDef *)((uint32_t)HPDMA1 + LL_DMA_CH_OFFSET_TAB[LL_DMA_CHANNEL_14]))->CSR;
-		volatile uint32_t dmaInCTR2 = ((DMA_Channel_TypeDef *)((uint32_t)HPDMA1 + LL_DMA_CH_OFFSET_TAB[LL_DMA_CHANNEL_14]))->CTR2;
-		volatile uint32_t dmaInCBR2 = ((DMA_Channel_TypeDef *)((uint32_t)HPDMA1 + LL_DMA_CH_OFFSET_TAB[LL_DMA_CHANNEL_14]))->CBR2;
-		
+	if(status != TX_SUCCESS) {		
 		this->TransferStop();
 		return Status::Timeout;
 	}
@@ -249,11 +244,16 @@ DMAChannel::Port DMAChannel::GetPortFromAddress(uint32_t address) {
 }
 
 void DMAChannel::InterruptHandler() {
+	volatile uint32_t cbr = ((DMA_Channel_TypeDef *)((uint32_t)this->instance + LL_DMA_CH_OFFSET_TAB[this->channelIndex]))->CBR1;
 	// Handle Transfer Error
 	if(LL_DMA_IsActiveFlag_DTE(this->instance, this->channelIndex) == 0x01) {
 		// Clear flag
 		tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
 		LL_DMA_ClearFlag_DTE(this->instance, this->channelIndex);
+
+		if(this->config.CompleteCallback != nullptr) {
+			this->config.CompleteCallback(this->config.callbackContext, Status::Error);
+		}
 		return;	// Exit early
 	}
 
@@ -306,6 +306,10 @@ void DMAChannel::InterruptHandler() {
 			LL_DMA_DisableIT_TC(this->instance, this->channelIndex);
 			tx_event_flags_set(&this->event, EVT_TRANS_CPLT, TX_OR);
 			LL_DMA_ClearFlag_TC(this->instance, this->channelIndex);
+
+			if(this->config.CompleteCallback != nullptr) {
+				this->config.CompleteCallback(this->config.callbackContext, Status::Ok);
+			}
 		}
 	}
 }

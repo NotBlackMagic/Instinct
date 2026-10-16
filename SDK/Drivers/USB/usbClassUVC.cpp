@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	SDK/Drivers/USB/usbClassUVC.cpp
  */
@@ -314,6 +314,25 @@ const uint8_t* USBClassUVC::GetConfigDescriptor(USB::BusSpeed speed, uint16_t* l
 			this->activeUVCDescriptor[offset++] = 0x9B;
 			this->activeUVCDescriptor[offset++] = 0x71;
 		}
+		else if(activePixelFormat == PixelFormat::Grayscale) {
+			// Y800 GUID: 30303859-0000-0010-8000-00AA00389B71
+			this->activeUVCDescriptor[offset++] = 0x59; // 'Y'
+			this->activeUVCDescriptor[offset++] = 0x38; // '8'
+			this->activeUVCDescriptor[offset++] = 0x30; // '0'
+			this->activeUVCDescriptor[offset++] = 0x30; // '0'
+			this->activeUVCDescriptor[offset++] = 0x00;
+			this->activeUVCDescriptor[offset++] = 0x00;
+			this->activeUVCDescriptor[offset++] = 0x10;
+			this->activeUVCDescriptor[offset++] = 0x00;
+			this->activeUVCDescriptor[offset++] = 0x80;
+			this->activeUVCDescriptor[offset++] = 0x00;
+			this->activeUVCDescriptor[offset++] = 0x00;
+			this->activeUVCDescriptor[offset++] = 0xAA;
+			this->activeUVCDescriptor[offset++] = 0x00;
+			this->activeUVCDescriptor[offset++] = 0x38;
+			this->activeUVCDescriptor[offset++] = 0x9B;
+			this->activeUVCDescriptor[offset++] = 0x71;
+		}
 		else {
 			// Default to YUY2
 			this->activeUVCDescriptor[offset++] = 0x59;	// 'Y'
@@ -334,7 +353,16 @@ const uint8_t* USBClassUVC::GetConfigDescriptor(USB::BusSpeed speed, uint16_t* l
 			this->activeUVCDescriptor[offset++] = 0x71;
 		}
 
-		this->activeUVCDescriptor[offset++] = (activePixelFormat == PixelFormat::YUV420_NV12) ? 12 : 16; // bBitsPerPixel
+		// Set bits per pixel depending on used pixel format
+		uint8_t bitsPerPixel = 16;
+		if(activePixelFormat == PixelFormat::Grayscale) {
+			bitsPerPixel = 8;
+		}
+		else if(activePixelFormat == PixelFormat::YUV420_NV12) {
+			bitsPerPixel = 12;
+		}
+		this->activeUVCDescriptor[offset++] = bitsPerPixel;		// bBitsPerPixel
+		
 		this->activeUVCDescriptor[offset++] = 0x01;		// bDefaultFrameIndex
 		this->activeUVCDescriptor[offset++] = 0x00;		// bAspectRatioX
 		this->activeUVCDescriptor[offset++] = 0x00;		// bAspectRatioY
@@ -362,8 +390,13 @@ const uint8_t* USBClassUVC::GetConfigDescriptor(USB::BusSpeed speed, uint16_t* l
 				frameSubtype = 0x11;	// VS_FRAME_FRAME_BASED
 			}
 			
-			// Assume 16 bits per pixel (YUY2) for max frame size calculation
-			uint8_t bytesPerPixel = (frame.format == PixelFormat::YUV420_NV12) ? 1 : 2;
+			uint8_t bytesPerPixel = 2;
+			if(frame.format == PixelFormat::Grayscale) {
+				bytesPerPixel = 1;
+			}
+			else if(frame.format == PixelFormat::YUV420_NV12) {
+				bytesPerPixel = 1; // Or (width * height * 3) / 2 if accounting for chroma
+			}
 			uint32_t maxFrameSize = frame.width * frame.height * bytesPerPixel;
 
 			this->activeUVCDescriptor[offset++] = frameDescLength;	// bLength
@@ -678,7 +711,13 @@ Status USBClassUVC::OnDataOut(USB& usb, uint8_t epNum, uint32_t len) {
 					this->probeCommitControl.frameInterval = activeCap.frameInterval;
 
 					// Calculate hardware requirements dynamically based on the matched setting
-					uint8_t bytesPerPixel = (activeCap.format == PixelFormat::YUV420_NV12) ? 1 : 2;
+					uint8_t bytesPerPixel = 2;
+					if(activeCap.format == PixelFormat::Grayscale) {
+						bytesPerPixel = 1;
+					}
+					else if(activeCap.format == PixelFormat::YUV420_NV12) {
+						bytesPerPixel = 1;
+					}
 					this->probeCommitControl.maxVideoFrameSize = activeCap.width * activeCap.height * bytesPerPixel; 
 					
 					// Tell the host what size of payload chunks it should expect.

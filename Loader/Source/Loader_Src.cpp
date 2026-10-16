@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Loader/Loader_Src.cpp
+ * File:	Loader/Loader_Src.cpp
  */
 
 #include "Loader_Src.h"
@@ -28,8 +28,8 @@ extern int __estack_end__;
 HyperBus* pBus = nullptr;
 HyperFlash* pFlash = nullptr;
 // Prepare/allocate for the class objects
-uint8_t busBuffer[sizeof(HyperBus)];
-uint8_t flashBuffer[sizeof(HyperFlash)];
+__attribute__((aligned(32))) uint8_t busBuffer[sizeof(HyperBus)];
+__attribute__((aligned(32))) uint8_t flashBuffer[sizeof(HyperFlash)];
 
 HyperFlash::Config extFlashConfig = {	
 	.deviceName = "Cypress S26HS512T",
@@ -64,6 +64,8 @@ void __attribute__((used,optimize("Os"))) Reset_Handler(void)
 		"nop\n"
 		"mov     sp, r0\n");
 
+	System::EnableDebug();
+
 	asm(
 		"ldr r0, =main\n"
 		"nop\n"
@@ -75,8 +77,8 @@ extern const uint32_t __ICFEDIT_region_RAM_end__;
 void Reset_Handler(void);
 
 uint32_t __vector_table[] __attribute__((section(".vectors"))) = {
-	(uint32_t)(&__ICFEDIT_region_RAM_end__), /* Stack pointer */
-	(uint32_t)&Reset_Handler                 /* Reset handler */
+	(uint32_t)(&__ICFEDIT_region_RAM_end__),	/* Stack pointer */
+	(uint32_t)&Reset_Handler					/* Reset handler */
 };
 
 void Reset_Handler(void) {
@@ -85,8 +87,8 @@ void Reset_Handler(void) {
 #endif
 
 /**
- * @brief  main function used for debug purpose
-  * @retval the function always returns 0
+ * @brief main function used for debug purpose
+ * @retval the function always returns 0
  */
 int main(void) {
 	return 0;
@@ -98,16 +100,22 @@ uint32_t HAL_GetTick(void) {
 
 void HAL_Delay(uint32_t Delay) {
 	int i=0;
-	for (i=0; i<0x1000; i++);
+	for(i=0; i<0x1000; i++);
 }
 
 /**
-  * @brief  System initialization.
-  * @param  None
-  * @retval  1      : Operation succeeded
-  * @retval  0      : Operation failed
-  */
+ * @brief System initialization.
+ * @param None
+ * @retval 1: Operation succeeded
+ * @retval 0: Operation failed
+ */
 KeepInCompilation uint32_t Init() {
+	System::EnableDebug();
+
+	// Invalidate caches in case loader was injected while caches were active
+	SCB_InvalidateICache();
+	SCB_InvalidateDCache();
+
 	uint32_t retr = 1;
 	uint8_t *startadd;
 	uint32_t size;
@@ -144,8 +152,10 @@ KeepInCompilation uint32_t Init() {
 	// Enable D-Cache
 	// SCB_EnableDCache();
 
-	// Configure the system clock
-	System::InitClock();
+	// Configure the system clock, if not already configured
+	if(LL_RCC_GetSysClkSource() == LL_RCC_SYS_CLKSOURCE_STATUS_HSI) {
+		System::InitClock();
+	}
 	Time::Init();
 
 	// Initialize GPIOs
@@ -160,12 +170,19 @@ KeepInCompilation uint32_t Init() {
 	LL_GPIO_SetPinOutputType(GPIOQ, LL_GPIO_PIN_1, LL_GPIO_OUTPUT_PUSHPULL);
 	LL_GPIO_SetPinPull(GPIOQ, LL_GPIO_PIN_1, LL_GPIO_PULL_NO);
 	LL_GPIO_SetPinMode(GPIOQ, LL_GPIO_PIN_1, LL_GPIO_MODE_OUTPUT);
+	// BLUE LED
+	LL_GPIO_SetPinSpeed(GPIOB, LL_GPIO_PIN_2, LL_GPIO_SPEED_FREQ_LOW);
+	LL_GPIO_SetPinOutputType(GPIOB, LL_GPIO_PIN_2, LL_GPIO_OUTPUT_PUSHPULL);
+	LL_GPIO_SetPinPull(GPIOB, LL_GPIO_PIN_2, LL_GPIO_PULL_NO);
+	LL_GPIO_SetPinMode(GPIOB, LL_GPIO_PIN_2, LL_GPIO_MODE_OUTPUT);
 
 	// Initialize HyperBus and HyperFlash
 	pBus = new (busBuffer) HyperBus(XSPI2);
 	pFlash = new (flashBuffer) HyperFlash(*pBus);
 
+	// All LEDs off
 	LL_GPIO_SetOutputPin(GPIOB, LL_GPIO_PIN_13);
+	LL_GPIO_SetOutputPin(GPIOB, LL_GPIO_PIN_2);
 	LL_GPIO_SetOutputPin(GPIOQ, LL_GPIO_PIN_1);
 
 	BoardXSPI2Init();
@@ -190,14 +207,14 @@ KeepInCompilation uint32_t Init() {
 }
 
 /**
-  * @brief   Program memory.
-  * @param   Address: page address
-  * @param   Size   : size of data
-  * @param   buffer : pointer to data buffer
-  * @retval  1      : Operation succeeded
-  * @retval  0      : Operation failed
-  */
-KeepInCompilation uint32_t Write (uint32_t Address, uint32_t Size, uint8_t* buffer) {
+ * @brief Program memory.
+ * @param Address: page address
+ * @param Size : size of data
+ * @param buffer : pointer to data buffer
+ * @retval 1 : Operation succeeded
+ * @retval 0 : Operation failed
+ */
+KeepInCompilation uint32_t Write(uint32_t Address, uint32_t Size, uint8_t* buffer) {
 	LL_GPIO_SetOutputPin(GPIOQ, LL_GPIO_PIN_1);
 
 	// Convert absolute memory address to relative flash offset
@@ -219,12 +236,12 @@ KeepInCompilation uint32_t Write (uint32_t Address, uint32_t Size, uint8_t* buff
 }
 
 /**
-  * @brief 	 Full erase of the device 						
-  * @param 	 Parallelism : 0 																		
-  * @retval  1           : Operation succeeded
-  * @retval  0           : Operation failed											
-  */
-KeepInCompilation  uint32_t MassErase (uint32_t Parallelism) {
+ * @brief Full erase of the device 						
+ * @param Parallelism : 0 																		
+ * @retval 1: Operation succeeded
+ * @retval 0: Operation failed											
+ */
+KeepInCompilation uint32_t MassErase(uint32_t Parallelism) {
 	LL_GPIO_SetOutputPin(GPIOQ, LL_GPIO_PIN_1);
 
 	// Disable memory mapped mode if enabled
@@ -243,31 +260,30 @@ KeepInCompilation  uint32_t MassErase (uint32_t Parallelism) {
 }
 
 /**
-  * @brief   Sector erase.
-  * @param   EraseStartAddress :  erase start address
-  * @param   EraseEndAddress   :  erase end address
-  * @retval  None
-  */
-KeepInCompilation uint32_t SectorErase (uint32_t EraseStartAddress ,uint32_t EraseEndAddress) {
+ * @brief Sector erase.
+ * @param EraseStartAddress: Erase start address.
+ * @param EraseEndAddress: Erase end address.
+ * @retval None
+ */
+KeepInCompilation uint32_t SectorErase(uint32_t EraseStartAddress ,uint32_t EraseEndAddress) {
 	LL_GPIO_SetOutputPin(GPIOQ, LL_GPIO_PIN_1);
 
 	// Disable memory mapped mode if enabled
 	if(memoryMappedMode == 1) {
-		pFlash->ExitMemoryMappedMode();
+		if(pFlash->ExitMemoryMappedMode() != Status::Ok) {
+			return 0;
+		}
 		memoryMappedMode = 0;
 	}
 
-	uint32_t BlockAddr;
 	EraseStartAddress = EraseStartAddress & 0x0FFFFFFF;
-	EraseEndAddress &= 0x0FFFFFFF;
-	EraseStartAddress = EraseStartAddress - EraseStartAddress % 0x00040000;
+	EraseEndAddress = EraseEndAddress & 0x0FFFFFFF;
+	EraseStartAddress = EraseStartAddress - (EraseStartAddress % 0x00040000);
 
 	while (EraseEndAddress>=EraseStartAddress) {
-		BlockAddr = EraseStartAddress;
-
-		// Erases the specified block of the HyperFlash memory
-		pFlash->SectorErase(BlockAddr);
-
+		if(pFlash->SectorErase(EraseStartAddress) != Status::Ok) {
+			return 0;
+		}
 		EraseStartAddress+=0x00040000;
 	}
 
@@ -275,16 +291,15 @@ KeepInCompilation uint32_t SectorErase (uint32_t EraseStartAddress ,uint32_t Era
 }
 
 /**
-  * Description :
-  * Calculates checksum value of the memory zone
-  * Inputs    :
-  *      StartAddress  : Flash start address
-  *      Size          : Size (in WORD)  
-  *      InitVal       : Initial CRC value
-  * outputs   :
-  *     R0             : Checksum value
-  * Note: Optional for all types of device
-  */
+ * Description :
+ * Calculates checksum value of the memory zone
+ * Inputs:
+ * StartAddress: Flash start address
+ * Size: Size (in WORD)
+ * InitVal: Initial CRC value
+ * outputs: R0: Checksum value
+ * Note: Optional for all types of device
+ */
 uint32_t CheckSum(uint32_t StartAddress, uint32_t Size, uint32_t InitVal) {
 	uint8_t missalignementAddress = StartAddress%4;
 	uint8_t missalignementSize = Size ;
@@ -347,21 +362,21 @@ uint32_t CheckSum(uint32_t StartAddress, uint32_t Size, uint32_t InitVal) {
 }
 
 /**
-  * Description :
-  * Verify flash memory with RAM buffer and calculates checksum value of
-  * the programmed memory
-  * Inputs    :
-  *      FlashAddr     : Flash address
-  *      RAMBufferAddr : RAM buffer address
-  *      Size          : Size (in WORD)  
-  *      InitVal       : Initial CRC value
-  * outputs   :
-  *     R0             : Operation failed (address of failure)
-  *     R1             : Checksum value
-  * Note: Optional for all types of device
-  */
+ * Description :
+ * Verify flash memory with RAM buffer and calculates checksum value of
+ * the programmed memory
+ * Inputs:
+ * FlashAddr: Flash address
+ * RAMBufferAddr: RAM buffer address
+ * Size: Size (in WORD)
+ * InitVal: Initial CRC value
+ * outputs:
+ * R0: Operation failed (address of failure)
+ * R1: Checksum value
+ * Note: Optional for all types of device
+ */
 
-KeepInCompilation uint64_t Verify (uint32_t MemoryAddr, uint32_t RAMBufferAddr, uint32_t Size, uint32_t missalignement) {
+KeepInCompilation uint64_t Verify(uint32_t MemoryAddr, uint32_t RAMBufferAddr, uint32_t Size, uint32_t missalignement) {
 	uint32_t VerifiedData = 0, InitVal = 0;
 	uint64_t checksum;
 	Size*=4;
@@ -386,9 +401,9 @@ KeepInCompilation uint64_t Verify (uint32_t MemoryAddr, uint32_t RAMBufferAddr, 
 }
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
+ * @brief This function is executed in case of error occurrence.
+ * @retval None
+ */
 void Error_Handler(void) {
 	LL_GPIO_SetOutputPin(GPIOQ, LL_GPIO_PIN_1);
 	LL_GPIO_ResetOutputPin(GPIOB, LL_GPIO_PIN_13);

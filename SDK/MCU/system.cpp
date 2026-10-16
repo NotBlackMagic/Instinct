@@ -37,6 +37,8 @@ struct CoreClocks {
 	uint32_t ic16;
 	uint32_t ic17;
 	uint32_t ic18;
+	uint32_t ic19;
+	uint32_t ic20;
 };
 
 static CoreClocks nodeFrequencies;
@@ -50,10 +52,10 @@ void System::InitClock(void) {
 	LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_PWR);
 	// Set to use internal SMPS
 	LL_PWR_ConfigSupply(LL_PWR_SMPS_SUPPLY);
-	while (LL_PWR_IsActiveFlag_ACTVOSRDY() == 0U);
+	while(LL_PWR_IsActiveFlag_ACTVOSRDY() != 1);
 	// Enable internal SMPS Overdrive votlage (scale 1/high)
 	LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1);
-	while(LL_PWR_IsActiveFlag_VOSRDY() == 0);
+	while(LL_PWR_IsActiveFlag_VOSRDY() != 1);
 
 	// Configure the IO power supply
 	LL_PWR_SetVddIOVoltageRange(LL_PWR_VDDIO_VOLTAGE_RANGE_3V3);		//Set the VDD IO voltage range: 3.3V
@@ -90,7 +92,7 @@ void System::InitClock(void) {
 
 	LL_RCC_HSI_Enable();
 	// Wait till HSI is ready
-	while(LL_RCC_HSI_IsReady() == 0);
+	while(LL_RCC_HSI_IsReady() != 1);
 
 	// Get current CPU/System buses clocks configuration and if necessary switch to intermediate HSI clock to ensure target clock can be set
 	if((LL_RCC_GetCpuClkSource() == LL_RCC_CPU_CLKSOURCE_STATUS_IC1) || (LL_RCC_GetSysClkSource() == LL_RCC_SYS_CLKSOURCE_STATUS_IC2_IC6_IC11)) {
@@ -206,6 +208,14 @@ void System::InitClock(void) {
 	LL_RCC_IC18_SetSource(LL_RCC_ICCLKSOURCE_PLL1); 
 	LL_RCC_IC18_SetDivider(160);
 	nodeFrequencies.ic18 = 20000000;
+	// Set IC19 output to PLL1 / 32 = 3200 MHz / 32 = 100 MHz (Clock to FDCAN)
+	LL_RCC_IC19_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
+	LL_RCC_IC19_SetDivider(16);
+	nodeFrequencies.ic19 = 100000000;
+	// Set IC20 output to PLL1 / 16 = 3200 MHz / 16 = 200 MHz (Clock to FDCAN)
+	LL_RCC_IC20_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
+	LL_RCC_IC20_SetDivider(16);
+	nodeFrequencies.ic20 = 200000000;
 
 	// Enable ICx clocks
 	LL_RCC_IC2_Enable();
@@ -218,6 +228,8 @@ void System::InitClock(void) {
 	LL_RCC_IC15_Enable();
 	LL_RCC_IC17_Enable();
 	LL_RCC_IC18_Enable();
+	LL_RCC_IC19_Enable();
+	LL_RCC_IC20_Enable();
 
 	// AXI Clock -> IC2 (AHB IC2/2), NPU Clock -> IC6, AXISRAM3/4/5/6 -> IC11
 	LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_IC2_IC6_IC11);
@@ -237,6 +249,8 @@ void System::InitClock(void) {
 	// Set peripheral clock sources
 	// DCMI peripheral
 	LL_RCC_SetDCMIPPClockSource(LL_RCC_DCMIPP_CLKSOURCE_IC17);	//Max: 333MHz
+	// FDCAN peripheral
+	LL_RCC_SetFDCANClockSource(LL_RCC_FDCAN_CLKSOURCE_IC19);
 	// I2C peripheral
 	LL_RCC_SetI2CClockSource(LL_RCC_I2C1_CLKSOURCE_IC10);
 	LL_RCC_SetI2CClockSource(LL_RCC_I2C2_CLKSOURCE_IC10);
@@ -244,6 +258,8 @@ void System::InitClock(void) {
 	// I3C peripheral
 	LL_RCC_SetI3CClockSource(LL_RCC_I3C1_CLKSOURCE_IC10);
 	LL_RCC_SetI3CClockSource(LL_RCC_I3C2_CLKSOURCE_IC10);
+	// PSSI/DCMI peripheral
+	LL_RCC_SetPSSIClockSource(LL_RCC_PSSI_CLKSOURCE_IC20);
 	// SPI peripheral
 	LL_RCC_SetSPIClockSource(LL_RCC_SPI1_CLKSOURCE_IC9);
 	LL_RCC_SetSPIClockSource(LL_RCC_SPI2_CLKSOURCE_IC9);
@@ -284,6 +300,8 @@ void System::InitFWClock(void) {
 	nodeFrequencies.ic11 = 900000000;
 	nodeFrequencies.ic17 = 320000000;
 	nodeFrequencies.ic18 = 20000000;
+	nodeFrequencies.ic19 = 100000000;
+	nodeFrequencies.ic20 = 200000000;
 	
 	// Save system and bus clock values
 	nodeFrequencies.sys = nodeFrequencies.ic1;
@@ -326,6 +344,9 @@ uint32_t System::GetNodeFrequency(ClockNode node) {
 		case ClockNode::IC15: return nodeFrequencies.ic15;
 		case ClockNode::IC16: return nodeFrequencies.ic16;
 		case ClockNode::IC17: return nodeFrequencies.ic17;
+		case ClockNode::IC18: return nodeFrequencies.ic18;
+		case ClockNode::IC19: return nodeFrequencies.ic19;
+		case ClockNode::IC20: return nodeFrequencies.ic20;
 		default: return 0;
 	}
 }
@@ -360,6 +381,68 @@ void System::EnableDebug(void) {
 	BSEC->AP_UNLOCK = 0xB4;
 	BSEC->DBGCR = 0xB451B400;
 	// BSEC->DBGCR = 0xB4B4B400;
+}
+
+uint32_t System::ReadOTP(uint32_t wordIndex) {
+	// Ensure BSEC clock is enabled
+	LL_APB4_GRP2_EnableClock(LL_APB4_GRP2_PERIPH_BSEC);
+
+	if(wordIndex >= 376) {
+		return 0;
+	}
+
+	// Direct shadow register read
+	return BSEC->FVRw[wordIndex];
+}
+
+Status System::ReadOTPHardware(uint32_t wordIndex, uint32_t &value) {
+	// Ensure BSEC clock is enabled
+	LL_APB4_GRP2_EnableClock(LL_APB4_GRP2_PERIPH_BSEC);
+
+	if(wordIndex >= 376) {
+		return Status::Error;
+	}
+
+	// Check if fuse is reload-locked by sticky lock register SRLOCKx
+	uint32_t statusReg = wordIndex / 32U;
+	uint32_t statusBit = 1UL << (wordIndex % 32U);
+	if((BSEC->SRLOCKx[statusReg] & statusBit) != 0U) {
+		return Status::Error;
+	}
+
+	// Wait until BSEC OTP controller is idle
+	uint32_t timeout = 1000000;
+	while((BSEC->OTPSR & BSEC_OTPSR_BUSY) != 0U) {
+		timeout = timeout - 1;
+		if(timeout == 0) {
+			return Status::Timeout;
+		}
+	}
+
+	// Perform reload: clear PROG and PPLOCK, set ADDR to wordIndex
+	uint32_t otpCr = BSEC->OTPCR;
+	otpCr &= ~(BSEC_OTPCR_PPLOCK | BSEC_OTPCR_PROG | BSEC_OTPCR_ADDR);
+	otpCr |= (wordIndex & BSEC_OTPCR_ADDR);
+	BSEC->OTPCR = otpCr;
+
+	// Wait for the reload operation to complete
+	timeout = 1000000;
+	while((BSEC->OTPSR & BSEC_OTPSR_BUSY) != 0U) {
+		timeout = timeout - 1;
+		if(timeout == 0) {
+			return Status::Timeout;
+		}
+	}
+
+	// Check for reload errors (Disturb, Double ECC error, Address Mismatch)
+	constexpr uint32_t reloadErrors = BSEC_OTPSR_DISTURBF | BSEC_OTPSR_DEDF | BSEC_OTPSR_AMEF;
+	if((BSEC->OTPSR & reloadErrors) != 0U) {
+		return Status::Error;
+	}
+
+	// Value was reloaded directly into the corresponding FVRw register
+	value = BSEC->FVRw[wordIndex];
+	return Status::Ok;
 }
 
 void System::EnableCache(void) {
