@@ -23,7 +23,8 @@ class ActuatorThread {
 
 	private:
 		static TX_THREAD threadPtr;
-		static uint8_t threadStack[4096];
+		static const uint16_t threadStackSize = 4096;
+		__attribute__((aligned(32))) static uint8_t threadStack[threadStackSize];
 
 		// Subscribers
 		static Subscriber<ActuatorMsg> subActuators;

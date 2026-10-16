@@ -1,10 +1,10 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Vision/JPEGEncoder.hpp
- * Author:  NotBlackMagic
- * Brief:   JPEG frame encoder.
+ * File:	Instinct/Modules/Vision/jpegEncoder.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Driver for the standalone (legacy) hardware accelerated JPEG encoder.
  */
 
 #pragma once
@@ -42,7 +42,7 @@ class JPEGEncoder {
 
 		TX_EVENT_FLAGS_GROUP syncEvent;
 		static constexpr uint32_t EVT_DONE = 0x01;
-		static constexpr uint32_t EVT_ERR  = 0x02;
+		static constexpr uint32_t EVT_ERR = 0x02;
 
 		// Static callbacks to pass into the DMA Config
 		static void DMAInStateCallback(void* ctx, bool enable);

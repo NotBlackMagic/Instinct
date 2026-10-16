@@ -1,8 +1,8 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Vision/imageWriter.cpp
+ * File:	Instinct/Modules/Vision/imageWriter.cpp
  */
 
 #include "imageWriter.hpp"

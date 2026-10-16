@@ -1,8 +1,8 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Vision/jpegEncoder.cpp
+ * File:	Instinct/Modules/Vision/jpegEncoder.cpp
  */
 
  // NOTE ON DMA TRANSFERS: https://community.st.com/t5/stm32-mcus-embedded-software/struggle-using-gpdma-linkedlist-on-jpeg-gpdma-input-ll-stalls/td-p/842221
@@ -96,13 +96,13 @@ Status JPEGEncoder::EncodeAsync(const VisionFrame& inputFrame, VisionFrame& outp
 	}
 
 	// Start OUT DMA (Providing the max allocated size)
-	Status status = this->dmaOut.Transfer((uint32_t)&JPEG->DOR, (uint32_t)outputFrame.startAddress, outputFrame.allocatedSize);
+	Status status = this->dmaOut.TransferAsync((uint32_t)&JPEG->DOR, (uint32_t)outputFrame.startAddress, outputFrame.allocatedSize);
 	if(status != Status::Ok) {
 		return status;
 	}
 
 	// Start IN DMA
-	status = this->dmaIn.Transfer((uint32_t)inputFrame.startAddress, (uint32_t)&JPEG->DIR, inputFrame.payloadSize);
+	status = this->dmaIn.TransferAsync((uint32_t)inputFrame.startAddress, (uint32_t)&JPEG->DIR, inputFrame.payloadSize);
 	if(status != Status::Ok) {
 		this->dmaOut.TransferStop();
 		return status;

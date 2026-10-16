@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:    Instinct/Modules/System/shellModules.hpp
  * Author:  NotBlackMagic
@@ -24,6 +24,7 @@
 void RegisterSystemCommands();
 
 // Hardware Peripherals
+void RegisterFDCANCommands();
 void RegisterI2CCommands();
 void RegisterI3CCommands();
 void RegisterGPIOCommands();

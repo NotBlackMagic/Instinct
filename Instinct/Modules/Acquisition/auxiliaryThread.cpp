@@ -1,7 +1,14 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:    Instinct/Modules/Acquisitions/auxiliaryThread.cpp
+ */
+
 #include "auxiliaryThread.hpp"
 
 TX_THREAD AuxiliaryThread::threadPtr;
-uint8_t AuxiliaryThread::threadStack[4096];
+__attribute__((aligned(32))) uint8_t AuxiliaryThread::threadStack[AuxiliaryThread::threadStackSize];
 
 Topic<BaroMsg> AuxiliaryThread::topicBaro[2] = {Topic<BaroMsg>("baro", static_cast<uint8_t>(TopicID::Baro), 0),
 												Topic<BaroMsg>("baro", static_cast<uint8_t>(TopicID::Baro), 1)};
@@ -9,10 +16,10 @@ Topic<MagMsg> AuxiliaryThread::topicMag[2] = {	Topic<MagMsg>("mag", static_cast<
 												Topic<MagMsg>("mag", static_cast<uint8_t>(TopicID::Mag), 1)};
 
 void AuxiliaryThread::Init() {
-	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("ACQ_Aux"),
+	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Auxiliary"),
 											AuxiliaryThread::Run, 0,
 											threadStack, sizeof(threadStack),
-											4, 0,
+											4, 4,
 											TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX ACQ Aux Thread Create Failed.");
@@ -25,12 +32,13 @@ void AuxiliaryThread::Init() {
 }
 
 void AuxiliaryThread::Run(ULONG input) {
+	(void)input;
+	LOG_INFO("Auxiliary Thread Initialized.");
+	
 	BaroMsg baroInt;
 	BaroMsg baroExt;
 	MagMsg magInt;
 	MagMsg magExt;
-
-	LOG_INFO("Auxiliary Thread Initialized.");
 
 	volatile uint8_t probeI2C1 = i2c1.Probe(0x1E);
 	volatile uint8_t probeI2C4 = i2c4.Probe(0x47);

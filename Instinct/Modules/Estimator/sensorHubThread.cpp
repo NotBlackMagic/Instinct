@@ -10,7 +10,7 @@
 #include <math.h>
 
 TX_THREAD SensorHubThread::threadPtr;
-uint8_t SensorHubThread::threadStack[8192];
+__attribute__((aligned(32))) uint8_t SensorHubThread::threadStack[SensorHubThread::threadStackSize];
 
 // Virtual Publishers
 Topic<IMUMsg> SensorHubThread::topicVirtualIMU("imu", static_cast<uint8_t>(TopicID::Imu), SensorHubThread::virtualInstanceID);
@@ -43,10 +43,10 @@ bool SensorHubThread::magHealth[SensorHubThread::maxMags] = {false, false};
 bool SensorHubThread::baroHealth[SensorHubThread::maxBaros] = {false, false};
 
 void SensorHubThread::Init() {
-	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Sens_Hub"),
+	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Sensor Hub"),
 													SensorHubThread::Run, 0,
 													threadStack, sizeof(threadStack),
-													2, 0,
+													2, 2,
 													TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Sensor Hub Thread Create Failed.");

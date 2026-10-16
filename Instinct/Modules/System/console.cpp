@@ -20,6 +20,7 @@ void Console::Init(UART* uart) {
 
 	// Register all active command modules
 	RegisterSystemCommands();
+	RegisterFDCANCommands();
 	RegisterI2CCommands();
 	RegisterI3CCommands();
 	RegisterGPIOCommands();

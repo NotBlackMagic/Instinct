@@ -1,10 +1,18 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ *
+ * File:	SDK/Acquisition/inertialThread.cpp
+ * Author:	NotBlackMagic
+ */
+
 #include "inertialThread.hpp"
 
 #include <stdio.h>
 
 // Allocate the static variables
 TX_THREAD InertialThread::threadPtr;
-uint8_t InertialThread::threadStack[4096];
+__attribute__((aligned(32))) uint8_t InertialThread::threadStack[InertialThread::threadStackSize];
 TX_EVENT_FLAGS_GROUP InertialThread::event;
 
 // Global/Shared timestamp for the EKF
@@ -31,10 +39,10 @@ void InertialThread::Ext2IntCallback(void* context, EXTIManager::Edge edge) {
 }
 
 void InertialThread::Init() {
-	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("ACQ_Inert"),
+	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Inertial"),
 													InertialThread::Run, 0,
 													threadStack, sizeof(threadStack),
-													3, 0,
+													3, 3,
 													TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX ACQ Inert Thread Create Failed.");
@@ -45,9 +53,10 @@ void InertialThread::Init() {
 }
 
 void InertialThread::Run(ULONG input) {
-	IMUMsg imuInt;
-
+	(void)input;
 	LOG_INFO("Inertial Thread Initialized.");
+	
+	IMUMsg imuInt;
 
 	// Create RTOS objects
 	if(tx_event_flags_create(&event, const_cast<char*>("IMU_event")) != TX_SUCCESS) {
@@ -104,8 +113,8 @@ void InertialThread::Run(ULONG input) {
 		LOG_WARN("Ext2 IMU (ICM45686) Init Failed!");
 	}
 
-	ULONG events;
-	UINT status;
+	ULONG events = 0;
+	UINT status = TX_SUCCESS;
 	uint8_t reqICM = 0x00;
 	while(1) {
 		// Wait for event
@@ -119,7 +128,7 @@ void InertialThread::Run(ULONG input) {
 		}
 		else if(status != TX_SUCCESS) {
 			// Handle sensor timeout (e.g., attempt software reset or trigger failsafe)
-			LOG_WARN("IMU Interrupt Timeout!");
+			// LOG_WARN("IMU Interrupt Timeout!");
 		}
 
 		// Wait for all called/triggered requests

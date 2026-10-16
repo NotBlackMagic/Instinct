@@ -8,7 +8,7 @@
 #include "controllerThread.hpp"
 
 TX_THREAD ControllerThread::threadPtr;
-uint8_t ControllerThread::threadStack[8192];
+__attribute__((aligned(32))) uint8_t ControllerThread::threadStack[ControllerThread::threadStackSize];
 
 // Output Publisher
 Topic<ActuatorMsg> ControllerThread::topicActuators("actuators", static_cast<uint8_t>(TopicID::Actuator), 0);
@@ -35,7 +35,7 @@ PID ControllerThread::pidRate[3];
 ControllerThread::MixerGeometry ControllerThread::currentMixer{};
 
 void ControllerThread::Init() {
-	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("CTRL_Loop"),
+	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Controller"),
 													ControllerThread::Run, 0,
 													threadStack, sizeof(threadStack),
 													2, 0, 
@@ -214,6 +214,10 @@ void ControllerThread::Run(ULONG input) {
 			// Publish
 			actuatorMsg.timestamp = stateMsg.timestamp;
 			topicActuators.Publish(actuatorMsg);
+		}
+		else {
+			// Safeguard: If the middleware queue fails, force a yield.
+			tx_thread_sleep(1);
 		}
 	}
 }

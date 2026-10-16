@@ -77,6 +77,55 @@ struct Matrix {
 		result.data[8] -= a.data[6]*b.data[2] + a.data[7]*b.data[5] + a.data[8]*b.data[8];
 	}
 
+	// Fast C = A * B^T (Eliminates explicit transpose temporary matrices)
+	static void MultiplyTransposedB3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& res) {
+		res.data[0] = a.data[0]*b.data[0] + a.data[1]*b.data[1] + a.data[2]*b.data[2];
+		res.data[1] = a.data[0]*b.data[3] + a.data[1]*b.data[4] + a.data[2]*b.data[5];
+		res.data[2] = a.data[0]*b.data[6] + a.data[1]*b.data[7] + a.data[2]*b.data[8];
+
+		res.data[3] = a.data[3]*b.data[0] + a.data[4]*b.data[1] + a.data[5]*b.data[2];
+		res.data[4] = a.data[3]*b.data[3] + a.data[4]*b.data[4] + a.data[5]*b.data[5];
+		res.data[5] = a.data[3]*b.data[6] + a.data[4]*b.data[7] + a.data[5]*b.data[8];
+
+		res.data[6] = a.data[6]*b.data[0] + a.data[7]*b.data[1] + a.data[8]*b.data[2];
+		res.data[7] = a.data[6]*b.data[3] + a.data[7]*b.data[4] + a.data[8]*b.data[5];
+		res.data[8] = a.data[6]*b.data[6] + a.data[7]*b.data[7] + a.data[8]*b.data[8];
+	}
+
+	// Fast C += A * B^T
+	static void MultiplyAccumulateTransposedB3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& res) {
+		res.data[0] += a.data[0]*b.data[0] + a.data[1]*b.data[1] + a.data[2]*b.data[2];
+		res.data[1] += a.data[0]*b.data[3] + a.data[1]*b.data[4] + a.data[2]*b.data[5];
+		res.data[2] += a.data[0]*b.data[6] + a.data[1]*b.data[7] + a.data[2]*b.data[8];
+
+		res.data[3] += a.data[3]*b.data[0] + a.data[4]*b.data[1] + a.data[5]*b.data[2];
+		res.data[4] += a.data[3]*b.data[3] + a.data[4]*b.data[4] + a.data[5]*b.data[5];
+		res.data[5] += a.data[3]*b.data[6] + a.data[4]*b.data[7] + a.data[5]*b.data[8];
+
+		res.data[6] += a.data[6]*b.data[0] + a.data[7]*b.data[1] + a.data[8]*b.data[2];
+		res.data[7] += a.data[6]*b.data[3] + a.data[7]*b.data[4] + a.data[8]*b.data[5];
+		res.data[8] += a.data[6]*b.data[6] + a.data[7]*b.data[7] + a.data[8]*b.data[8];
+	}
+
+	// Fast res = (Skew(u) * M) * scale
+	static void SkewMultiplyScalar3x3(const Matrix<3, 1>& u, const Matrix<3, 3>& m, float scale, Matrix<3, 3>& res) {
+		float ux = u.data[0] * scale;
+		float uy = u.data[1] * scale;
+		float uz = u.data[2] * scale;
+
+		res.data[0] = uy * m.data[6] - uz * m.data[3];
+		res.data[1] = uy * m.data[7] - uz * m.data[4];
+		res.data[2] = uy * m.data[8] - uz * m.data[5];
+
+		res.data[3] = uz * m.data[0] - ux * m.data[6];
+		res.data[4] = uz * m.data[1] - ux * m.data[7];
+		res.data[5] = uz * m.data[2] - ux * m.data[8];
+
+		res.data[6] = ux * m.data[3] - uy * m.data[0];
+		res.data[7] = ux * m.data[4] - uy * m.data[1];
+		res.data[8] = ux * m.data[5] - uy * m.data[2];
+	}
+
 	static void Multiply5x5(const Matrix<5, 5>& a, const Matrix<5, 5>& b, Matrix<5, 5>& result) {
 		for(int r = 0; r < 5; r++) {
 			for(int c = 0; c < 5; c++) {

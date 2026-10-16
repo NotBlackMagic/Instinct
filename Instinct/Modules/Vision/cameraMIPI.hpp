@@ -1,10 +1,10 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/Vision/cameraMIPI.hpp
  * Author:	NotBlackMagic
- * Brief:	Aaa 
+ * Brief:	Helper class to acquire frames over MIPI-CSI and DCMIPP. Wraps camera sensor driver, CSI and DCMIPP under one master class.
  */
 
 #pragma once

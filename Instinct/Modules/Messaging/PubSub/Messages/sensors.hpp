@@ -1,10 +1,10 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Messaging/PubSub/Messages/sensors.hpp
- * Author:  NotBlackMagic
- * Brief:   Topic messages definitions for sensor messages.
+ * File:	Instinct/Modules/Messaging/PubSub/Messages/sensors.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Topic messages definitions for sensor messages.
  */
 
 #pragma once
@@ -54,6 +54,17 @@ struct NavSatMsg {
 	double lon;				// In degrees, positive is east of prime meridian; negative is west.
 	float alt;				// In meters, positive is above the WGS 84 ellipsoid
 	float hdop;				// Horizontal dilution
+};
+
+struct RangeMsg {
+	Timestamp timestamp;	// Microseconds
+	float distance;			// Meters
+};
+
+struct FlowMsg {
+	Timestamp timestamp;	// Microseconds
+	float flowRate[2];		// Optical angular rate [wx, wy] (rad/s)
+	float quality;			// Normalized confidence [0.0f to 1.0f]
 };
 
 #pragma pack(pop) // Restore default compiler alignment

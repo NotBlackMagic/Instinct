@@ -8,7 +8,7 @@
 #include "actuatorThread.hpp"
 
 TX_THREAD ActuatorThread::threadPtr;
-uint8_t ActuatorThread::threadStack[4096];
+__attribute__((aligned(32))) uint8_t ActuatorThread::threadStack[ActuatorThread::threadStackSize];
 
 Subscriber<ActuatorMsg> ActuatorThread::subActuators;
 Topic<ActuatorMsg>* ActuatorThread::topicActuators = nullptr;
@@ -45,10 +45,10 @@ void ActuatorThread::Init() {
 		pinConfigs[i].idle = 1500;
 	}
 
-	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("ACT_Loop"),
+	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Actuator"),
 													ActuatorThread::Run, 0,
 													threadStack, sizeof(threadStack),
-													1, 0,
+													1, 1,
 													TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX ACT Loop Thread Create Failed.");
@@ -71,9 +71,15 @@ void ActuatorThread::Run(ULONG input) {
 	// Initialize default safe status
 	ForceSafeOutputs();
 
+	bool inFailsafe = false;
 	while(1) {
 		// Deadman switch failsafe: if no message in 50ms assume controller thread crashed -> go to failsafe
 		if(topicActuators->Take(&subActuators, actuatorMsg, 50) == true) {
+			if(inFailsafe == true) {
+				LOG_INFO("ActuatorThread: Controller signal restored.");
+				inFailsafe = false;
+			}
+
 			if(actuatorMsg.isArmed == true) {
 				// Map and apply active outputs
 				for(uint8_t i = 0; i < 16; i++) {
@@ -90,8 +96,13 @@ void ActuatorThread::Run(ULONG input) {
 		}
 		else {
 			// Timeout crash, the controller stopped sending messages.
-			LOG_ERR("ActuatorThread: Controller IPC Timeout! Force HW failsafe.");
+			if(inFailsafe == false) {
+				LOG_ERR("ActuatorThread: Controller IPC Timeout! Force HW failsafe.");
+				inFailsafe = true;
+			}
 			ForceSafeOutputs();
+			// Safeguard: If the middleware queue fails, force a yield.
+			tx_thread_sleep(1);
 		}
 	}
 }

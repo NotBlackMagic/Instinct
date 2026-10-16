@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/System/shellCommands.cpp
  */
@@ -128,8 +128,8 @@ static bool CommandMemory(const char* args) {
 	// Print
 	Logger::Instance().Write("\r\n--- MEMORY USAGE ---\r\n");
 	// Internal Memory
-	Logger::Instance().Printf("ROM    : %8lu / %8lu B (%d%%)\r\n", romUsed, BoardInfo::SizeROM, romPct);
-	Logger::Instance().Printf("RAM    : %8lu / %8lu B (%d%%)\r\n", ramUsed, BoardInfo::SizeRAM, ramPct);
+	Logger::Instance().Printf("ROM    : %8lu / %8lu B (%d%%)\r\n", romUsed, romTotal, romPct);
+	Logger::Instance().Printf("RAM    : %8lu / %8lu B (%d%%)\r\n", ramUsed, ramTotal, ramPct);
 	// External Memory
 	Logger::Instance().Printf("H-FLASH: %8lu / %8lu B (%d%%)\r\n", 0UL, BoardInfo::SizeExtFlash, 0);
 	Logger::Instance().Printf("PSRAM  : %8lu / %8lu B (%d%%)\r\n", psramUsed, psramTotal, psramPct);
@@ -143,21 +143,36 @@ static bool CommandMemory(const char* args) {
 // Helper to decode numeric states into human-readable strings
 static const char* GetThreadState(UINT state) {
 	switch (state) {
-		case TX_READY:             return "READY";
-		case TX_COMPLETED:         return "DONE";
-		case TX_TERMINATED:        return "DEAD";
-		case TX_SUSPENDED:         return "SUSP";
-		case TX_SLEEP:             return "SLEEP";
-		case TX_QUEUE_SUSP:        return "QUEUE";
-		case TX_SEMAPHORE_SUSP:    return "SEM";
-		case TX_EVENT_FLAG:        return "FLAG";
-		case TX_BLOCK_MEMORY:      return "MEM";
-		case TX_BYTE_MEMORY:       return "BYTE";
-		case TX_IO_DRIVER:         return "IO";
-		case TX_FILE:              return "FILE";
-		case TX_TCP_IP:            return "NET";
-		case TX_MUTEX_SUSP:        return "MUTEX";
-		default:                   return "????";
+		case TX_READY:
+			return "READY";
+		case TX_COMPLETED:
+			return "DONE";
+		case TX_TERMINATED:
+			return "DEAD";
+		case TX_SUSPENDED:
+			return "SUSP";
+		case TX_SLEEP:
+			return "SLEEP";
+		case TX_QUEUE_SUSP:
+			return "QUEUE";
+		case TX_SEMAPHORE_SUSP:
+			return "SEM";
+		case TX_EVENT_FLAG:
+			return "FLAG";
+		case TX_BLOCK_MEMORY:
+			return "MEM";
+		case TX_BYTE_MEMORY:
+			return "BYTE";
+		case TX_IO_DRIVER:
+			return "IO";
+		case TX_FILE:
+			return "FILE";
+		case TX_TCP_IP:
+			return "NET";
+		case TX_MUTEX_SUSP:
+			return "MUTEX";
+		default:
+			return "????";
 	}
 }
 
@@ -184,7 +199,7 @@ static bool CommandRTOS(const char* args) {
 
 	tx_interrupt_control(state);
 
-	if (thread == nullptr) {
+	if(thread == nullptr) {
 		Logger::Instance().Write("No threads found!\r\n");
 		return true;
 	}
@@ -196,7 +211,7 @@ static bool CommandRTOS(const char* args) {
 	do {
 		totalSystemTime += tempThread->tx_thread_execution_time_total;
 		tempThread = tempThread->tx_thread_created_next;
-	} while (tempThread != thread);
+	} while(tempThread != thread);
 #endif
 
 	//Iterate through thread list
@@ -206,31 +221,31 @@ static bool CommandRTOS(const char* args) {
 	do {		
 		uint32_t stackSize = thread->tx_thread_stack_size;
 		uint8_t* deepPtr = (uint8_t*)thread->tx_thread_stack_highest_ptr;	//'highest_ptr' is the lowest address the stack pointer has ever reached (High Watermark).
-		uint8_t* startPtr = (uint8_t*)thread->tx_thread_stack_start;		//'start' is the lowest address (limit). 
 		uint8_t* endPtr = (uint8_t*)thread->tx_thread_stack_end;			//'end' is the XXX address (limit).
 		
 		// Bytes used is the distance from the absolute top down to the deepest point reached
 		uint32_t used = (uint32_t)(endPtr - deepPtr);
 		
 		uint32_t usagePercent = 0;
-		if (stackSize > 0) {
+		if(stackSize > 0) {
 			usagePercent = (used * 100) / stackSize;
 		}
 
 		// Calculate CPU Percentage for this specific thread
 		uint32_t cpuPercent = 0;
 #ifdef TX_EXECUTION_PROFILE_ENABLE
-		if (totalSystemTime > 0) {
+		if(totalSystemTime > 0) {
 			// Multiply by 1000 for 1 decimal place (e.g., 154 = 15.4%)
 			cpuPercent = (uint32_t)((thread->tx_thread_execution_time_total * 1000) / totalSystemTime); 
 		}
 #endif
 
 		// Format the line
-		snprintf(buffer, sizeof(buffer), "%-12.12s %-7s %2d     %5lu / %5lu (%2lu%%)   %-9lu   %2lu.%01lu%%\r\n",
+		snprintf(buffer, sizeof(buffer), "%-12.12s %-7s %2d/%2d     %5lu / %5lu (%2lu%%)   %-9lu   %2lu.%01lu%%\r\n",
 			thread->tx_thread_name ? thread->tx_thread_name : "???",
 			GetThreadState(thread->tx_thread_state),
 			thread->tx_thread_priority,
+			thread->tx_thread_preempt_threshold,
 			(unsigned long)used,
 			(unsigned long)stackSize,
 			(unsigned long)usagePercent,
@@ -244,7 +259,7 @@ static bool CommandRTOS(const char* args) {
 		//Move to next thread
 		thread = thread->tx_thread_created_next;
 
-	} while (thread != startThread);
+	} while(thread != startThread);
 
 #ifdef TX_EXECUTION_PROFILE_ENABLE
 	// Print System level stats (Idle and ISR) at the bottom
@@ -272,7 +287,7 @@ static bool CommandReboot(const char* args) {
 
 static bool CommandLog(const char* args) {
 	int level = atoi(args);
-	if (level >= 0 && level <= 6) {
+	if(level >= 0 && level <= 6) {
 		Logger::Instance().SetConsoleLevel((Logger::LogLevel)level);
 		Logger::Instance().Printf("Log Level set to %d\r\n", level);
 	}

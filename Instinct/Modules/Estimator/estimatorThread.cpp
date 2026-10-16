@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/Estimation/estimatorThread.cpp
  */
@@ -8,7 +8,7 @@
 #include "estimatorThread.hpp"
 
 TX_THREAD EstimatorThread::threadPtr;
-uint8_t EstimatorThread::threadStack[16384];
+__attribute__((aligned(32))) uint8_t EstimatorThread::threadStack[EstimatorThread::threadStackSize];
 
 // Instantiate the Math Engine
 InEKF EstimatorThread::filter;
@@ -20,16 +20,20 @@ Topic<StateMsg> EstimatorThread::topicState("state", static_cast<uint8_t>(TopicI
 Subscriber<IMUMsg> EstimatorThread::subVirtualIMU;
 Subscriber<MagMsg> EstimatorThread::subVirtualMag;
 Subscriber<BaroMsg> EstimatorThread::subVirtualBaro;
+Subscriber<RangeMsg> EstimatorThread::subRange;
+Subscriber<FlowMsg> EstimatorThread::subFlow;
 
 Topic<IMUMsg>* EstimatorThread::topicVirtualIMU = nullptr;
 Topic<MagMsg>* EstimatorThread::topicVirtualMag = nullptr;
 Topic<BaroMsg>* EstimatorThread::topicVirtualBaro = nullptr;
+Topic<RangeMsg>* EstimatorThread::topicRange = nullptr;
+Topic<FlowMsg>* EstimatorThread::topicFlow = nullptr;
 
 void EstimatorThread::Init() {
-	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("EST_InEKF"),
+	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Estimator"),
 													EstimatorThread::Run, 0,
 													threadStack, sizeof(threadStack),
-													1, 0,
+													1, 1,
 													TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX EST InEKF Thread Create Failed.");
@@ -73,10 +77,29 @@ void EstimatorThread::Run(ULONG input) {
 		LOG_WARN("Estimator: No Virtual Baro Topic found!");
 	}
 
-	IMUMsg imuMsg;
-	MagMsg magMsg;
-	BaroMsg baroMsg;
+	topicRange = Broker::GetTopic<RangeMsg>(static_cast<uint8_t>(TopicID::Range), 0);
+	if(topicRange != nullptr) {
+		topicRange->Subscribe(&subRange);
+	}
+	else {
+		LOG_WARN("Estimator: No Range Topic found!");
+	}
+
+	topicFlow = Broker::GetTopic<FlowMsg>(static_cast<uint8_t>(TopicID::Flow), 0);
+	if(topicFlow != nullptr) {
+		topicFlow->Subscribe(&subFlow);
+	}
+	else {
+		LOG_WARN("Estimator: No Flow Topic found!");
+	}
+
+	IMUMsg imuMsg{};
+	MagMsg magMsg{};
+	BaroMsg baroMsg{};
+	RangeMsg rangeMsg{};
+	FlowMsg flowMsg{};
 	bool magInitialized = false;
+	float latestRangeM = 0.0f;
 
 	StateMsg currentState{};
 	currentState.status = EstimatorState::Uninitialized;
@@ -139,11 +162,29 @@ void EstimatorThread::Run(ULONG input) {
 				}
 			}
 
+			// // Downward ToF Range Right-Invariant Update
+			// if(topicRange != nullptr && topicRange->Take(&subRange, rangeMsg, TX_NO_WAIT) == true) {
+			// 	if(rangeMsg.timestamp != 0) {
+			// 		latestRangeM = rangeMsg.distance;
+			// 		filter.UpdateRange(rangeMsg.distance);
+			// 	}
+			// }
+
+			// // Optical Flow Right-Invariant Update
+			// if(topicFlow != nullptr && topicFlow->Take(&subFlow, flowMsg, TX_NO_WAIT) == true) {
+			// 	if(flowMsg.timestamp != 0) {
+			// 		filter.UpdateOpticalFlow(flowMsg.flowRate, imuMsg.gyro, latestRangeM, flowMsg.quality);
+			// 	}
+			// }
+
 			timeUpd = Time::GetUs() - timestamp;
 			timestamp = Time::GetUs();
 			if(deltaTime < Time::GetMs()) {
-				// Current state is: "EST Thread: TOTAL 97/10091 us, PRED 57 us, UPT G 35 us" (A HUGE upgrade from starting point of "PRED 280 us, UPT G 341 us"!)
-				// LOG_INFO("EST Thread: TOTAL %d/%d us, PRED %d us, UPT G %d us", timeCycle, timePeriod, timePred, timeUpd);
+				// Original, first version: "PRED 280 us, UPT G 341 us"
+				// Current state is:
+				// From XIP: "EST Thread: TOTAL 142/1243 us, PRED 70 us, UPT G 48 us"
+				// From XIP (new, unverified): "EST Thread: TOTAL 93/1274 us, PRED 64 us, UPT G 49 us"
+				LOG_INFO("EST Thread: TOTAL %d/%d us, PRED %d us, UPT G %d us", timeCycle, timePeriod, timePred, timeUpd);
 				deltaTime = Time::GetMs() + 5000;
 			}
 
@@ -175,6 +216,6 @@ void EstimatorThread::Run(ULONG input) {
 		else {
 			// Safeguard: If the middleware queue fails, force a yield.
 			tx_thread_sleep(1);
-        }
+		}
 	}
 }

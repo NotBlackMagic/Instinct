@@ -23,7 +23,8 @@ class CommanderThread {
 
 	private:
 		static TX_THREAD threadPtr;
-		static uint8_t threadStack[8192];
+		static const uint16_t threadStackSize = 8192;
+		__attribute__((aligned(32))) static uint8_t threadStack[threadStackSize];
 
 		struct VehicleConfig {
 			uint8_t thrustAxis;	// 0 = X-Axis (Rover/Plane), 2 = Z-Axis (Drone)

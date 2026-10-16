@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/System/shellI2C.cpp
  */
@@ -8,14 +8,14 @@
 #include "shellModules.hpp"
 
 static void PrintHelp() {
-	Logger::Instance().Write("--- I2C Diagnostic Commands ---\r\n");
+	Logger::Instance().Write("--- I2C Commands ---\r\n");
 	Logger::Instance().Write("  i2c scan [bus]                      - Scan specific bus or all available buses\r\n");
 	Logger::Instance().Write("  i2c read <bus> <addr> <reg> [len]   - Read registers (addr/reg in hex, len max 64)\r\n");
 	Logger::Instance().Write("  i2c write <bus> <addr> <reg> <b0>.. - Write 1-8 data bytes to register (hex)\r\n");
 	Logger::Instance().Write("  i2c dump <bus> <addr> [start] [len] - Hexdump memory map of device (defaults 0x00 32)\r\n");
 	Logger::Instance().Write("  i2c stats <bus>                     - Bus transfer and error counters\r\n");
 	Logger::Instance().Write("  i2c reset <bus>                     - Reset I2C telemetry counters\r\n");
-	Logger::Instance().Write("-------------------------------\r\n");
+	Logger::Instance().Write("--------------------\r\n");
 }
 
 static I2C* GetI2CBus(uint8_t busID) {

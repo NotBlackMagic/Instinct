@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:    Instinct/Modules/System/shellGPIO.cpp
  */
@@ -8,7 +8,11 @@
 #include "shellModules.hpp"
 
 static void PrintHelp() {
-	Logger::Instance().Write("Usage: gpio <read|write|toggle> <port> <pin> [val]\r\n");
+	Logger::Instance().Write("--- GPIO Commands ---\r\n");
+	Logger::Instance().Write("  read <port> <pin> [val]   - Read GPIO output/insput state\r\n");
+	Logger::Instance().Write("  write <port> <pin> [val]  - Write GPIO output state\r\n");
+	Logger::Instance().Write("  toggle <port> <pin>       - Toggle GPIO output state\r\n");
+	Logger::Instance().Write("------------------------\r\n");
 }
 
 static bool CommandGPIO(const char* args) {

@@ -22,7 +22,8 @@ class SensorHubThread {
 
 	private:
 		static TX_THREAD threadPtr;
-		static uint8_t threadStack[8192];
+		static const uint16_t threadStackSize = 4096;
+		__attribute__((aligned(32))) static uint8_t threadStack[4096];
 
 		// Hardware Redundancy Configuration
 		static constexpr uint8_t maxIMUs = 3;	// 1 Onboard, 2 Offboard

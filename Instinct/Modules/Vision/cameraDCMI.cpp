@@ -1,36 +1,37 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Vision/cameraDCMI.cpp
+ * File:	Instinct/Modules/Vision/cameraDCMI.cpp
  */
 
 #include "cameraDCMI.hpp"
 
 Status CameraDCMI::Init(const Config &config) {
 	Status status;
+	this->config = config;
 
 	// Powerup sequence
 	camPwdn.Write(1);
 	tx_thread_sleep(10);
 
-	// Configure the Sensor (OV7670)
-	OV7670::Config ov7670Cnfg;
-	ov7670Cnfg.width = config.width;
-	ov7670Cnfg.height = config.height;
-	ov7670Cnfg.format = config.format;
-	ov7670Cnfg.fps = config.fps;
-	ov7670Cnfg.resetPin = nullptr;
-	ov7670Cnfg.powerDownPin = nullptr;
+	// Configure the Sensor (OV7670 or OV9281)
+	OV9281::Config sensorCnfg{};
+	sensorCnfg.width = config.width;
+	sensorCnfg.height = config.height;
+	sensorCnfg.format = config.format;
+	sensorCnfg.fps = config.fps;
+	sensorCnfg.triggerMode = OV9281::TriggerMode::Continuous;
+	sensorCnfg.shutdownPin = nullptr;
 
-	// Initialize Sensor (OV7670)
-	status = this->sensor.Init(ov7670Cnfg);
-	if (status != Status::Ok) {
+	// Initialize Sensor (OV7670 or OV9281)
+	status = this->sensor.Init(sensorCnfg);
+	if(status != Status::Ok) {
 		return status;
 	}
 
 	// Configure the Interface (DCMI)
-	Dcmi::Config dcmiCfg;
+	Dcmi::Config dcmiCfg{};
 	dcmiCfg.vSyncPolarity = Dcmi::SyncPolarity::High;
 	dcmiCfg.hSyncPolarity = Dcmi::SyncPolarity::Low;
 	dcmiCfg.pxClkPolarity = Dcmi::ClockPolarity::Rising;
@@ -38,12 +39,12 @@ Status CameraDCMI::Init(const Config &config) {
 
 	// Initialize the Interface Hardware
 	status = this->dcmiInterface.Init(dcmiCfg);
-	if (status != Status::Ok) {
+	if(status != Status::Ok) {
 		return status;
 	}
 
 	// Initialize the DMA Channel
-	DMAChannel::Config dmaConfig;
+	DMAChannel::Config dmaConfig{};
 	dmaConfig.direction = DMAChannel::Direction::PeripheralToMemory;
 	dmaConfig.dstWidth = DMAChannel::DataWidth::Word;
 	dmaConfig.srcWidth = DMAChannel::DataWidth::Word;
@@ -51,6 +52,8 @@ Status CameraDCMI::Init(const Config &config) {
 	dmaConfig.incSrc = false;
 	dmaConfig.priority = DMAChannel::Priority::High;
 	dmaConfig.requestLine = LL_HPDMA1_REQUEST_DCMI_PSSI;
+	dmaConfig.CompleteCallback = CameraDCMI::OnDMAComplete;
+	dmaConfig.callbackContext = this;
 
 	return this->dmaChannel.Init(dmaConfig);
 }
@@ -67,7 +70,7 @@ Status CameraDCMI::CaptureAsync(VisionFrame &buffer) {
 	// Handle cache coherency
 	System::CleanCache((uint32_t*)buffer.startAddress, buffer.payloadSize);
 
-	Status status = this->dmaChannel.Transfer((uint32_t)&DCMI->DR, (uint32_t)buffer.startAddress, buffer.payloadSize);
+	Status status = this->dmaChannel.TransferAsync((uint32_t)&DCMI->DR, (uint32_t)buffer.startAddress, buffer.payloadSize);
 	if(status != Status::Ok) {
 		return status;
 	}
@@ -82,7 +85,7 @@ Status CameraDCMI::CaptureWait(uint32_t timeoutTicks) {
 	}
 
 	Status status = this->dmaChannel.TransferWait(timeoutTicks);
-	if (status == Status::Ok) {
+	if(status == Status::Ok) {
 		// Handle cache coherency
 		System::InvalidateCache((uint32_t*)this->frame->startAddress, this->frame->payloadSize);
 	}
@@ -108,4 +111,40 @@ Status CameraDCMI::CaptureAbort() {
 	this->frame = nullptr;
 	
 	return Status::Ok;
+}
+
+void CameraDCMI::OnDMAComplete(void* ctx, Status status) {
+	if(ctx == nullptr) {
+		return;
+	}
+
+	CameraDCMI* self = static_cast<CameraDCMI*>(ctx);
+	if(self->frame == nullptr) {
+		return;
+	}
+
+	VisionFrame* completedFrame = self->frame;
+	self->frame = nullptr;
+
+	// Stop DCMI CAPTURE & ENABLE are 0 before the trailing VSYNC arrives
+	self->dcmiInterface.Stop();
+
+	if(status == Status::Ok) {
+		// Handle cache coherency
+		System::InvalidateCache((uint32_t*)completedFrame->startAddress, completedFrame->payloadSize);
+
+		// Frame timestamp
+		completedFrame->timestampUs = Time::GetUs();
+
+		if(self->config.EventCallback != nullptr) {
+			self->config.EventCallback(self->config.callbackContext, Event::FrameComplete);
+		}
+	}
+	else {
+		self->dcmiInterface.Stop();
+
+		if(self->config.EventCallback != nullptr) {
+			self->config.EventCallback(self->config.callbackContext, Event::Error);
+		}
+	}
 }

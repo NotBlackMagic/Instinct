@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/System/storageThread.hpp
  * Author:	NotBlackMagic
@@ -30,11 +30,12 @@ class StorageThread {
 
 	private:
 		static TX_THREAD threadPtr;
-		static uint8_t threadStack[4096];
+		static const uint16_t threadStackSize = 4096;
+		__attribute__((aligned(32))) static uint8_t threadStack[threadStackSize];
 
 		// FileX Memory
 		static FX_MEDIA sdMedia;
-		__attribute__((aligned(32))) static uint8_t sdMediaPool[4096]; // Minimum 512 bytes for sector buffer
+		__attribute__((aligned(32))) static uint8_t sdMediaPool[threadStackSize]; // Minimum 512 bytes for sector buffer
 
 		// Thread-safe state flag
 		static std::atomic<bool> storageReady;

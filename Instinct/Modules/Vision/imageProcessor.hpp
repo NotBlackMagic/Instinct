@@ -1,10 +1,10 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Vision/imageProcessor.hpp
- * Author:  NotBlackMagic
- * Brief:   Stateless utility class for formatting and processing images/frames.
+ * File:	Instinct/Modules/Vision/imageProcessor.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Stateless utility class for formatting and processing images/frames.
  */
 
 #pragma once
@@ -30,7 +30,7 @@ class ImageProcessor {
 		static Status ConvertFormat(const VisionFrame& input, VisionFrame& output);
 
 	private:
-        // Format-specific highly optimized conversion loops
+		// Format-specific highly optimized conversion loops
 		static Status ConvertYVYUToYUYV(const VisionFrame& input, VisionFrame& output);
 
 		// Interleaved 4:2:2 (Outputs 16x8 MCUs)

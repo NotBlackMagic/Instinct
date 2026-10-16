@@ -9,7 +9,7 @@
 #include <math.h>
 
 TX_THREAD CommanderThread::threadPtr;
-uint8_t CommanderThread::threadStack[8192];
+__attribute__((aligned(32))) uint8_t CommanderThread::threadStack[CommanderThread::threadStackSize];
 
 // Output Publishers
 Topic<VehicleStatusMsg> CommanderThread::topicStatus("vehicle_status", static_cast<uint8_t>(TopicID::VehicleStatus), 0);
@@ -34,7 +34,7 @@ uint64_t CommanderThread::lastRunTimestamp = 0;
 CommanderThread::VehicleConfig CommanderThread::config = { 2, 1.0f, 1.0f, 1.0f }; // Z-Thrust, Full Roll/Pitch/Yaw
 
 void CommanderThread::Init() {
-	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("CMD_Logic"),
+	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Commander"),
 													CommanderThread::Run, 0,
 													threadStack, sizeof(threadStack),
 													3, 0, 

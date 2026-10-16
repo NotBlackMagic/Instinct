@@ -1,10 +1,10 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:	Instinct/Modules/Vision/VENCEncoder.hpp
+ * File:	Instinct/Modules/Vision/vencEncoder.hpp
  * Author:	NotBlackMagic
- * Brief:	H.264 video stream encoder.
+ * Brief:	Driver for the VENC/H.264 video stream encoder.
  */
 
 #pragma once

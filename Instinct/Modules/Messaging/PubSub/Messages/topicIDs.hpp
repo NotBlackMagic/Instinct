@@ -1,10 +1,10 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Messaging/PubSub/Messages/topicIDs.hpp
- * Author:  NotBlackMagic
- * Brief:   List of all topic IDs available.
+ * File:	Instinct/Modules/Messaging/PubSub/Messages/topicIDs.hpp
+ * Author:	NotBlackMagic
+ * Brief:	List of all topic IDs available.
  */
 
 #pragma once
@@ -26,6 +26,7 @@ enum class TopicID : uint8_t {
 	// Environment/Ranging Sensors
 	Range = 20,
 	Tacho = 21,
+	Flow = 22,
 
 	// Power Sensors
 	Power = 30,

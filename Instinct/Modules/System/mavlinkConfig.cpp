@@ -12,6 +12,8 @@ void MavlinkConfig::ApplyStandardProfile() {
 	MavlinkThread::SetRate(MavlinkThread::Stream::Heartbeat, 1.0f);
 	MavlinkThread::SetRate(MavlinkThread::Stream::Attitude, 20.0f);
 	MavlinkThread::SetRate(MavlinkThread::Stream::HighresIMU, 10.0f);
+	MavlinkThread::SetRate(MavlinkThread::Stream::DistanceSensor, 10.0f);
+	MavlinkThread::SetRate(MavlinkThread::Stream::OpticalFlow, 10.0f);
 
 	LOG_INFO("Mavlink: Standard Telemetry Profile Applied");
 }
@@ -21,6 +23,8 @@ void MavlinkConfig::ApplyHighSpeedProfile() {
 	MavlinkThread::SetRate(MavlinkThread::Stream::Heartbeat, 1.0f);
 	MavlinkThread::SetRate(MavlinkThread::Stream::Attitude, 50.0f);
 	MavlinkThread::SetRate(MavlinkThread::Stream::HighresIMU, 50.0f);
+	MavlinkThread::SetRate(MavlinkThread::Stream::DistanceSensor, 25.0f);
+	MavlinkThread::SetRate(MavlinkThread::Stream::OpticalFlow, 50.0f);
 
 	LOG_INFO("Mavlink: High-Speed Telemetry Profile Applied");
 }
@@ -30,6 +34,8 @@ void MavlinkConfig::ApplyQuietProfile() {
 	MavlinkThread::SetRate(MavlinkThread::Stream::Heartbeat, 1.0f);
 	MavlinkThread::SetRate(MavlinkThread::Stream::Attitude, 0.0f);
 	MavlinkThread::SetRate(MavlinkThread::Stream::HighresIMU, 0.0f);
+	MavlinkThread::SetRate(MavlinkThread::Stream::DistanceSensor, 0.0f);
+	MavlinkThread::SetRate(MavlinkThread::Stream::OpticalFlow, 0.0f);
 
 	LOG_INFO("Mavlink: Quiet Telemetry Profile Applied");
 }

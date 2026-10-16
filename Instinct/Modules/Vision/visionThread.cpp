@@ -1,7 +1,14 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
+ *
+ * File:	Instinct/Modules/Vision/visionThread.cpp
+ */
+
 #include "visionThread.hpp"
 
 TX_THREAD VisionThread::threadPtr;
-uint8_t VisionThread::threadStack[8196];
+__attribute__((aligned(32))) uint8_t VisionThread::threadStack[VisionThread::threadStackSize];
 
 TX_MUTEX VisionThread::mutex;
 VisionThread::Statistics VisionThread::stats = {};
@@ -92,7 +99,7 @@ void VisionThread::Init() {
 	status = tx_thread_create(&threadPtr,	const_cast<char*>("Vision"),
 													VisionThread::Run, 0,
 													threadStack, sizeof(threadStack),
-													5, 0,
+													5, 5,
 													TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Vision Thread Create Failed.");
@@ -101,6 +108,7 @@ void VisionThread::Init() {
 
 void VisionThread::Run(ULONG input) {
 	(void)input;
+	Status status;
 	
 	LOG_INFO("Vision Thread Initialized.");
 
@@ -123,26 +131,6 @@ void VisionThread::Run(ULONG input) {
 	// USB UVC stuff
 	usbUVC.RegisterStreamEventCallback(VisionThread::OnUVCStreamState);
 
-	// SD-CAM Initialization
-	CameraDCMI::Config configSD;
-	configSD.width = camWidth;
-	configSD.height = camHeight;
-	configSD.fps = camFPS;
-	configSD.format = camFormat;
-	Status status = cameraSD.Init(configSD);
-	if(status != Status::Ok) {
-		LOG_ERR("SD-CAM Init Failed.");
-		while(1) {
-			tx_thread_sleep(1000);
-		}
-	}
-	LOG_INFO("SD-CAM Initialized.");
-	tx_thread_sleep(1000);
-
-	// cameraSD.GetSensor().SetManualExposure(0);
-	cameraSD.GetSensor().SetMaxGain(OV7670::GainCeiling::x4);
-	// cameraSD.GetSensor().SetTestPattern(true);
-
 	// HD-CAM Initialization
 	CameraMIPI::Config configHD;
 	configHD.width = camWidth;
@@ -158,9 +146,9 @@ void VisionThread::Run(ULONG input) {
 	}
 	LOG_INFO("HD-CAM Initialized.");
 	tx_thread_sleep(1000);
-
 	// cameraHD.GetSensor().SetTestPattern(true);
 
+	// Dedicated (legacy) JPEG Encoder Initialization
 	status = jpegEncoder.Init();
 	if(status != Status::Ok) {
 		LOG_ERR("JPEG Encoder Init Failed.");
@@ -368,11 +356,9 @@ void VisionThread::Run(ULONG input) {
 		timeIOSum = timeIOSum + timeIO;
 		timestamp = Time::GetUs();
 		
-		// status = cameraSD.CaptureAsync(rawFrameBuffer);
 		// status = cameraHD.CaptureAsync(rawFrameBuffer);
 		status = Status::Ok;
 		if(status == Status::Ok) {
-			// status = cameraSD.CaptureWait(1000);	// Capture takes about 43ms
 			status = cameraHD.CaptureWait(1000);
 			// status = PatternGenerator::Checkerboard(rawFrameBuffer);
 			if(status == Status::Ok) {

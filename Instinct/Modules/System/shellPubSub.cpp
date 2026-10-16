@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:    Instinct/Modules/System/shellPubSub.cpp
  */
@@ -10,6 +10,8 @@
  #include "broker.hpp"
 
 static void PrintHelp() {
+	Logger::Instance().Write("--- PubSub Commands ---\r\n");
+	Logger::Instance().Write("-----------------------\r\n");
 }
 
  static bool CommandPubSub(const char* args) {

@@ -1,8 +1,8 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Estimation/inEKF.cpp
+ * File:	Instinct/Modules/Estimation/inEKF.cpp
  */
 
  #include "inEKF.hpp"
@@ -27,12 +27,7 @@
 	// Initialize Covariance Matrix with a conservative confidence baseline
 	for(int r = 0; r < 5; r++) {
 		for(int c = 0; c < 5; c++) {
-			if(r == c) {
-				P[r][c].SetIdentity();
-			}
-			else {
-				memset(P[r][c].data, 0, sizeof(Matrix3f));
-			}
+			memset(P[r][c].data, 0, sizeof(P[r][c].data));
 		}
 	}
 
@@ -64,51 +59,84 @@ Status InEKF::InitializeMagReference(const float magInit[3]) {
 	magBody.data[2] = magInit[2];
 
 	// Project raw boot magnetometer reading into the Global frame
-	magRefNed = R * magBody;
+	Matrix3f::Multiply3x3Vector3(R, magBody, magRefNed);
 	magRefNed.data[1] = 0.0f;	// Force East (Y) to 0, locking heading as North
 	return Status::Ok;
 }
 
 void InEKF::NormalizeRotation() {
-	Vector3fMat xCol(InitType::Uninitialized);
-	Vector3fMat yCol(InitType::Uninitialized);
-	Vector3fMat zCol(InitType::Uninitialized);
+	float x0 = R.data[0], x1 = R.data[3], x2 = R.data[6];
+	float y0 = R.data[1], y1 = R.data[4], y2 = R.data[7];
 
-	// Extract columns
-	xCol.data[0] = R.data[0];
-	xCol.data[1] = R.data[3];
-	xCol.data[2] = R.data[6];
-	yCol.data[0] = R.data[1];
-	yCol.data[1] = R.data[4];
-	yCol.data[2] = R.data[7];
+	float xMag;
+	arm_sqrt_f32(x0 * x0 + x1 * x1 + x2 * x2, &xMag);
+	float invX = 1.0f / xMag;
+	x0 *= invX; x1 *= invX; x2 *= invX;
 
-	// Normalize X
-	float xMag = sqrtf(xCol.data[0]*xCol.data[0] + xCol.data[1]*xCol.data[1] + xCol.data[2]*xCol.data[2]);
-	for(int i=0; i<3; i++) {
-		xCol.data[i] = xCol.data[i] / xMag;
+	float dotXY = x0 * y0 + x1 * y1 + x2 * y2;
+	y0 -= dotXY * x0;
+	y1 -= dotXY * x1;
+	y2 -= dotXY * x2;
+
+	float yMag;
+	arm_sqrt_f32(y0 * y0 + y1 * y1 + y2 * y2, &yMag);
+	float invY = 1.0f / yMag;
+	y0 *= invY; y1 *= invY; y2 *= invY;
+
+	// Z = X cross Y
+	float z0 = x1 * y2 - x2 * y1;
+	float z1 = x2 * y0 - x0 * y2;
+	float z2 = x0 * y1 - x1 * y0;
+
+	R.data[0] = x0; R.data[1] = y0; R.data[2] = z0;
+	R.data[3] = x1; R.data[4] = y1; R.data[5] = z1;
+	R.data[6] = x2; R.data[7] = y2; R.data[8] = z2;
+}
+
+void InEKF::ApplyErrorState(const float delta[15]) {
+	Vector3fMat w(InitType::Uninitialized);
+	Vector3fMat u(InitType::Uninitialized);
+	Vector3fMat dPos(InitType::Uninitialized);
+
+	for(int i = 0; i < 3; i++) {
+		w.data[i] = delta[i];
+		u.data[i] = delta[i + 3];
+		dPos.data[i] = delta[i + 6];
 	}
 
-	// Force Y orthogonal to X: y = y - (x dot y) * x
-	float dotXY = (xCol.data[0]*yCol.data[0] + xCol.data[1]*yCol.data[1] + xCol.data[2]*yCol.data[2]);
-	for(int i=0; i<3; i++) {
-		yCol.data[i] = yCol.data[i] - (dotXY * xCol.data[i]);
+	// Compute R_delta = ExpSO3(w) and Left Jacobian JL directly in 3x3 without 5x5 Matrix5f overhead
+	Matrix3f rDelta(InitType::Uninitialized);
+	Matrix3f JL(InitType::Uninitialized);
+	LieGroups::CalculateKinematicsSO3(w, rDelta, JL);
+
+	Vector3fMat ju(InitType::Uninitialized);
+	Vector3fMat jv(InitType::Uninitialized);
+	Matrix3f::Multiply3x3Vector3(JL, u, ju);
+	Matrix3f::Multiply3x3Vector3(JL, dPos, jv);
+
+	Matrix3f newR(InitType::Uninitialized);
+	Matrix3f::Multiply3x3(rDelta, R, newR);
+	R = newR;
+
+	Vector3fMat rV(InitType::Uninitialized);
+	Vector3fMat rP(InitType::Uninitialized);
+	Matrix3f::Multiply3x3Vector3(rDelta, v, rV);
+	Matrix3f::Multiply3x3Vector3(rDelta, p, rP);
+
+	for(int i = 0; i < 3; i++) {
+		v.data[i] = rV.data[i] + ju.data[i];
+		p.data[i] = rP.data[i] + jv.data[i];
+		gyroBias.data[i] += delta[i + 9];
+		accelBias.data[i] += delta[i + 12];
 	}
+}
 
-	// Normalize Y
-	float yMag = sqrtf(yCol.data[0]*yCol.data[0] + yCol.data[1]*yCol.data[1] + yCol.data[2]*yCol.data[2]);
-	for(int i=0; i<3; i++) {
-		yCol.data[i] = yCol.data[i] / yMag;
+void InEKF::MirrorCovarianceLower() {
+	for(int r = 1; r < 5; r++) {
+		for(int c = 0; c < r; c++) {
+			Matrix3f::Transpose3x3(P[c][r], P[r][c]);
+		}
 	}
-
-	// Z is exactly X cross Y
-	zCol.data[0] = xCol.data[1]*yCol.data[2] - xCol.data[2]*yCol.data[1];
-	zCol.data[1] = xCol.data[2]*yCol.data[0] - xCol.data[0]*yCol.data[2];
-	zCol.data[2] = xCol.data[0]*yCol.data[1] - xCol.data[1]*yCol.data[0];
-
-	// Write back to R
-	R.data[0] = xCol.data[0]; R.data[1] = yCol.data[0]; R.data[2] = zCol.data[0];
-	R.data[3] = xCol.data[1]; R.data[4] = yCol.data[1]; R.data[5] = zCol.data[1];
-	R.data[6] = xCol.data[2]; R.data[7] = yCol.data[2]; R.data[8] = zCol.data[2];
 }
 
 Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timestampUs) {
@@ -125,20 +153,17 @@ Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timest
 		return Status::Ok;
 	}
 
-	// Remove estimated sensor biases from raw hardware measurements
-	Vector3fMat wUnbiased(InitType::Uninitialized);
-	wUnbiased.data[0] = gyro[0] - gyroBias.data[0];
-	wUnbiased.data[1] = gyro[1] - gyroBias.data[1];
-	wUnbiased.data[2] = gyro[2] - gyroBias.data[2];
+	// Remove estimated sensor biases from raw hardware measurements w. continuous-time kinematic manifold integration
+	Vector3fMat wStep(InitType::Uninitialized);
+	wStep.data[0] = (gyro[0] - gyroBias.data[0]) * dt;
+	wStep.data[1] = (gyro[1] - gyroBias.data[1]) * dt;
+	wStep.data[2] = (gyro[2] - gyroBias.data[2]) * dt;
 
 	Vector3fMat aUnbiased(InitType::Uninitialized);
 	aUnbiased.data[0] = accel[0] - accelBias.data[0];
 	aUnbiased.data[1] = accel[1] - accelBias.data[1];
 	aUnbiased.data[2] = accel[2] - accelBias.data[2];
 
-	// Continuous-Time Kinematic Manifold Integration
-	Vector3fMat wStep(InitType::Uninitialized);
-	Matrix3f::MultiplyScalarVector3(wUnbiased, dt, wStep);
 	Matrix3f expR = LieGroups::ExpSO3(wStep);
 
 	// Rotate local acceleration vector into the global frame
@@ -151,9 +176,7 @@ Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timest
 	Vector3fMat oldP = p;
 
 	// Update Kinematics
-	Matrix3f newR(InitType::Uninitialized);
-	Matrix3f::Multiply3x3(R, expR, newR);
-	R = newR;
+	Matrix3f::Multiply3x3(oldR, expR, R);
 
 	float dtSqHalf = 0.5f * dt * dt;
 	for(int i = 0; i < 3; i++) {
@@ -162,127 +185,99 @@ Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timest
 		p.data[i] = oldP.data[i] + (oldV.data[i] * dt) + (aNed * dtSqHalf);
 	}
 
-	// Construct the 15x15 Discrete Error State Transition Matrix (Phi)
-	Matrix3f gSkew = LieGroups::Skew(gravityNed);
-	Matrix3f vSkew = LieGroups::Skew(oldV);
-	Matrix3f pSkew = LieGroups::Skew(oldP);
-
-	Matrix3f gSkewDt(InitType::Uninitialized);
-	Matrix3f vR_tmp(InitType::Uninitialized);
+	// Construct non-zero blocks of Discrete Transition Matrix Phi directly:
+	// vR = -dt * Skew(oldV) * oldR, pR = -dt * Skew(oldP) * oldR, negR_dt = -dt * oldR
 	Matrix3f vR(InitType::Uninitialized);
-	Matrix3f pR_tmp(InitType::Uninitialized);
 	Matrix3f pR(InitType::Uninitialized);
 	Matrix3f negR_dt(InitType::Uninitialized);
 
-	Matrix3f::MultiplyScalar3x3(gSkew, dt, gSkewDt);
-	Matrix3f::Multiply3x3(vSkew, oldR, vR_tmp);
-	Matrix3f::MultiplyScalar3x3(vR_tmp, -dt, vR);
-	Matrix3f::Multiply3x3(pSkew, oldR, pR_tmp);
-	Matrix3f::MultiplyScalar3x3(pR_tmp, -dt, pR);
+	Matrix3f::SkewMultiplyScalar3x3(oldV, oldR, -dt, vR);
+	Matrix3f::SkewMultiplyScalar3x3(oldP, oldR, -dt, pR);
 	Matrix3f::MultiplyScalar3x3(oldR, -dt, negR_dt);
 
-	// Propagate Covariance: P = (Phi * P * Phi^T) + Q
-	// Memory is already laid out in blocks. Calculate Y = Phi * P directly.
-	Matrix3f Y[5][5];
+	float gDt = gravityNed.data[2] * dt; // 9.80665f * dt
+
+	// Y = Phi * P (Only rows 0, 1, 2 change; rows 3 and 4 of Phi are Identity!)
+	Matrix3f Y[3][5];
 	for(int c = 0; c < 5; c++) {
-		// Row 0
+		// Row 0: P[0][c] + negR_dt * P[3][c]
 		Y[0][c] = P[0][c];
 		Matrix3f::MultiplyAccumulate3x3(negR_dt, P[3][c], Y[0][c]);
 
-		// Row 1
+		// Row 1: P[1][c] + Skew(g)*dt * P[0][c] + vR * P[3][c] + negR_dt * P[4][c]
+		// Note: Skew([0, 0, g*dt]) * M only subtracts Row 1 into Row 0 and adds Row 0 into Row 1!
 		Y[1][c] = P[1][c];
-		Matrix3f::MultiplyAccumulate3x3(gSkewDt, P[0][c], Y[1][c]);
+		const float* p0 = P[0][c].data;
+		Y[1][c].data[0] -= gDt * p0[3];
+		Y[1][c].data[1] -= gDt * p0[4];
+		Y[1][c].data[2] -= gDt * p0[5];
+		Y[1][c].data[3] += gDt * p0[0];
+		Y[1][c].data[4] += gDt * p0[1];
+		Y[1][c].data[5] += gDt * p0[2];
+
 		Matrix3f::MultiplyAccumulate3x3(vR, P[3][c], Y[1][c]);
 		Matrix3f::MultiplyAccumulate3x3(negR_dt, P[4][c], Y[1][c]);
 
-		// Row 2
-		// Since MultiplyScalar doesn't have a MAC version, we just do it manually or write to Y first
-		Matrix3f::MultiplyScalar3x3(P[1][c], dt, Y[2][c]);
-		Matrix3f::Add3x3(P[2][c], Y[2][c], Y[2][c]);
+		// Row 2: P[2][c] + dt * P[1][c] + pR * P[3][c]
+		for(int i = 0; i < 9; i++) {
+			Y[2][c].data[i] = P[2][c].data[i] + (P[1][c].data[i] * dt);
+		}
 		Matrix3f::MultiplyAccumulate3x3(pR, P[3][c], Y[2][c]);
-
-		// Row 3 & 4
-		Y[3][c] = P[3][c];
-		Y[4][c] = P[4][c];
 	}
 
-	// Compute Transposed Blocks for Phi^T
-	Matrix3f negR_dt_T(InitType::Uninitialized), gSkewDt_T(InitType::Uninitialized);
-	Matrix3f vR_T(InitType::Uninitialized), pR_T(InitType::Uninitialized);
-	Matrix3f::Transpose3x3(negR_dt, negR_dt_T);
-	Matrix3f::Transpose3x3(gSkewDt, gSkewDt_T);
-	Matrix3f::Transpose3x3(vR, vR_T);
-	Matrix3f::Transpose3x3(pR, pR_T);
-
-	// Compute P_new = Y * Phi^T block-by-block directly into P
-	for(int r = 0; r < 5; r++) {
-		// Col 0
-		if(0 >= r) {
-			P[r][0] = Y[r][0];
-			Matrix3f::MultiplyAccumulate3x3(Y[r][3], negR_dt_T, P[r][0]);
+	// Upper triangle of P_new = Y * Phi^T
+	for(int r = 0; r < 3; r++) {
+		// Col 0 (only for r == 0)
+		if(r == 0) {
+			P[0][0] = Y[0][0];
+			Matrix3f::MultiplyAccumulateTransposedB3x3(Y[0][3], negR_dt, P[0][0]);
 		}
-		
-		// Col 1
-		if(1 >= r) {
+
+		// Col 1 (for r <= 1)
+		if(r <= 1) {
 			P[r][1] = Y[r][1];
-			Matrix3f::MultiplyAccumulate3x3(Y[r][0], gSkewDt_T, P[r][1]);
-			Matrix3f::MultiplyAccumulate3x3(Y[r][3], vR_T, P[r][1]);
-			Matrix3f::MultiplyAccumulate3x3(Y[r][4], negR_dt_T, P[r][1]);
+			// Y[r][0] * (Skew(g)*dt)^T: Col 0 += gDt * Col 1, Col 1 -= gDt * Col 0
+			const float* y0 = Y[r][0].data;
+			P[r][1].data[0] -= gDt * y0[1];
+			P[r][1].data[1] += gDt * y0[0];
+			P[r][1].data[3] -= gDt * y0[4];
+			P[r][1].data[4] += gDt * y0[3];
+			P[r][1].data[6] -= gDt * y0[7];
+			P[r][1].data[7] += gDt * y0[6];
+
+			Matrix3f::MultiplyAccumulateTransposedB3x3(Y[r][3], vR, P[r][1]);
+			Matrix3f::MultiplyAccumulateTransposedB3x3(Y[r][4], negR_dt, P[r][1]);
 		}
 
-		// Col 2
-		if(2 >= r) {
-			Matrix3f::MultiplyScalar3x3(Y[r][1], dt, P[r][2]);
-			Matrix3f::Add3x3(Y[r][2], P[r][2], P[r][2]);
-			Matrix3f::MultiplyAccumulate3x3(Y[r][3], pR_T, P[r][2]);
+		// Col 2 (for r <= 2)
+		for(int i = 0; i < 9; i++) {
+			P[r][2].data[i] = Y[r][2].data[i] + (Y[r][1].data[i] * dt);
 		}
+		Matrix3f::MultiplyAccumulateTransposedB3x3(Y[r][3], pR, P[r][2]);
 
 		// Col 3 & 4
-		if(3 >= r) {
-			P[r][3] = Y[r][3];
-		}
-		if(4 >= r) {
-			P[r][4] = Y[r][4];
-		}
+		P[r][3] = Y[r][3];
+		P[r][4] = Y[r][4];
 	}
+	// Rows 3 and 4 for Cols 3 and 4 remain unchanged prior to process noise Q!
 
-	// Mirror upper triangle to lower triangle using hardware Transpose
-	for(int r = 1; r < 5; r++) {
-		for(int c = 0; c < r; c++) {
-			Matrix3f::Transpose3x3(P[c][r], P[r][c]);
-		}
-	}
+	// Mirror upper triangle to lower triangle
+	MirrorCovarianceLower();
 
-	// Process Noise (Q) applied to diagonal blocks
-	float dtQ[5] = { gyroNoiseVar * dt, accelNoiseVar * dt, 1e-5f * dt, gyroBiasWalkVar * dt, accelBiasWalkVar * dt };
-	static const float maxP[5] = {0.1f, 1.0f, 10.0f, 0.01f, 0.01f};
+	// Add Process Noise (Q) to diagonals
+	float dtQ[5] = {
+		gyroNoiseVar * dt,
+		accelNoiseVar * dt,
+		1e-5f * dt,
+		gyroBiasWalkVar * dt,
+		accelBiasWalkVar * dt
+	};
 
 	for(int b = 0; b < 5; b++) {
-		// Add Noise
-		P[b][b].data[0] = P[b][b].data[0] + dtQ[b];
-		P[b][b].data[4] = P[b][b].data[4] + dtQ[b];
-		P[b][b].data[8] = P[b][b].data[8] + dtQ[b];
-		
-		// Clamp Diagonals to prevent unbounded float32 growth
-		P[b][b].data[0] = fmaxf(1e-6f, P[b][b].data[0]);
-		P[b][b].data[4] = fmaxf(1e-6f, P[b][b].data[4]);
-		P[b][b].data[8] = fmaxf(1e-6f, P[b][b].data[8]);
+		P[b][b].data[0] = fmaxf(1e-6f, P[b][b].data[0] + dtQ[b]);
+		P[b][b].data[4] = fmaxf(1e-6f, P[b][b].data[4] + dtQ[b]);
+		P[b][b].data[8] = fmaxf(1e-6f, P[b][b].data[8] + dtQ[b]);
 	}
-
-	// // In a Generic EKF: Only clamp states if they drift dangerously close to float limits.
-	// // If you have no GPS, the Position Controller shouldn't be using these values anyway.
-	// const float maxPos = 10000.0f;	// 10km
-	// const float maxVel = 100.0f;		// 100m/s
-
-	// // X and Y
-	// if(fabsf(p.data[0]) > maxPos) p.data[0] = 0.0f; // Reset if drifting to infinity
-	// if(fabsf(p.data[1]) > maxPos) p.data[1] = 0.0f;
-	// if(fabsf(v.data[0]) > maxVel) v.data[0] = 0.0f;
-	// if(fabsf(v.data[1]) > maxVel) v.data[1] = 0.0f;
-
-	// // Z (In case Baro fails or is disabled)
-	// if(fabsf(p.data[2]) > maxPos) p.data[2] = 0.0f;
-	// if(fabsf(v.data[2]) > maxVel) v.data[2] = 0.0f;
 
 	// Matrix Orthogonalization Hook: Periodically snap the manifold back to a perfect SO(3) rotation matrix
 	if(sampleCount % 100 == 0) {
@@ -305,148 +300,87 @@ Status InEKF::UpdateGravity(const float accel[3]) {
 		return Status::Ok;
 	}
 
-	Vector3fMat y(InitType::Uninitialized);
-	y.data[0] = accel[0];
-	y.data[1] = accel[1];
-	y.data[2] = accel[2];
-
-	// Gating: Only fuse if drone is experiencing approx 1G (not violently maneuvering)
-	float normSq = y.data[0]*y.data[0] + y.data[1]*y.data[1] + y.data[2]*y.data[2];
-	float gSq = 9.80665f * 9.80665f;
+	// 1G Magnitude Gate (0.8G to 1.2G)
+	float normSq = accel[0] * accel[0] + accel[1] * accel[1] + accel[2] * accel[2];
+	constexpr float gVal = 9.80665f;
+	constexpr float gSq  = gVal * gVal;
 	if(normSq < (gSq * 0.64f) || normSq > (gSq * 1.44f)) {
 		return Status::Ok;
 	}
 
-	// Accelerometers measure Specific Force (f = a - g). Static expected measurement is -g.
-	Vector3fMat expectedSpecificForce(InitType::Uninitialized);
-	expectedSpecificForce.data[0] = -gravityNed.data[0];
-	expectedSpecificForce.data[1] = -gravityNed.data[1];
-	expectedSpecificForce.data[2] = -gravityNed.data[2];
+	// Expected specific force in body frame: R^T * [0, 0, -g]^T + accelBias
+	// Since [0, 0, -g] only has Z, R^T * [0, 0, -g] is simply -g * Row 2 of R!
+	float yExp0 = (-gVal * R.data[6]) + accelBias.data[0];
+	float yExp1 = (-gVal * R.data[7]) + accelBias.data[1];
+	float yExp2 = (-gVal * R.data[8]) + accelBias.data[2];
 
-	// Expected specific force vector mapped into the body frame
-	Vector3fMat yExpected(InitType::Uninitialized);
-	Matrix3f::MultiplyTransposed3x3Vector3(R, expectedSpecificForce, yExpected);
-
-	// Add the current bias estimate to the predicted raw measurement
-	yExpected.data[0] = yExpected.data[0] + accelBias.data[0];
-	yExpected.data[1] = yExpected.data[1] + accelBias.data[1];
-	yExpected.data[2] = yExpected.data[2] + accelBias.data[2];
-
-	// Innovation (Residual)
 	Vector3fMat z(InitType::Uninitialized);
-	z.data[0] = y.data[0] - yExpected.data[0];
-	z.data[1] = y.data[1] - yExpected.data[1];
-	z.data[2] = y.data[2] - yExpected.data[2];
+	z.data[0] = accel[0] - yExp0;
+	z.data[1] = accel[1] - yExp1;
+	z.data[2] = accel[2] - yExp2;
 
-	// Construct Measurement Matrix block mapping
-	// H = [hAttitude | 0 | 0 | 0 | I_3x3]
-	Matrix3f rT(InitType::Uninitialized);
-	Matrix3f::Transpose3x3(R, rT);
-	Matrix3f hAttitude(InitType::Uninitialized);
-	Matrix3f::Multiply3x3(rT, LieGroups::Skew(expectedSpecificForce), hAttitude);
+	// hAttitude = R^T * Skew([0, 0, -g]):
+	// Col 0 = -g * Col 1 of R^T = -g * Row 1 of R
+	// Col 1 = +g * Col 0 of R^T = +g * Row 0 of R
+	// Col 2 = 0
+	Matrix3f hAtt(InitType::Uninitialized);
+	hAtt.data[0] = -gVal * R.data[3]; hAtt.data[1] = gVal * R.data[0]; hAtt.data[2] = 0.0f;
+	hAtt.data[3] = -gVal * R.data[4]; hAtt.data[4] = gVal * R.data[1]; hAtt.data[5] = 0.0f;
+	hAtt.data[6] = -gVal * R.data[5]; hAtt.data[7] = gVal * R.data[2]; hAtt.data[8] = 0.0f;
 
-	// Compute H * P: An array of five 3x3 blocks
+	// HP[c] = hAtt * P[0][c] + P[4][c]
 	Matrix3f HP[5];
 	for(int c = 0; c < 5; c++) {
-		HP[c] = P[4][c]; 
-		Matrix3f::MultiplyAccumulate3x3(hAttitude, P[0][c], HP[c]);
+		HP[c] = P[4][c];
+		Matrix3f::MultiplyAccumulate3x3(hAtt, P[0][c], HP[c]);
 	}
 
-	// Compute S = (H * P) * H^T + R_Noise
-	// S = HP[0] * hAttitude^T + HP[4] * I^T + R_Noise
-	Matrix3f hAttitudeT(InitType::Uninitialized);
-	Matrix3f::Transpose3x3(hAttitude, hAttitudeT);
-
+	// S = HP[0] * hAtt^T + HP[4] + R_Noise
 	Matrix3f S = HP[4];
-	Matrix3f::MultiplyAccumulate3x3(HP[0], hAttitudeT, S);
+	Matrix3f::MultiplyAccumulateTransposedB3x3(HP[0], hAtt, S);
 
-	float rNoise = 0.5f; // Adjust this higher if the attitude is too twitchy
-	S.data[0] = S.data[0] + rNoise;
-	S.data[4] = S.data[4] + rNoise;
-	S.data[8] = S.data[8] + rNoise;
+	constexpr float rNoise = 0.5f;
+	S.data[0] += rNoise;
+	S.data[4] += rNoise;
+	S.data[8] += rNoise;
 
 	Matrix3f sInv = S.Inverse3x3();
 
-	// Innovation Gating: Mahalanobis distance for 3D vectors: z^T * S_inv * z
-	static Vector3fMat sInvZ(InitType::Uninitialized);
+	Vector3fMat sInvZ(InitType::Uninitialized);
 	Matrix3f::Multiply3x3Vector3(sInv, z, sInvZ);
-	float mahalanobisSq =	(z.data[0] * sInvZ.data[0]) + 
-							(z.data[1] * sInvZ.data[1]) + 
-							(z.data[2] * sInvZ.data[2]);
-	// A threshold of 11.3 means anything outside 3 standard deviations is rejected
+	float mahalanobisSq = (z.data[0] * sInvZ.data[0]) + (z.data[1] * sInvZ.data[1]) + (z.data[2] * sInvZ.data[2]);
 	if(mahalanobisSq > 11.3f) {
-		return Status::Ok; // Reject outlier
+		return Status::Ok;
 	}
 
-	// Compute K = (P * H^T) * S_inv
+	// Exploit symmetry: (P * H^T)_r = (H * P)_r^T = HP[r]^T
+	float delta[15];
 	Matrix3f K[5];
 	for(int r = 0; r < 5; r++) {
-		Matrix3f tmpK = P[r][4];
-		Matrix3f::MultiplyAccumulate3x3(P[r][0], hAttitudeT, tmpK);
-		Matrix3f::Multiply3x3(tmpK, sInv, K[r]);
+		Matrix3f hpT(InitType::Uninitialized);
+		Matrix3f::Transpose3x3(HP[r], hpT);
+		Matrix3f::Multiply3x3(hpT, sInv, K[r]);
+
+		Vector3fMat deltaBlk(InitType::Uninitialized);
+		Matrix3f::MultiplyTransposed3x3Vector3(HP[r], sInvZ, deltaBlk);
+		delta[r * 3 + 0] = deltaBlk.data[0];
+		delta[r * 3 + 1] = deltaBlk.data[1];
+		delta[r * 3 + 2] = deltaBlk.data[2];
 	}
 
-	// Compute Error Correction Vector (Delta)
-	static Vector15fMat delta(InitType::Uninitialized);
-	for(int r = 0; r < 5; r++) {
-		Vector3fMat delta_block(InitType::Uninitialized);
-		Matrix3f::Multiply3x3Vector3(K[r], z, delta_block);
-		
-		delta.data[r * 3 + 0] = delta_block.data[0];
-		delta.data[r * 3 + 1] = delta_block.data[1];
-		delta.data[r * 3 + 2] = delta_block.data[2];
-	}
+	// Compute and Apply Error Correction
+	ApplyErrorState(delta);
 
-	// Apply corrections to the manifold state space
-	Vector9fMat kinematicDelta(InitType::Uninitialized);
-	for(int i = 0; i < 9; i++) {
-		kinematicDelta.data[i] = delta.data[i];
-	}
-
-	Matrix5f correctionX(InitType::Uninitialized);
-	LieGroups::ExpSE23(kinematicDelta, correctionX);
-
-	Matrix3f rDelta(InitType::Uninitialized);
-	Vector3fMat ju(InitType::Uninitialized);
-	Vector3fMat jv(InitType::Uninitialized);
-	for(int r = 0; r < 3; r++) {
-		for(int c = 0; c < 3; c++) {
-			rDelta.data[r * 3 + c] = correctionX.data[r * 5 + c];
-		}
-		ju.data[r] = correctionX.data[r * 5 + 3];
-		jv.data[r] = correctionX.data[r * 5 + 4];
-	}
-
-	Matrix3f newR(InitType::Uninitialized);
-	Matrix3f::Multiply3x3(rDelta, R, newR);
-	R = newR;
-
-	Vector3fMat rV(InitType::Uninitialized);
-	Vector3fMat rP(InitType::Uninitialized);
-	Matrix3f::Multiply3x3Vector3(rDelta, v, rV);
-	Matrix3f::Multiply3x3Vector3(rDelta, p, rP);
-
-	for(int i = 0; i < 3; i++) {
-		v.data[i] = rV.data[i] + ju.data[i];
-		p.data[i] = rP.data[i] + jv.data[i];
-		gyroBias.data[i] = gyroBias.data[i] + delta.data[i + 9];
-		accelBias.data[i] = accelBias.data[i] + delta.data[i + 12];
-	}
-
-	// Covariance Update P = P - K*(H*P)
-	// Calculate ONLY the upper triangle (c >= r)
+	// Covariance Update P = P - K * (H * P)
+	// Calculate ONLY the upper triangle (c >= r).
 	for(int r = 0; r < 5; r++) {
 		for(int c = r; c < 5; c++) {
 			Matrix3f::MultiplySubtract3x3(K[r], HP[c], P[r][c]);
 		}
 	}
 
-	// Mirror upper triangle to lower triangle using hardware Transpose
-	for(int r = 1; r < 5; r++) {
-		for(int c = 0; c < r; c++) {
-			Matrix3f::Transpose3x3(P[c][r], P[r][c]);
-		}
-	}
+	// Mirror upper triangle to lower triangle
+	MirrorCovarianceLower();
 
 	return Status::Ok;
 }
@@ -456,41 +390,34 @@ Status InEKF::UpdateMag(const float mag[3]) {
 		return Status::Ok;
 	}
 
-	Vector3fMat y(InitType::Uninitialized);
-	y.data[0] = mag[0];
-	y.data[1] = mag[1];
-	y.data[2] = mag[2];
-
 	// Compute expected magnetic reading in the body frame
 	Vector3fMat yExpected(InitType::Uninitialized);
-	Matrix3f::MultiplyTransposed3x3Vector3(R, magRefNed, yExpected);
+    Matrix3f::MultiplyTransposed3x3Vector3(R, magRefNed, yExpected);
 
 	// Innovation calculation (Residual)
 	Vector3fMat z(InitType::Uninitialized);
-	z.data[0] = y.data[0] - yExpected.data[0];
-	z.data[1] = y.data[1] - yExpected.data[1];
-	z.data[2] = y.data[2] - yExpected.data[2];
+	z.data[0] = mag[0] - yExpected.data[0];
+	z.data[1] = mag[1] - yExpected.data[1];
+	z.data[2] = mag[2] - yExpected.data[2];
 
 	// Construct Measurement Matrix block mapping
-	// H = [hMagAttitude | 0 | 0 | 0 | 0]
+	// H = [hMagAtt | 0 | 0 | 0 | 0]
 	Matrix3f rT(InitType::Uninitialized);
 	Matrix3f::Transpose3x3(R, rT);
-	Matrix3f hMagAttitude(InitType::Uninitialized);
-	Matrix3f::Multiply3x3(rT, LieGroups::Skew(magRefNed), hMagAttitude);
+	Matrix3f hMagAtt(InitType::Uninitialized);
+	Matrix3f::SkewMultiplyScalar3x3(magRefNed, R, -1.0f, hMagAtt);	// Skew(m) * R == -(R^T * Skew(m))^T -> wait: keep exact rT * Skew(magRefNed):
+	Matrix3f::Multiply3x3(rT, LieGroups::Skew(magRefNed), hMagAtt);
 
 	// Compute H * P: An array of five 3x3 blocks
 	Matrix3f HP[5];
 	for(int c = 0; c < 5; c++) {
-		// Since H is zero everywhere except block 0, HP[c] = hMagAttitude * P[0][c]
-		Matrix3f::Multiply3x3(hMagAttitude, P[0][c], HP[c]);
+		// Since H is zero everywhere except block 0, HP[c] = hMagAtt * P[0][c]
+		Matrix3f::Multiply3x3(hMagAtt, P[0][c], HP[c]);
 	}
 
 	// Compute S = (H * P) * H^T + R_Noise
-	Matrix3f hMagAttitudeT(InitType::Uninitialized);
-	Matrix3f::Transpose3x3(hMagAttitude, hMagAttitudeT);
-
 	Matrix3f S(InitType::Uninitialized);
-	Matrix3f::Multiply3x3(HP[0], hMagAttitudeT, S);
+	Matrix3f::MultiplyTransposedB3x3(HP[0], hMagAtt, S);
 
 	float rNoise = 0.04f;	// 0.2 Gauss standard deviation squared
 	S.data[0] = S.data[0] + rNoise;
@@ -502,70 +429,32 @@ Status InEKF::UpdateMag(const float mag[3]) {
 	// Innovation Gating: Mahalanobis distance for 3D vectors: z^T * S_inv * z
 	static Vector3fMat sInvZ(InitType::Uninitialized);
 	Matrix3f::Multiply3x3Vector3(sInv, z, sInvZ);
-	float mahalanobisSq =	(z.data[0] * sInvZ.data[0]) + 
-							(z.data[1] * sInvZ.data[1]) + 
-							(z.data[2] * sInvZ.data[2]);
+	float mahalanobisSq = (z.data[0] * sInvZ.data[0]) +  (z.data[1] * sInvZ.data[1]) + (z.data[2] * sInvZ.data[2]);
 	// A threshold of 11.3 means anything outside 3 standard deviations is rejected
 	if(mahalanobisSq > 11.3f) {
 		return Status::Ok;	// Reject outlier
 	}
 
-	// Matrix<15, 3> K = P * H_T * S_inv;
+	// Use symmetry of P: P * H^T = HP^T, and delta_r = HP[r]^T * sInvZ
+	float delta[15];
 	Matrix3f K[5];
 	for(int r = 0; r < 5; r++) {
-		Matrix3f tmpK(InitType::Uninitialized);
-		Matrix3f::Multiply3x3(P[r][0], hMagAttitudeT, tmpK);
-		Matrix3f::Multiply3x3(tmpK, sInv, K[r]);
+		Matrix3f hpT(InitType::Uninitialized);
+		Matrix3f::Transpose3x3(HP[r], hpT);
+		Matrix3f::Multiply3x3(hpT, sInv, K[r]);
+
+		Vector3fMat deltaBlk(InitType::Uninitialized);
+		Matrix3f::MultiplyTransposed3x3Vector3(HP[r], sInvZ, deltaBlk);
+		delta[r * 3 + 0] = deltaBlk.data[0];
+		delta[r * 3 + 1] = deltaBlk.data[1];
+		delta[r * 3 + 2] = deltaBlk.data[2];
 	}
 
-	// Compute Error Correction Vector (Delta)
-	static Vector15fMat delta(InitType::Uninitialized);
-	for(int r = 0; r < 5; r++) {
-		Vector3fMat deltaBlock(InitType::Uninitialized);
-		Matrix3f::Multiply3x3Vector3(K[r], z, deltaBlock);
-		
-		delta.data[r * 3 + 0] = deltaBlock.data[0];
-		delta.data[r * 3 + 1] = deltaBlock.data[1];
-		delta.data[r * 3 + 2] = deltaBlock.data[2];
-	}
+	// Compute and Apply Error Correction
+	ApplyErrorState(delta);
 
-	// Apply corrections to the manifold state space
-	Vector9fMat kinematicDelta(InitType::Uninitialized);
-	for(int i = 0; i < 9; i++) {
-		kinematicDelta.data[i] = delta.data[i];
-	}
-
-	Matrix5f correctionX(InitType::Uninitialized);
-	LieGroups::ExpSE23(kinematicDelta, correctionX);
-
-	Matrix3f rDelta(InitType::Uninitialized);
-	Vector3fMat ju(InitType::Uninitialized);
-	Vector3fMat jv(InitType::Uninitialized);
-	for(int r = 0; r < 3; r++) {
-		for(int c = 0; c < 3; c++) {
-			rDelta.data[r * 3 + c] = correctionX.data[r * 5 + c];
-		}
-		ju.data[r] = correctionX.data[r * 5 + 3];
-		jv.data[r] = correctionX.data[r * 5 + 4];
-	}
-
-	Matrix3f newR(InitType::Uninitialized);
-	Matrix3f::Multiply3x3(rDelta, R, newR);
-	R = newR;
-
-	Vector3fMat rV(InitType::Uninitialized), rP(InitType::Uninitialized);
-	Matrix3f::Multiply3x3Vector3(rDelta, v, rV);
-	Matrix3f::Multiply3x3Vector3(rDelta, p, rP);
-
-	for(int i = 0; i < 3; i++) {
-		v.data[i] = rV.data[i] + ju.data[i];
-		p.data[i] = rP.data[i] + jv.data[i];
-		gyroBias.data[i] = gyroBias.data[i] + delta.data[i + 9];
-		accelBias.data[i] = accelBias.data[i] + delta.data[i + 12];
-	}
-
-	// Covariance Update P = P - K*(H*P)
-	// Calculate ONLY the upper triangle (c >= r)
+	// Covariance Update P = P - K * (H * P)
+	// Calculate ONLY the upper triangle (c >= r).
 	for(int r = 0; r < 5; r++) {
 		for(int c = r; c < 5; c++) {
 			Matrix3f::MultiplySubtract3x3(K[r], HP[c], P[r][c]);
@@ -573,11 +462,67 @@ Status InEKF::UpdateMag(const float mag[3]) {
 	}
 
 	// Mirror upper triangle to lower triangle
-	for(int r = 1; r < 5; r++) {
-		for(int c = 0; c < r; c++) {
-			Matrix3f::Transpose3x3(P[c][r], P[r][c]);
+	MirrorCovarianceLower();
+
+	return Status::Ok;
+}
+
+Status InEKF::UpdateVerticalPosition(float measuredDownPos, float rNoise) {
+    // In the NED frame standard, Down is positive, meaning Altitude points along the negative axis
+    float z  = measuredDownPos - p.data[2];     // Innovation error calculation
+    // Manifold Jacobian: H_att = -Skew(p). The 3rd row of -Skew(p) isolates the Z-axis attitude coupling
+    float hy =  p.data[1];
+    float hx = -p.data[0];
+
+    // Compute H * P (which evaluates to a 1x15 row vector)
+    float hpRow[15];
+    for(int c = 0; c < 5; c++) {
+        const float* p0 = P[0][c].data;
+        const float* p2 = P[2][c].data;
+        hpRow[c * 3 + 0] = (hy * p0[0]) + (hx * p0[3]) + p2[6];
+        hpRow[c * 3 + 1] = (hy * p0[1]) + (hx * p0[4]) + p2[7];
+        hpRow[c * 3 + 2] = (hy * p0[2]) + (hx * p0[5]) + p2[8];
+    }
+
+    // Compute S = H * P * H^T + R_Noise
+    float sVal = (hpRow[0] * hy) + (hpRow[1] * hx) + hpRow[8] + rNoise;
+    // Innovation Gating: z^2 / S gives the Mahalanobis distance squared
+    // A threshold of 9.0 means anything outside 3 standard deviations is rejected
+    if((z * z) > (9.0f * sVal)) {
+        return Status::Ok;
+    }
+
+    float invS     = 1.0f / sVal;
+    float scaledZ  = z * invS; // Combine z * invS so delta[i] = hpRow[i] * scaledZ!
+    float kFlat[15];
+    float delta[15];
+
+	// K is the 8th column of P, scaled by invS.
+	// Because P is mathematically symmetric, P * H^T is identical to (H * P)^T
+	for(int i = 0; i < 15; i++) {
+		kFlat[i] = hpRow[i] * invS;
+		delta[i] = hpRow[i] * scaledZ;
+	}
+
+	// Compute and Apply Error Correction
+	ApplyErrorState(delta);
+
+	// Covariance Update P = P - K * (H * P)
+	// Calculate ONLY the upper triangle (c >= r).
+	for(int c = 0; c < 5; c++) {
+		for(int r = 0; r <= c; r++) {
+			float* pBlk = P[r][c].data;
+			for(int i = 0; i < 3; i++) {
+				float kVal = kFlat[r * 3 + i];
+				pBlk[i * 3 + 0] -= kVal * hpRow[c * 3 + 0];
+				pBlk[i * 3 + 1] -= kVal * hpRow[c * 3 + 1];
+				pBlk[i * 3 + 2] -= kVal * hpRow[c * 3 + 2];
+			}
 		}
 	}
+
+	// Mirror upper triangle to lower triangle
+	MirrorCovarianceLower();
 
 	return Status::Ok;
 }
@@ -587,102 +532,142 @@ Status InEKF::UpdateBaro(float pressurePascal) {
 		return Status::Ok;
 	}
 
-	// Convert raw atmospheric pressure to a local altitude measurement
-	// Standard ISA conversion benchmark: baseline 101325 Pa reference
-	float measuredAltitude = 44330.77f * (1.0f - powf(pressurePascal / 101325.0f, 0.1902632f));
+	float measuredAltitude = 44330.77f * (1.0f - powf(pressurePascal * (1.0f / 101325.0f), 0.1902632f));
+	return UpdateVerticalPosition(-measuredAltitude, 0.25f);
+}
 
-	// In the NED frame standard, Down is positive, meaning Altitude points along the negative axis
-	float z = (-measuredAltitude) - p.data[2];	// Innovation error calculation
-	float rNoise = 0.25f;						// 0.5 meter barometric noise deviation variance
-
-	// Manifold Jacobian: H_att = -Skew(p). The 3rd row of -Skew(p) isolates the Z-axis attitude coupling
-	float hy = p.data[1];
-	float hx = -p.data[0];
-
-	// Compute H * P (which evaluates to a 1x15 row vector)
-	float hpRow[15];
-	for(int c = 0; c < 5; c++) {
-		hpRow[c * 3 + 0] = (hy * P[0][c].data[0]) + (hx * P[0][c].data[3]) + P[2][c].data[6];
-		hpRow[c * 3 + 1] = (hy * P[0][c].data[1]) + (hx * P[0][c].data[4]) + P[2][c].data[7];
-		hpRow[c * 3 + 2] = (hy * P[0][c].data[2]) + (hx * P[0][c].data[5]) + P[2][c].data[8];
+Status InEKF::UpdateRange(float rangeMeters) {
+	if(isInitialized == false) {
+		return Status::Ok;
 	}
 
-	// Compute S = H * P * H^T + R_Noise
-	float sVal = (hpRow[0] * hy) + (hpRow[1] * hx) + hpRow[8] + rNoise;
-
-	// Innovation Gating: z^2 / S gives the Mahalanobis distance squared
-	// A threshold of 9.0 means anything outside 3 standard deviations is rejected
-	if((z * z) / sVal > 9.0f) {
-		return Status::Ok;	// Reject outlier
+	float cosTilt = R.data[8];
+	if(rangeMeters < 0.04f || rangeMeters > 4.0f || cosTilt < 0.5f) {
+		return Status::Ok;
 	}
 
-	float invS = 1.0f / sVal;
+	float measuredDownPos = -(rangeMeters * cosTilt);
+	float rNoise = 0.0009f / (cosTilt * cosTilt);
+	return UpdateVerticalPosition(measuredDownPos, rNoise);
+}
 
-	// K is the 8th column of P, scaled by invS.
-	// Because P is mathematically symmetric, P * H^T is identical to (H * P)^T
-	float kFlat[15];
-	for(int i = 0; i < 15; i++) {
-		kFlat[i] = hpRow[i] * invS;
+Status InEKF::UpdateOpticalFlow(const float flowRate[2], const float gyro[3], float rangeMeters, float quality) {
+	if(isInitialized == false || quality <= 0.05f) {
+		return Status::Ok;
 	}
 
-	// Compute Error Correction
-	Vector15fMat delta(InitType::Uninitialized);
-	for(int i = 0; i < 15; i++) {
-		delta.data[i] = kFlat[i] * z;
+	// Require valid ground distance (use ToF if valid, otherwise fallback to EKF height -p.z / R[8])
+	float cosTilt = R.data[8];
+	if(cosTilt < 0.5f) {
+		return Status::Ok;
 	}
 
-	// Extract and map updates across the SE_2(3) Manifold structures
-	Vector9fMat kinematicDelta(InitType::Uninitialized);
-	for(int i = 0; i < 9; i++) {
-		kinematicDelta.data[i] = delta.data[i];
-	}
-
-	Matrix5f correctionX(InitType::Uninitialized);
-	LieGroups::ExpSE23(kinematicDelta, correctionX);
-
-	Matrix3f rDelta(InitType::Uninitialized);
-	Vector3fMat ju(InitType::Uninitialized), jv(InitType::Uninitialized);
-	for(int r = 0; r < 3; r++) {
-		for(int c = 0; c < 3; c++) {
-			rDelta.data[r * 3 + c] = correctionX.data[r * 5 + c];
+	float d = rangeMeters;
+	if(d < 0.05f || d > 4.0f) {
+		float estHeight = -p.data[2];
+		if(estHeight < 0.05f) {
+			return Status::Ok;
 		}
-		ju.data[r] = correctionX.data[r * 5 + 3];
-		jv.data[r] = correctionX.data[r * 5 + 4];
+		d = estHeight / cosTilt;
 	}
 
-	Matrix3f newR(InitType::Uninitialized);
-	Matrix3f::Multiply3x3(rDelta, R, newR);
-	R = newR;
+	// Derotate optical flow using unbiased gyro (in rad/s) and scale by range d to get body velocity [vx_b, vy_b]
+	float wUnbiasedX = gyro[0] - gyroBias.data[0];
+	float wUnbiasedY = gyro[1] - gyroBias.data[1];
 
-	Vector3fMat rV(InitType::Uninitialized), rP(InitType::Uninitialized);
-	Matrix3f::Multiply3x3Vector3(rDelta, v, rV);
-	Matrix3f::Multiply3x3Vector3(rDelta, p, rP);
+	// Standard downward camera alignment:
+	// Pitching nose down (-wy) / moving forward (+vx_b) produces flow along wy
+	// Rolling right (+wx) / moving right (+vy_b) produces flow along wx
+	float vxMeasBody = (flowRate[1] - wUnbiasedY) * d;
+	float vyMeasBody = -(flowRate[0] - wUnbiasedX) * d;
 
-	for(int i = 0; i < 3; i++) {
-		v.data[i] = rV.data[i] + ju.data[i];
-		p.data[i] = rP.data[i] + jv.data[i];
-		gyroBias.data[i] = gyroBias.data[i] + delta.data[i + 9];
-		accelBias.data[i] = accelBias.data[i] + delta.data[i + 12];
+	// Predicted body-frame velocity: v_body = R^T * v_ned
+	// Only need X and Y components of R^T * v
+	float vxPredBody = R.data[0] * v.data[0] + R.data[3] * v.data[1] + R.data[6] * v.data[2];
+	float vyPredBody = R.data[1] * v.data[0] + R.data[4] * v.data[1] + R.data[7] * v.data[2];
+
+	// 2D Innovation z = [vx_meas - vx_pred, vy_meas - vy_pred]
+	float z0 = vxMeasBody - vxPredBody;
+	float z1 = vyMeasBody - vyPredBody;
+
+	// Right-Invariant Jacobian for Body Velocity v_b = R^T * v:
+	// Attitude error cancels out! H is non-zero ONLY at Velocity block (Block 1):
+	// Row 0 of H_vel = Row 0 of R^T = Col 0 of R = [R[0], R[3], R[6]]
+	// Row 1 of H_vel = Row 1 of R^T = Col 1 of R = [R[1], R[4], R[7]]
+	float h0x = R.data[0], h0y = R.data[3], h0z = R.data[6];
+	float h1x = R.data[1], h1y = R.data[4], h1z = R.data[7];
+
+	// Compute HP (2x15 matrix) using only Block 1 of P (P[1][c])
+	float hp0[15];
+	float hp1[15];
+	for(int c = 0; c < 5; c++) {
+		const float* pBlk = P[1][c].data;
+		hp0[c * 3 + 0] = h0x * pBlk[0] + h0y * pBlk[3] + h0z * pBlk[6];
+		hp0[c * 3 + 1] = h0x * pBlk[1] + h0y * pBlk[4] + h0z * pBlk[7];
+		hp0[c * 3 + 2] = h0x * pBlk[2] + h0y * pBlk[5] + h0z * pBlk[8];
+
+		hp1[c * 3 + 0] = h1x * pBlk[0] + h1y * pBlk[3] + h1z * pBlk[6];
+		hp1[c * 3 + 1] = h1x * pBlk[1] + h1y * pBlk[4] + h1z * pBlk[7];
+		hp1[c * 3 + 2] = h1x * pBlk[2] + h1y * pBlk[5] + h1z * pBlk[8];
 	}
+
+	// Scale measurement noise inversely with flow quality and proportionally with distance^2
+	float baseVelVar = 0.02f * (1.0f + d * d);
+	float rNoise = baseVelVar / fmaxf(0.1f, quality);
+
+	// 2x2 Innovation Covariance S = H * P * H^T + R_noise (using Block 1 columns: indices 3, 4, 5)
+	float s00 = (hp0[3] * h0x + hp0[4] * h0y + hp0[5] * h0z) + rNoise;
+	float s01 = (hp0[3] * h1x + hp0[4] * h1y + hp0[5] * h1z);
+	float s11 = (hp1[3] * h1x + hp1[4] * h1y + hp1[5] * h1z) + rNoise;
+
+	float detS = (s00 * s11) - (s01 * s01);
+	if(detS <= 1e-7f) {
+		return Status::Ok;
+	}
+	float invDetS = 1.0f / detS;
+	float sInv00 = s11 * invDetS;
+	float sInv01 = -s01 * invDetS;
+	float sInv11 = s00 * invDetS;
+
+	// 2D Mahalanobis distance squared: z^T * S^-1 * z (95% / 3-sigma gate for 2 DOF = 9.21f)
+	// Precompute sInvZ = S^-1 * z (2 floats)
+	float sInvZ0 = sInv00 * z0 + sInv01 * z1;
+	float sInvZ1 = sInv01 * z0 + sInv11 * z1;
+	if((z0 * sInvZ0 + z1 * sInvZ1) > 9.21f) {
+		return Status::Ok;
+	}
+
+	// Kalman Gain K (15x2): since P is symmetric, P * H^T = (H * P)^T = [hp0^T | hp1^T]
+	float k0[15];
+	float k1[15];
+	float delta[15];
+	for(int i = 0; i < 15; i++) {
+		k0[i] = hp0[i] * sInv00 + hp1[i] * sInv01;
+        k1[i] = hp0[i] * sInv01 + hp1[i] * sInv11;
+        delta[i] = hp0[i] * sInvZ0 + hp1[i] * sInvZ1;
+	}
+
+	// Compute and Apply Error Correction
+	ApplyErrorState(delta);
 
 	// Covariance Update P = P - K * (H * P)
 	// Calculate ONLY the upper triangle (c >= r).
 	for(int c = 0; c < 5; c++) {
 		for(int r = 0; r <= c; r++) {
+			float* pBlk = P[r][c].data;
 			for(int i = 0; i < 3; i++) {
-				for(int j = 0; j < 3; j++) {
-					P[r][c].data[i * 3 + j] -= kFlat[r * 3 + i] * hpRow[c * 3 + j];
-				}
+				int rowIdx = r * 3 + i;
+				float k0r  = k0[rowIdx];
+				float k1r  = k1[rowIdx];
+				pBlk[i * 3 + 0] -= (k0r * hp0[c * 3 + 0] + k1r * hp1[c * 3 + 0]);
+				pBlk[i * 3 + 1] -= (k0r * hp0[c * 3 + 1] + k1r * hp1[c * 3 + 1]);
+				pBlk[i * 3 + 2] -= (k0r * hp0[c * 3 + 2] + k1r * hp1[c * 3 + 2]);
 			}
 		}
 	}
 
 	// Mirror upper triangle to lower triangle
-	for(int r = 1; r < 5; r++) {
-		for(int c = 0; c < r; c++) {
-			Matrix3f::Transpose3x3(P[c][r], P[r][c]);
-		}
-	}
+	MirrorCovarianceLower();
 
 	return Status::Ok;
 }
@@ -691,34 +676,43 @@ Quaternion InEKF::GetQuaternion() const {
 	Quaternion q;
 	float trace = R.data[0] + R.data[4] + R.data[8];
 	if(trace > 0.0f) {
-		float s = 0.5f / sqrtf(fmaxf(0.0f, trace + 1.0f));
-		q.w = 0.25f / s;
+		float root;
+		arm_sqrt_f32(fmaxf(0.0f, trace + 1.0f), &root);
+		float s = 0.5f / root;
+		q.w = 0.5f * root;
 		q.x = (R.data[7] - R.data[5]) * s;
 		q.y = (R.data[2] - R.data[6]) * s;
 		q.z = (R.data[3] - R.data[1]) * s;
 	}
+	else if(R.data[0] > R.data[4] && R.data[0] > R.data[8]) {
+		float root;
+		arm_sqrt_f32(fmaxf(0.0f, 1.0f + R.data[0] - R.data[4] - R.data[8]), &root);
+		float s = 2.0f * root;
+		float invS = 1.0f / s;
+		q.w = (R.data[7] - R.data[5]) * invS;
+		q.x = 0.25f * s;
+		q.y = (R.data[1] + R.data[3]) * invS; // Fixed bug: was R[1] + R[4]!
+		q.z = (R.data[2] + R.data[6]) * invS; // Fixed bug: was R[2] + R[8]!
+	}
+	else if(R.data[4] > R.data[8]) {
+		float root;
+		arm_sqrt_f32(fmaxf(0.0f, 1.0f + R.data[4] - R.data[0] - R.data[8]), &root);
+		float s = 2.0f * root;
+		float invS = 1.0f / s;
+		q.w = (R.data[2] - R.data[6]) * invS;
+		q.x = (R.data[1] + R.data[3]) * invS; // Fixed bug: was R[1] + R[4]!
+		q.y = 0.25f * s;
+		q.z = (R.data[5] + R.data[7]) * invS;
+	}
 	else {
-		if(R.data[0] > R.data[4] && R.data[0] > R.data[8]) {
-			float s = 2.0f * sqrtf(fmaxf(0.0f, 1.0f + R.data[0] - R.data[4] - R.data[8]));
-			q.w = (R.data[7] - R.data[5]) / s;
-			q.x = 0.25f * s;
-			q.y = (R.data[1] + R.data[4]) / s;
-			q.z = (R.data[2] + R.data[8]) / s;
-		}
-		else if(R.data[4] > R.data[8]) {
-			float s = 2.0f * sqrtf(fmaxf(0.0f, 1.0f + R.data[4] - R.data[0] - R.data[8]));
-			q.w = (R.data[2] - R.data[6]) / s;
-			q.x = (R.data[1] + R.data[4]) / s;
-			q.y = 0.25f * s;
-			q.z = (R.data[5] + R.data[7]) / s;
-		}
-		else {
-			float s = 2.0f * sqrtf(fmaxf(0.0f, 1.0f + R.data[8] - R.data[0] - R.data[4]));
-			q.w = (R.data[3] - R.data[1]) / s;
-			q.x = (R.data[2] + R.data[8]) / s;
-			q.y = (R.data[5] + R.data[7]) / s;
-			q.z = 0.25f * s;
-		}
+		float root;
+		arm_sqrt_f32(fmaxf(0.0f, 1.0f + R.data[8] - R.data[0] - R.data[4]), &root);
+		float s = 2.0f * root;
+		float invS = 1.0f / s;
+		q.w = (R.data[3] - R.data[1]) * invS;
+		q.x = (R.data[2] + R.data[6]) * invS; // Fixed bug: was R[2] + R[8]!
+		q.y = (R.data[5] + R.data[7]) * invS;
+		q.z = 0.25f * s;
 	}
 	return q;
 }

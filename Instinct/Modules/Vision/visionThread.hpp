@@ -1,10 +1,10 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Vision/visionThread.hpp
- * Author:  NotBlackMagic
- * Brief:   
+ * File:	Instinct/Modules/Vision/visionThread.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Handles MIPI-CSI (Main/HD camera) video feed.
  */
 
 #pragma once
@@ -80,7 +80,8 @@ class VisionThread {
 		static const uint8_t numITControls;
 	private:
 		static TX_THREAD threadPtr;
-		static uint8_t threadStack[8196];
+		static const uint16_t threadStackSize = 8196;
+		__attribute__((aligned(32))) static uint8_t threadStack[threadStackSize];
 
 		// Telemetry synchronization
 		static TX_MUTEX mutex;

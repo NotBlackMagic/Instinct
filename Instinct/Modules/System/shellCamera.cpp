@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/System/shellCamera.cpp
  */
@@ -8,7 +8,18 @@
 #include "shellModules.hpp"
 
 static void PrintHelp() {
-	Logger::Instance().Write("Usage: cam <target> <action> [val]\r\n");
+	Logger::Instance().Write("--- Camera Commands ---\r\n");
+	Logger::Instance().Write("  <target> info              - Return connected camera sensor info\r\n");
+	Logger::Instance().Write("  <target> start             - Start capture\r\n");
+	Logger::Instance().Write("  <target> stop              - Stop capture\r\n");
+	Logger::Instance().Write("  <target> fps [val]         - Set camera sensor FPS\r\n");
+	Logger::Instance().Write("  <target> gain [val]        - Set camera sensor AGC/analog gain\r\n");
+	Logger::Instance().Write("  <target> exposure [val]    - Set camera sensor exposure\r\n");
+	Logger::Instance().Write("  <target> brightness [val]  - Set camera sensor brightness\r\n");
+	Logger::Instance().Write("  <target> contrast [val]    - Set camera sensor contrast\r\n");
+	Logger::Instance().Write("  <target> flicker [val]     - Set camera sensor flicker filter\r\n");
+	Logger::Instance().Write("  <target> test [val]        - Enable/disable test pattern output\r\n");
+	Logger::Instance().Write("-----------------------\r\n");
 }
 
 static bool CommandCam(const char* args) {
@@ -46,8 +57,10 @@ static bool CommandCam(const char* args) {
 	// Route the actions
 	if(strcmp(action, "info") == 0) {
 		if(routeDcmi == true) {
-			Logger::Instance().Write("[DCMI/OV7670] Fetching info...\r\n");
-			OV7670::SensorInfo info = cameraSD.GetSensor().GetInfo();
+			// Logger::Instance().Write("[DCMI/OV7670] Fetching info...\r\n");
+			// OV7670::SensorInfo info = cameraSD.GetSensor().GetInfo();
+			Logger::Instance().Write("[DCMI/OV9281] Fetching info...\r\n");
+			OV9281::SensorInfo info = cameraSD.GetSensor().GetInfo();
 			Logger::Instance().Printf("  ID: 0x%04X, Res: %dx%d\r\n", info.id, info.width, info.height);
 		}
 		if(routeMipi == true) {
@@ -80,10 +93,43 @@ static bool CommandCam(const char* args) {
 		}
 		return true;
 	}
+
+	if(strcmp(action, "fps") == 0 && count >= 3) {
+		if(routeDcmi == true) {
+			cameraSD.GetSensor().SetFPS((uint32_t)val);
+			Logger::Instance().Printf("DCMI Gain set to %d.\r\n", (uint32_t)val);
+		}
+		if(routeMipi == true) {
+			// cameraMipi.GetSensor().SetBrightness((int8_t)val);
+		}
+		return true;
+	}
+
+	if(strcmp(action, "gain") == 0 && count >= 3) {
+		if(routeDcmi == true) {
+			cameraSD.GetSensor().SetAnalogGain((uint16_t)val);
+			Logger::Instance().Printf("DCMI Gain set to %d.\r\n", (uint16_t)val);
+		}
+		if(routeMipi == true) {
+			// cameraMipi.GetSensor().SetBrightness((int8_t)val);
+		}
+		return true;
+	}
+
+	if(strcmp(action, "exposure") == 0 && count >= 3) {
+		if(routeDcmi == true) {
+			cameraSD.GetSensor().SetExposure((uint32_t)val);
+			Logger::Instance().Printf("DCMI Exposure set to %d.\r\n", (uint32_t)val);
+		}
+		if(routeMipi == true) {
+			// cameraMipi.GetSensor().SetBrightness((int8_t)val);
+		}
+		return true;
+	}
 	
 	if(strcmp(action, "brightness") == 0 && count >= 3) {
 		if(routeDcmi == true) {
-			cameraSD.GetSensor().SetBrightness((int8_t)val);
+			// cameraSD.GetSensor().SetBrightness((int8_t)val);
 			Logger::Instance().Printf("DCMI Brightness set to %d.\r\n", (int8_t)val);
 		}
 		if(routeMipi == true) {
@@ -94,7 +140,7 @@ static bool CommandCam(const char* args) {
 	
 	if(strcmp(action, "contrast") == 0 && count >= 3) {
 		if(routeDcmi == true) {
-			cameraSD.GetSensor().SetContrast((uint8_t)val);
+			// cameraSD.GetSensor().SetContrast((uint8_t)val);
 			Logger::Instance().Printf("DCMI Contrast set to %u.\r\n", (uint8_t)val);
 		}
 		return true;
@@ -119,7 +165,7 @@ static bool CommandCam(const char* args) {
 		}
 
 		if(routeDcmi == true) {
-			cameraSD.GetSensor().SetBandingFilter(filter);
+			// cameraSD.GetSensor().SetBandingFilter(filter);
 			Logger::Instance().Printf("DCMI Flicker filter set to %s.\r\n", filterName);
 		}
 		return true;

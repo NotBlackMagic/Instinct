@@ -1,10 +1,10 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Vision/imageWriter.hpp
- * Author:  NotBlackMagic
- * Brief:   Stateless utility class for formatting and saving static images to storage.
+ * File:	Instinct/Modules/Vision/imageWriter.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Stateless utility class for formatting and saving static images to storage.
  */
 
 #pragma once

@@ -23,6 +23,8 @@ class InEKF {
 		/// @brief Constructor.
 		InEKF();
 
+		void InitializeState(uint64_t timestampUs);
+
 		/// @brief Initializes the Magnetometer reference. Should be called after EKF first stabiles with level drone. Updates the magRefNed with passed and oriented magnetometer readings.
 		/// @param magInit The stable and level magnetometer readings.
 		/// @return Status::Ok if initialization succeeded.
@@ -50,6 +52,9 @@ class InEKF {
 		/// @return Status::Ok if update succeeded.
 		Status UpdateBaro(float pressure);
 
+		Status UpdateRange(float rangeMeters);
+		Status UpdateOpticalFlow(const float flowRate[2], const float gyro[3], float rangeMeters, float quality);
+
 		/// @brief Gets the quaternion orientation estimate.
 		/// @return Quaternion orientation estimate.
 		Quaternion GetQuaternion() const;
@@ -69,6 +74,10 @@ class InEKF {
 		/// @brief Gets the accelerometer bias estimate.
 		/// @return Accelerometer bias estimate.
 		Vector3f GetAccelBias() const;
+
+		/// @brief Gets the if EKF is initialized.
+		/// @return Initialization status.
+		bool IsInitialized() const { return isInitialized; }
 		
 		/// @brief Gets the if EKF estimate has converged.
 		/// @return Converged status.
@@ -103,7 +112,9 @@ class InEKF {
 		float gyroBiasWalkVar;
 		float accelBiasWalkVar;
 
-		// Private Helper Functions
-		void InitializeState(uint64_t timestampUs);
+		// Private Helper Function
 		void NormalizeRotation();
+		void ApplyErrorState(const float delta[15]);
+		Status UpdateVerticalPosition(float measuredDownPos, float rNoise);
+		void MirrorCovarianceLower();
 };

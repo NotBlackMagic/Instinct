@@ -27,16 +27,20 @@ MEMORY
 {
 	ITCM	(rx)	: ORIGIN = 0x10000000,	LENGTH = 128K
 	DTCM	(rw)	: ORIGIN = 0x30000000,	LENGTH = 128K
+
+	/* AXISRAM2 Total: 512K (0x34180000 - 0x34200000)
+	* 0x34180000 - 0x341803FF: Reserved for FSBL Header (1K)
+	* 0x34180400 - 0x341D3FFF: ROM (Code + RoData) = 335K
+	* 0x341D4000 - 0x341FFFFF: RAM (Data + BSS + Stacks) = 176K
+	*/
 	/*
 	ROM		(xrw)	: ORIGIN = 0x34180400,	LENGTH = 255K
 	RAM		(xrw)	: ORIGIN = 0x341C0000,	LENGTH = 256K
 	*/
-	/*
-	ROM     (xrw)   : ORIGIN = 0x34180400,  LENGTH = 280K
-	RAM     (xrw)   : ORIGIN = 0x341C6400,  LENGTH = 231K
-	*/
-	ROM     (xrw)   : ORIGIN = 0x34180400,  LENGTH = 358K
-	RAM     (xrw)   : ORIGIN = 0x341D9C00,  LENGTH = 153K
+	/* ROM     (xrw)   : ORIGIN = 0x34180400,  LENGTH = 300K
+    RAM     (xrw)   : ORIGIN = 0x341CB400,  LENGTH = 211K */
+	ROM     (xrw)   : ORIGIN = 0x34180400,  LENGTH = 350K
+    RAM     (xrw)   : ORIGIN = 0x341D7C00,  LENGTH = 161K
 }
 
 /* Memories definition (Run in XIP mode from HyperFlash/XSPI2) */
@@ -53,7 +57,7 @@ _ram_capacity = LENGTH(RAM);
 SECTIONS
 {
 	/* Mark the absolute start of ROM */
-    _srom = ORIGIN(ROM);
+	_srom = ORIGIN(ROM);
 
 	/* The startup code into "RAM" Ram type memory */
 	.isr_vector :
@@ -159,10 +163,8 @@ SECTIONS
 		_sdata = .;		/* create a global symbol at data start */
 		*(.data)		/* .data sections */
 		*(.data*)		/* .data* sections */
-
 		. = ALIGN(4);
 		_edata = .;		/* define a global symbol at data end */
-
 	} >RAM AT> ROM
 
 	/* The absolute end of the ROM payload is the Load Address (LMA) of .data plus its size */

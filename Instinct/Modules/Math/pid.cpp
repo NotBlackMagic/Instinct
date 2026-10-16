@@ -15,6 +15,7 @@ PID::PID() {
 Status PID::Init(const Config& config) {
 	this->config = config;
 	Reset();
+	return Status::Ok;
 }
 
 void PID::Reset() {

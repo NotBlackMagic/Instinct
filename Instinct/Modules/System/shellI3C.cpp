@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/System/shellI3C.cpp
  */
@@ -8,14 +8,14 @@
 #include "shellModules.hpp"
 
 static void PrintHelp() {
-	Logger::Instance().Write("--- I3C Diagnostic Commands ---\r\n");
+	Logger::Instance().Write("--- I3C Commands ---\r\n");
 	Logger::Instance().Write("  i3c scan [bus]                      - Scan specific bus or all available buses (Legacy I2C mode)\r\n");
 	Logger::Instance().Write("  i3c read <bus> <addr> <reg> [len]   - Read registers via Legacy I2C (addr/reg in hex, len max 64)\r\n");
 	Logger::Instance().Write("  i3c write <bus> <addr> <reg> <b0>.. - Write 1-8 data bytes to register (hex)\r\n");
 	Logger::Instance().Write("  i3c dump <bus> <addr> [start] [len] - Hexdump memory map (defaults 0x00 32, max 128)\r\n");
 	Logger::Instance().Write("  i3c stats <bus>                     - Bus transfer and error counters\r\n");
 	Logger::Instance().Write("  i3c reset <bus>                     - Reset I3C telemetry counters\r\n");
-	Logger::Instance().Write("-------------------------------\r\n");
+	Logger::Instance().Write("--------------------\r\n");
 }
 
 static I3C* GetI3CBus(uint8_t busId) {
@@ -261,7 +261,7 @@ static bool CommandI3C(const char* args) {
 			}
 		}
 		else {
-			Logger::Instance().Write("Usage: i2c stats <bus>\r\n");
+			Logger::Instance().Write("Usage: i3c stats <bus>\r\n");
 		}
 		return true;
 	}

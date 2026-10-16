@@ -8,16 +8,16 @@
 #include "radioThread.hpp"
 
 TX_THREAD RadioThread::threadPtr;
-uint8_t RadioThread::threadStack[4096];
+__attribute__((aligned(32))) uint8_t RadioThread::threadStack[RadioThread::threadStackSize];
 
 static Topic<RCMsg> topicRC("rcMain", static_cast<uint8_t>(TopicID::RC), 0);
 static Topic<ManualControlMsg> topicManualControl("manualControl", static_cast<uint8_t>(TopicID::ManualControl), 0);
 
 void RadioThread::Init() {
-	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("ACQ_Radio"),
+	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("RC Radio"),
 										RadioThread::Run, 0,
 										threadStack, sizeof(threadStack),
-										2, 0,
+										2, 2,
 										TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX ACQ Radio Thread Create Failed.");
@@ -27,6 +27,9 @@ void RadioThread::Init() {
 }
 
 void RadioThread::Run(ULONG input) {
+	(void)input;
+	LOG_INFO("Radio Thread Initialized.");
+
 	RCMsg rcMsg;
 	ManualControlMsg controlMsg;
 	RCReceiver::ChannelData data;
@@ -34,8 +37,6 @@ void RadioThread::Run(ULONG input) {
 
 	// Setup Telemetry Subscribers (for outbound telemetry)
 	// Subscriber<BatteryMsg> subBattery(TopicID::Battery);
-
-	LOG_INFO("Radio Thread Initialized.");
 
 	// Fetch Dynamic Configuration
 	// RadioThread::Config threadConfig = SystemSettings::GetRadioConfig();

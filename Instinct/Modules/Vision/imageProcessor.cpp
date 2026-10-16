@@ -1,8 +1,8 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Vision/imageProcessor.cpp
+ * File:	Instinct/Modules/Vision/imageProcessor.cpp
  */
 
 #include "imageProcessor.hpp"
@@ -127,9 +127,9 @@ Status ImageProcessor::YUYVToMCU422(const VisionFrame& input, VisionFrame& outpu
 				for(uint32_t col = 0; col < 16; col += 2) {
 					// Extract the 4 bytes for this macropixel
 					uint8_t y0 = inBuf[inOffset];		// Y0
-					uint8_t u  = inBuf[inOffset + 1];	// U
+					uint8_t u = inBuf[inOffset + 1];	// U
 					uint8_t y1 = inBuf[inOffset + 2];	// Y1
-					uint8_t v  = inBuf[inOffset + 3];	// V
+					uint8_t v = inBuf[inOffset + 3];	// V
 
 					// Route the Y pixels to the correct 8x8 block
 					if(col < 8) {
@@ -197,9 +197,9 @@ Status ImageProcessor::UYVYToMCU422(const VisionFrame& input, VisionFrame& outpu
 				for(uint32_t col = 0; col < 16; col += 2) {
 					// Extract the 4 bytes for this macropixel
 					uint8_t u = inBuf[inOffset];		// U
-					uint8_t y0  = inBuf[inOffset + 1];	// Y0
+					uint8_t y0 = inBuf[inOffset + 1];	// Y0
 					uint8_t v = inBuf[inOffset + 2];	// V
-					uint8_t y1  = inBuf[inOffset + 3];	// Y1
+					uint8_t y1 = inBuf[inOffset + 3];	// Y1
 
 					// Route the Y pixels to the correct 8x8 block
 					if(col < 8) {
@@ -267,9 +267,9 @@ Status ImageProcessor::YVYUToMCU422(const VisionFrame& input, VisionFrame& outpu
 				for(uint32_t col = 0; col < 16; col += 2) {
 					// Extract the 4 bytes for this macropixel
 					uint8_t y0 = inBuf[inOffset];		// Y0
-					uint8_t v  = inBuf[inOffset + 1];	// V
+					uint8_t v = inBuf[inOffset + 1];	// V
 					uint8_t y1 = inBuf[inOffset + 2];	// Y1
-					uint8_t u  = inBuf[inOffset + 3];	// U
+					uint8_t u = inBuf[inOffset + 3];	// U
 
 					// Route the Y pixels to the correct 8x8 block
 					if(col < 8) {
@@ -326,12 +326,12 @@ Status ImageProcessor::NV12ToMCU420(const VisionFrame& input, VisionFrame& outpu
 		for(uint32_t mcuX = 0; mcuX < hMCUCount; mcuX++) {
 			
 			uint8_t* currentMcuBase = outBuf + (mcuIndex * 384);
-			uint8_t* destY0 = currentMcuBase;             // Top-left Y (64 bytes)
-			uint8_t* destY1 = currentMcuBase + 64;        // Top-right Y (64 bytes)
-			uint8_t* destY2 = currentMcuBase + 128;       // Bottom-left Y (64 bytes)
-			uint8_t* destY3 = currentMcuBase + 192;       // Bottom-right Y (64 bytes)
-			uint8_t* destCb = currentMcuBase + 256;       // Cb (64 bytes)
-			uint8_t* destCr = currentMcuBase + 320;       // Cr (64 bytes)
+			uint8_t* destY0 = currentMcuBase;		// Top-left Y (64 bytes)
+			uint8_t* destY1 = currentMcuBase + 64;	// Top-right Y (64 bytes)
+			uint8_t* destY2 = currentMcuBase + 128;	// Bottom-left Y (64 bytes)
+			uint8_t* destY3 = currentMcuBase + 192;	// Bottom-right Y (64 bytes)
+			uint8_t* destCb = currentMcuBase + 256;	// Cb (64 bytes)
+			uint8_t* destCr = currentMcuBase + 320;	// Cr (64 bytes)
 
 			// Extract the 16x16 Y component into four 8x8 blocks
 			for(uint32_t row = 0; row < 16; row++) {
@@ -367,8 +367,8 @@ Status ImageProcessor::NV12ToMCU420(const VisionFrame& input, VisionFrame& outpu
 
 				for(uint32_t col = 0; col < 8; col++) {
 					// NV12 Layout: U, V, U, V...
-					*destCb++ = uvPlane[uvOffset + (col * 2)];      // U
-					*destCr++ = uvPlane[uvOffset + (col * 2) + 1];  // V
+					*destCb++ = uvPlane[uvOffset + (col * 2)];		// U
+					*destCr++ = uvPlane[uvOffset + (col * 2) + 1];	// V
 				}
 			}
 			mcuIndex++;
@@ -411,12 +411,12 @@ Status ImageProcessor::NV21ToMCU420(const VisionFrame& input, VisionFrame& outpu
 		for(uint32_t mcuX = 0; mcuX < hMCUCount; mcuX++) {
 			
 			uint8_t* currentMcuBase = outBuf + (mcuIndex * 384);
-			uint8_t* destY0 = currentMcuBase;             // Top-left Y (64 bytes)
-			uint8_t* destY1 = currentMcuBase + 64;        // Top-right Y (64 bytes)
-			uint8_t* destY2 = currentMcuBase + 128;       // Bottom-left Y (64 bytes)
-			uint8_t* destY3 = currentMcuBase + 192;       // Bottom-right Y (64 bytes)
-			uint8_t* destCb = currentMcuBase + 256;       // Cb (64 bytes)
-			uint8_t* destCr = currentMcuBase + 320;       // Cr (64 bytes)
+			uint8_t* destY0 = currentMcuBase;		// Top-left Y (64 bytes)
+			uint8_t* destY1 = currentMcuBase + 64;	// Top-right Y (64 bytes)
+			uint8_t* destY2 = currentMcuBase + 128;	// Bottom-left Y (64 bytes)
+			uint8_t* destY3 = currentMcuBase + 192;	// Bottom-right Y (64 bytes)
+			uint8_t* destCb = currentMcuBase + 256;	// Cb (64 bytes)
+			uint8_t* destCr = currentMcuBase + 320;	// Cr (64 bytes)
 
 			// Extract the 16x16 Y component into four 8x8 blocks
 			for(uint32_t row = 0; row < 16; row++) {
@@ -452,8 +452,8 @@ Status ImageProcessor::NV21ToMCU420(const VisionFrame& input, VisionFrame& outpu
 
 				for(uint32_t col = 0; col < 8; col++) {
 					// NV21 Layout: V, U, V, U...
-					*destCr++ = uvPlane[uvOffset + (col * 2)];      // V (Cr) is first
-					*destCb++ = uvPlane[uvOffset + (col * 2) + 1];  // U (Cb) is second
+					*destCr++ = uvPlane[uvOffset + (col * 2)];		// V (Cr) is first
+					*destCb++ = uvPlane[uvOffset + (col * 2) + 1];	// U (Cb) is second
 				}
 			}
 			mcuIndex++;
@@ -483,9 +483,9 @@ Status ImageProcessor::YUV444ToMCU444(const VisionFrame& input, VisionFrame& out
 		for(uint32_t mcuX = 0; mcuX < hMCUCount; mcuX++) {
 			
 			uint8_t* currentMcuBase = outBuf + (mcuIndex * 192);
-			uint8_t* destY  = currentMcuBase;             // First 64 bytes
-			uint8_t* destCb = currentMcuBase + 64;        // Next 64 bytes
-			uint8_t* destCr = currentMcuBase + 128;       // Final 64 bytes
+			uint8_t* destY = currentMcuBase;		// First 64 bytes
+			uint8_t* destCb = currentMcuBase + 64;	// Next 64 bytes
+			uint8_t* destCr = currentMcuBase + 128;	// Final 64 bytes
 
 			for(uint32_t row = 0; row < 8; row++) {
 				uint32_t globalY = (mcuY * 8) + row;
@@ -495,7 +495,7 @@ Status ImageProcessor::YUV444ToMCU444(const VisionFrame& input, VisionFrame& out
 				uint32_t inOffset = (globalY * width * 3) + (globalX * 3);
 				
 				for(uint32_t col = 0; col < 8; col++) {
-					*destY++  = inBuf[inOffset];
+					*destY++ = inBuf[inOffset];
 					*destCb++ = inBuf[inOffset + 1];
 					*destCr++ = inBuf[inOffset + 2];
 					inOffset += 3;

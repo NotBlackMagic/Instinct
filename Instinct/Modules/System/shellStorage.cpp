@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/System/shellStorage.cpp
  */
@@ -64,8 +64,8 @@ static bool CommandStorage(const char* args) {
 		Logger::Instance().Write("[FILESYSTEM]\r\n");
 		if(StorageThread::IsReady() && StorageThread::GetMedia() != nullptr) {
 			FX_MEDIA* media = StorageThread::GetMedia();
-			ULONG freeBytes = 0;
-			fx_media_space_available(media, &freeBytes);
+			ULONG64 freeBytes = 0;
+			fx_media_extended_space_available(media, &freeBytes);
 
 			uint64_t totalBytes = static_cast<uint64_t>(media->fx_media_total_sectors) * media->fx_media_bytes_per_sector;
 			uint32_t usedPct = (totalBytes > 0) ? static_cast<uint32_t>(((totalBytes - freeBytes) * 100) / totalBytes) : 0;
@@ -84,6 +84,25 @@ static bool CommandStorage(const char* args) {
 		Logger::Instance().Write("[SD CARD]\r\n");
 		if(card.sizeBytes > 0) {
 			const char* specStr = (card.specVersion == 0) ? "1.0" : (card.specVersion == 1) ? "1.1" : "2.0+";
+
+			// Video Speed Classes [Min. Continuouse Write Speeds]: 
+			// V6  [6 MB/s]
+			// V10 [10 MB/s]
+			// V30 [30 MB/s]
+			// V60 [60 MB/s]
+			// V90 [90 MB/s]
+			// UHS Speed Classes [Min. Continuouse Write Speeds]:
+			// U1 [10 MB/s]
+			// U3 [30 MB/s]
+			// Speed Classes [Min. Continuouse Write Speeds]:
+			// C2  [2 MB/s]
+			// C4  [4 MB/s]
+			// C6  [6 MB/s]
+			// C10 [10 MB/s]
+			// Application Performance Classes [Min. Random Read; Min Random Write; Min. Sustained Sequetial Write]
+			// IOPS: Number of 4 KByte read or write commands per second
+			// A1 [1500 IOPS;  500 IOPS; 10 MB/s]
+			// A2 [4000 IOPS; 2000 IOPS; 10 MB/s]
 
 			Logger::Instance().Printf("  Card Name:   %s (Rev %u.%u)\r\n", card.cardName, (card.revision >> 4) & 0x0F, card.revision & 0x0F);
 			Logger::Instance().Printf("  Identity:    MID: 0x%02X, OID: 0x%04X, PSN: 0x%08lX\r\n", card.manufacturerID, card.oemID, card.serialNumber);

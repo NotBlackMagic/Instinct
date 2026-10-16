@@ -1,10 +1,10 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Vision/cameraDCMI.hpp
- * Author:  NotBlackMagic
- * Brief:   
+ * File:	Instinct/Modules/Vision/cameraDCMI.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Helper class to acquire frames over DCMI. Wraps camera sensor driver and DCMI under one master class.
  */
 
 #pragma once
@@ -27,12 +27,22 @@
 
 class CameraDCMI {
 	public:
+		/// @brief DCMI events
+		enum class Event : uint8_t {
+			FrameComplete = 0,
+			Error
+		};
+
 		/// @brief Configuration structure for the SD/DCMI Camera Pipeline.
 		struct Config {
 			uint16_t width;			///< Image width in pixels.
 			uint16_t height;		///< Image height in pixels.
 			PixelFormat format;		///< Pixel format.
 			uint32_t fps;			///< Frame rate.
+
+			// Callbacks
+			void (*EventCallback)(void* ctx, Event evt) = nullptr;
+			void* callbackContext = nullptr;
 		};
 
 		// Delete copy constructors
@@ -42,7 +52,7 @@ class CameraDCMI {
 		/// @brief Constructor.
 		/// @param dcmi Reference to the low-level bus driver.
 		/// @param sensor Reference to camera sensor driver. 
-		CameraDCMI(Dcmi &dcmi, OV7670 &sensor, DMAChannel &dma) : dcmiInterface(dcmi), sensor(sensor), dmaChannel(dma) {};
+		CameraDCMI(Dcmi &dcmi, OV9281 &sensor, DMAChannel &dma) : dcmiInterface(dcmi), sensor(sensor), dmaChannel(dma) {};
 
 		/// @brief Initializes the sensor, DCMI peripheral, and DMA pipelines.
 		/// @param config The requested resolution and format settings.
@@ -65,13 +75,17 @@ class CameraDCMI {
 
 		/// @brief Expose a reference to the sensor
 		/// @return Camera instance.
-		OV7670& GetSensor() { return sensor; }
+		OV9281& GetSensor() { return sensor; }
 
 	private:
 		Dcmi& dcmiInterface;
-		OV7670& sensor;
+		// OV7670& sensor;
+		OV9281& sensor;
 		DMAChannel& dmaChannel;
+		Config config;
 
 		// Capture context
 		VisionFrame* frame;
+
+		static void OnDMAComplete(void* ctx, Status status);
 };

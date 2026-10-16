@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
  *
- * File:    Instinct/Modules/Acquisitions/radioThread.hpp
- * Author:  NotBlackMagic
- * Brief:   Radio receiver polling and publishing thread.
+ * File:	Instinct/Modules/Acquisitions/radioThread.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Radio receiver polling and publishing thread.
  */
 
 #pragma once
@@ -38,10 +38,11 @@ class RadioThread {
 
 	private:
 		static TX_THREAD threadPtr;
-		static uint8_t threadStack[4096];
+		static const uint16_t threadStackSize = 4096;
+		__attribute__((aligned(32))) static uint8_t threadStack[threadStackSize];
 
 		static void Run(ULONG input);
 
-        static float NormalizeBidirectional(uint16_t raw, uint16_t deadband);
-        static float NormalizeUnidirectional(uint16_t raw);
+		static float NormalizeBidirectional(uint16_t raw, uint16_t deadband);
+		static float NormalizeUnidirectional(uint16_t raw);
 };

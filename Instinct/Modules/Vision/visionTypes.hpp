@@ -1,10 +1,10 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Vision/visionTypes.hpp
- * Author:  NotBlackMagic
- * Brief:   
+ * File:	Instinct/Modules/Vision/visionTypes.hpp
+ * Author:	NotBlackMagic
+ * Brief:	Shared/general enum classes defines for the vision system.
  */
 
 #pragma once
