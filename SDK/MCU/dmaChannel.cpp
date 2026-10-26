@@ -10,7 +10,7 @@
 DMAChannel::DMAChannel(DMA_TypeDef *instance, uint8_t channelIndex) {
 	this->instance = instance;
 	this->channelIndex = channelIndex & 0x0F; // Limit channel numer to 15
-	this->irqPriority = 0x02; 	// High priority
+	this->irqPriority = 0x05; 	// Higher priority
 }
 
 Status DMAChannel::Init(const Config& config) {

@@ -27,6 +27,14 @@
 
 class CameraMIPI {
 	public:
+		/// @brief Camera pipeline and throughput statistics.
+		struct Statistics {
+			uint32_t frames = 0;
+			uint32_t drops = 0;
+			uint32_t errors = 0;
+			float fps = 0.0f;
+		};
+
 		/// @brief Configuration structure for the HD/MIPI-CSI Camera Pipeline.
 		struct Config {
 			uint16_t width;			///< Image width in pixels.
@@ -75,11 +83,23 @@ class CameraMIPI {
 		/// @brief Retrieve hardware-level timing statistics for the CSI interface.
 		Csi::Statistics GetCSIStatistics() const { return csiInterface.GetStatistics(); }
 
+		/// @brief Returns pipeline performance statistics.
+		Statistics GetStatistics() const { return this->stats; }
+
+		/// @brief Resets pipeline statistics counters.
+		void ResetStatistics() {
+			this->stats = {};
+			this->lastUs = 0;
+		}
+
 	private:
 		Csi& csiInterface;
 		Dcmipp& dcmiPPInterface;
 		OV5645& sensor;
 		DMAChannel& dmaChannel;
+
+		Statistics stats = {};
+		uint32_t lastUs = 0;
 
 		// Capture context
 		enum class Mode { Idle, Snapshot, Continuous, Partial };

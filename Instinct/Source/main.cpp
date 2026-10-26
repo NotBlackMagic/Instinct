@@ -192,8 +192,8 @@ void tx_application_define(void *first_unused_memory) {
 	MavlinkThread::Init();
 	SensorHubThread::Init();
 	EstimatorThread::Init();
-	// ControllerThread::Init();
-	// CommanderThread::Init();
+	ControllerThread::Init();
+	CommanderThread::Init();
 	// ActuatorThread::Init();
 
 	// Configure blackbox (data logging to SD card) logging profile
@@ -247,6 +247,7 @@ int main(void) {
 	System::EnableCache();
 	System::EnableAXISRAM();
 	System::EnableVENCSRAM();
+	System::ConfigureRIF();
 	Time::Init();
 
 	// Wait for debugger connection, for USB DFU mode with Hot-Plug connection: Loops until ST-LINK attaches and hardware sets C_DEBUGEN

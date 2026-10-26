@@ -32,7 +32,7 @@ void MavlinkThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Mavlink"),
 										MavlinkThread::Run, 0,
 										threadStack, sizeof(threadStack),
-										5, 0,
+										6, 6,
 										TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Mavlink Thread Create Failed.");
@@ -96,11 +96,11 @@ void MavlinkThread::Run(ULONG input) {
 
 				switch(static_cast<Stream>(i)) {
 					case Stream::Heartbeat:
-						SendHeartbeat(telem2);
+						SendHeartbeat(gps1);
 						break;
 					case Stream::Attitude:
 						if(topicState->Peek(stateMsg)) {
-							SendAttitude(telem2, stateMsg);
+							SendAttitude(gps1, stateMsg);
 						}
 						break;
 					case Stream::HighresIMU:
@@ -111,12 +111,12 @@ void MavlinkThread::Run(ULONG input) {
 							if(topicVirtualBaro != nullptr) {
 								topicVirtualBaro->Peek(baroMsg);
 							}
-							SendHighresIMU(telem2, imuMsg, magMsg, baroMsg);
+							SendHighresIMU(gps1, imuMsg, magMsg, baroMsg);
 						}
 						break;
 					case Stream::DistanceSensor:
 						if(topicRange != nullptr && topicRange->Peek(rangeMsg)) {
-							SendDistanceSensor(telem2, rangeMsg);
+							SendDistanceSensor(gps1, rangeMsg);
 						}
 						break;
 					case Stream::OpticalFlow:
@@ -125,7 +125,7 @@ void MavlinkThread::Run(ULONG input) {
 							if(topicRange != nullptr && topicRange->Peek(rangeMsg)) {
 								groundDistance = rangeMsg.distance;
 							}
-							SendOpticalFlow(telem2, flowMsg, groundDistance);
+							SendOpticalFlow(gps1, flowMsg, groundDistance);
 						}
 						break;
 					default:
@@ -135,13 +135,13 @@ void MavlinkThread::Run(ULONG input) {
 		}
 
 		// Handle inbound MAVLink parameter requests from QGC (Mavlink RX parsing)
-		uint32_t bytesAvailable = telem2.Available();
+		uint32_t bytesAvailable = gps1.Available();
 		if(bytesAvailable > 0) {
 			uint8_t rxBuffer[128];
 			uint32_t bytesToRead = (bytesAvailable > sizeof(rxBuffer)) ? sizeof(rxBuffer) : bytesAvailable;
 			
 			// Get/read bytes from the UART buffer
-			uint32_t bytesRead = telem2.Receive(rxBuffer, bytesToRead);
+			uint32_t bytesRead = gps1.Receive(rxBuffer, bytesToRead);
 
 			// Feed received buffer byte-by-byte into the official MAVLink parser
 			mavlink_message_t rxMsg;

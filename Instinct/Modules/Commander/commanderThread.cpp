@@ -37,7 +37,7 @@ void CommanderThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Commander"),
 													CommanderThread::Run, 0,
 													threadStack, sizeof(threadStack),
-													3, 0, 
+													4, 4, 
 													TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX CMD Logic Thread Create Failed.");

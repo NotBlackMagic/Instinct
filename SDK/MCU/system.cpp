@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	SDK/MCU/system.cpp
  */
@@ -360,6 +360,11 @@ void System::DisableSysTick(void) {
 	LL_SYSTICK_DisableIT();
 }
 
+void System::ConfigureFLEXMEM(ITCMSize itcmSize, DTCMSize dtcmSize) {
+	// Set ITCM and DTCM sizes. Values above smallest size gets allocated from the AXISRAM1 lower words.
+	MODIFY_REG(SYSCFG->CM55TCMCR, SYSCFG_CM55TCMCR_CFGITCMSZ | SYSCFG_CM55TCMCR_CFGDTCMSZ, (static_cast<uint32_t>(itcmSize) << SYSCFG_CM55TCMCR_CFGITCMSZ_Pos) | (static_cast<uint32_t>(dtcmSize) << SYSCFG_CM55TCMCR_CFGDTCMSZ_Pos));
+}
+
 void System::EnableAXISRAM(void) {
 	// By default enabled: FLEXRAM, AXISRAM1, AXISRAM2, BKPSRAM, AHBSRAM1, AHBSRAM2
 	// By default disabled: AXISRAM3, AXISRAM4, AXISRAM5, AXISRAM6, VENCRAM, CACHEAXIRAM
@@ -374,6 +379,43 @@ void System::EnableAXISRAM(void) {
 void System::EnableVENCSRAM(void) {
 	// Init VENCRAM
 	LL_MEM_EnableClock(LL_MEM_VENCRAM);
+}
+
+void System::ConfigureRIF(void) {
+	LL_AHB3_GRP1_EnableClock(LL_AHB3_GRP1_PERIPH_RIFSC);
+	LL_AHB3_GRP1_EnableClock(LL_AHB3_GRP1_PERIPH_RISAF);
+
+	// RIF configuration
+	const uint32_t RIF_CID = 0x0F;	// Allow ALL i.e RW for everyone
+	const uint32_t RIF_CID_NONE = 0x00000000U;
+	constexpr uint32_t RIF_ATTRIBUTE_SEC = 0x00000001U;
+
+	// RIF configuration (CPU ASISRAM0)
+	RISAF2->REG[0].STARTR = 0x0;
+	RISAF2->REG[0].ENDR = 0xFFFFFFFFU;		// Full region
+	RISAF2->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
+	RISAF2->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos) | (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
+	// RIF configuration (CPU ASISRAM1)
+	RISAF3->REG[0].STARTR = 0x0;
+	RISAF3->REG[0].ENDR = 0xFFFFFFFFU;		// Full region
+	RISAF3->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
+	RISAF3->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos) | (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
+	
+	// // RIF configuration (NPU Master 0, part of AXISRAM3/4/5/6)
+	// RISAF4->REG[0].STARTR = 0x0;
+	// RISAF4->REG[0].ENDR = 0xFFFFFFFFU;		// Full region
+	// RISAF4->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
+	// RISAF4->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos) | (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
+	// // RIF configuration (NPU Master 1, part of AXISRAM3/4/5/6)
+	// RISAF5->REG[0].STARTR = 0x0;
+	// RISAF5->REG[0].ENDR = 0xFFFFFFFFU;		// Full region
+	// RISAF5->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
+	// RISAF5->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos) | (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
+	// // RIF configuration (CPU Master 1, part of AXISRAM3/4/5/6)
+	// RISAF6->REG[0].STARTR = 0x0;
+	// RISAF6->REG[0].ENDR = 0xFFFFFFFFU;		// Full region
+	// RISAF6->REG[0].CIDCFGR = (RIF_CID | (RIF_CID << RISAF_REGx_CIDCFGR_WRENC0_Pos));
+	// RISAF6->REG[0].CFGR = (RISAF_REGx_CFGR_BREN | (RIF_ATTRIBUTE_SEC << RISAF_REGx_CFGR_SEC_Pos) | (RIF_CID_NONE << RISAF_REGx_CFGR_PRIVC0_Pos));
 }
 
 void System::EnableDebug(void) {

@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Messaging/PubSub/topic.hpp
- * Author:  NotBlackMagic
- * Brief:   PubSub topic logic (main logic for the PubSub). Inherits from TopicBase class (for broker registration system).
+ * File:	Instinct/Modules/Messaging/PubSub/topic.hpp
+ * Author:	NotBlackMagic
+ * Brief:	PubSub topic logic (main logic for the PubSub). Inherits from TopicBase class (for broker registration system).
  */
 
 #pragma once
@@ -21,7 +21,8 @@
 #include "subscriber.hpp"
 #include "topicBase.hpp"
 
-// #define BARRIER() __asm volatile( "dmb" ::: "memory" )
+// Hardware Data Memory Barrier + Compiler Memory Clobber
+#define BARRIER() __asm volatile( "dmb" ::: "memory" )
 
 template <typename T>
 class Topic : public TopicBase {
@@ -32,12 +33,17 @@ class Topic : public TopicBase {
 		Topic(const Topic&) = delete;
 		Topic& operator=(const Topic&) = delete;
 
-		void Subscribe(Subscriber<T>* sub) {
+		/// @brief Subscribe to this topic.
+		/// @param sub Pointer to subscriber instance.
+		/// @param enableEvent Set true if thread blocks with TX_WAIT_FOREVER/timeout; false if only polling with TX_NO_WAIT.
+		bool Subscribe(Subscriber<T>* sub, bool enableEvent = true) {
 			if(sub == nullptr) {
-				return;
+				return false;
 			}
 
-			sub->init();
+			if(sub->Init(enableEvent) == false) {
+				return false;
+			}
 
 			// Enter Critical Section
 			UINT state = tx_interrupt_control(TX_INT_DISABLE);
@@ -47,7 +53,7 @@ class Topic : public TopicBase {
 			while(curr) {
 				if(curr == sub) {
 					tx_interrupt_control(state);
-					return; 
+					return true; 
 				}
 				curr = curr->next;
 			}
@@ -60,6 +66,8 @@ class Topic : public TopicBase {
 
 			// Exit Critical Section
 			tx_interrupt_control(state);
+
+			return true;
 		}
 
 		void Unsubscribe(Subscriber<T>* sub) {
@@ -104,9 +112,11 @@ class Topic : public TopicBase {
 				subCount = subCount - 1; 
 				
 				// Clean up the event group
-				// This will wake up any thread waiting on this event with TX_DELETED
-				tx_event_flags_delete(&sub->eventGroup);
-				sub->isValid = false;
+				if(sub->isValid == true) {
+					// This will wake up any thread waiting on this event with TX_DELETED
+					tx_event_flags_delete(&sub->eventGroup);
+					sub->isValid = false;
+				}
 			}
 
 			// Exit Critical Section
@@ -117,10 +127,12 @@ class Topic : public TopicBase {
 			// Capture time
 			uint64_t now = Time::GetUs();
 
+			// Enter Critical Section
+			UINT state = tx_interrupt_control(TX_INT_DISABLE);
+
 			// Calculate Rate (Period)
 			if(publishTimestamp != 0) {
 				uint32_t delta = (uint32_t)(now - publishTimestamp);
-				
 				if(averagePeriodUs == 0) {
 					averagePeriodUs = delta; // Seed the average on first real delta
 				}
@@ -131,26 +143,25 @@ class Topic : public TopicBase {
 			}
 
 			// Increment Version (Odd number = "I am writing")
-			// version = version + 1;
 			version.fetch_add(1, std::memory_order_relaxed);
 
-			// Barrier: Ensure version increment lands before data write starts
-			// BARRIER();
-			std::atomic_thread_fence(std::memory_order_release);
+			BARRIER();
+
 			// Copy Data
 			data = msg;
 			// Update Stats
-			msgCount += 1;
+			msgCount = msgCount + 1;
 			publishTimestamp = now;
-			// Barrier: Ensure data write finishes before version increments again
-			// BARRIER();
-			std::atomic_thread_fence(std::memory_order_release);
+
+			BARRIER();
 
 			// Increment Version (Even number = "I am done")
-			// version += 1;
 			version.fetch_add(1, std::memory_order_relaxed);
 
-			// Logging hook
+			// Exit Critical Section
+			tx_interrupt_control(state);
+
+			// Binary SD Logging hook
 			if(logEnabled == true) {
 				if(logPeriodUs == 0 || (now - lastLogTimestamp) >= logPeriodUs) {
 					lastLogTimestamp = now;
@@ -159,15 +170,17 @@ class Topic : public TopicBase {
 				}
 			}
 
-			// Notify all subscribers
+			// Notify blocking subscribers only
 			Subscriber<T>* curr = head;
 			while (curr != nullptr) {
-				tx_event_flags_set(&curr->eventGroup, 0x01, TX_OR);
+				if(curr->useEvent == true && curr->isValid == true) {
+					tx_event_flags_set(&curr->eventGroup, 0x01, TX_OR);
+				}
 				curr = curr->next;
 			}
 		}
 
-		bool Peek(T& msg) {
+		bool Peek(T& msg, uint32_t* outVersion = nullptr) {
 			uint32_t v1, v2;
 			uint8_t retries = 0;
 			const uint8_t maxRetries = 5;
@@ -176,17 +189,25 @@ class Topic : public TopicBase {
 				retries += 1;
 								
 				v1 = version.load(std::memory_order_acquire);
-				// If odd, publisher is currently writing. Try again.
+				// If odd (writing) or 0 (never published), abort/retry
+				if(v1 == 0) {
+					return false;
+				}
 				if(v1 & 1) {
+					BARRIER();
 					continue;
-				} 
+				}
 
+				BARRIER();
 				msg = data;
-				std::atomic_thread_fence(std::memory_order_acquire);
-				v2 = version.load(std::memory_order_relaxed);
+				BARRIER();
 
+				v2 = version.load(std::memory_order_relaxed);
 				// If versions match, the read was clean!
 				if (v1 == v2) {
+					if(outVersion != nullptr) {
+						*outVersion = v1;
+					}
 					return true;
 				}
 			}
@@ -194,8 +215,48 @@ class Topic : public TopicBase {
 			return false;
 		}
 
+		/// @brief Lock-free check if new data was published since last check (consumes update).
+		bool HasUpdate(Subscriber<T>* sub) {
+			if(sub == nullptr) {
+				return false;
+			}
+
+			uint32_t currentVer = version.load(std::memory_order_acquire);
+			// Return false if never published (0), unchanged, or currently mid-write (odd)
+			if(currentVer == 0 || currentVer == sub->lastVersion || (currentVer & 1)) {
+				return false;
+			}
+
+			sub->missedUpdates = (sub->lastVersion != 0) && ((currentVer - sub->lastVersion) > 2);
+			sub->lastVersion = currentVer;
+			return true;
+		}
+
 		bool Take(Subscriber<T>* sub, T& msg, ULONG ticks) {
 			if(sub == nullptr) {
+				return false;
+			}
+
+			// Fast Lock-Free Path for TX_NO_WAIT (Zero RTOS Kernel Overhead)
+			if(ticks == TX_NO_WAIT) {
+				// Check if have new version since last call (subscriber saves its last version read)
+				uint32_t currentVer = version.load(std::memory_order_relaxed);
+				if(currentVer == sub->lastVersion || currentVer == 0) {
+					return false;
+				}
+
+				uint32_t readVer = 0;
+				if(Peek(msg, &readVer) == true) {
+					// Each Publish() increments version by 2. A jump > 2 means multiple publishes occurred.
+					sub->missedUpdates = (sub->lastVersion != 0) && ((readVer - sub->lastVersion) > 2);
+					sub->lastVersion = readVer;
+					return true;
+				}
+				return false;
+			}
+
+			// Blocking Path for threads synchronizing on this topic (e.g., TX_WAIT_FOREVER)
+			if(sub->useEvent == false || sub->isValid == false) {
 				return false;
 			}
 
@@ -203,14 +264,18 @@ class Topic : public TopicBase {
 			UINT status = tx_event_flags_get(&sub->eventGroup, 0x01, TX_OR_CLEAR, &flags, ticks);
 		
 			if(status == TX_SUCCESS) {
-				return Peek(msg);
+				uint32_t readVer = 0;
+				if(Peek(msg, &readVer) == true) {
+					sub->missedUpdates = (sub->lastVersion != 0) && ((readVer - sub->lastVersion) > 2);
+					sub->lastVersion = readVer;
+					return true;
+				}
 			}
 
 			return false;
 		}
 
 	private:
-		// volatile uint32_t version;
 		std::atomic<uint32_t> version;
 		T data;
 		Subscriber<T>* head;

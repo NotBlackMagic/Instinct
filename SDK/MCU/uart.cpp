@@ -132,22 +132,32 @@ Status UART::Transmit(uint8_t *buf, uint16_t len) {
 	}
 #endif
 
-	// Buffer copy (to internal ring buffer)
 	uint16_t tmpHead = txBufHead;
+	uint16_t tmpTail = txBufTail;
 
-	uint16_t i;
-	for(i = 0; i < len; i++) {
-		uint16_t nextHead = (tmpHead + 1) % txBufferSize;
+	// Calculate free space in ring buffer
+	uint16_t freeSpace;
+	if(tmpHead >= tmpTail) {
+		freeSpace = (txBufferSize - 1) - (tmpHead - tmpTail);
+	}
+	else {
+		freeSpace = (tmpTail - tmpHead) - 1;
+	}
 
-		// Check space against tail
-		if(nextHead != txBufTail) {
-			txBuffer[tmpHead] = buf[i];
-			tmpHead = nextHead;
+	// Reject write if payload cannot fit
+	if(len > freeSpace) {
+#if defined (USE_RTOS)
+		if(useLock == true) {
+			tx_mutex_put(&mutex);
 		}
-		else {
-			// Buffer overflow
-			break;
-		}
+#endif
+		return Status::Error;
+	}
+
+	// Buffer copy (to internal ring buffer)
+	for(uint16_t i = 0; i < len; i++) {
+		txBuffer[tmpHead] = buf[i];
+		tmpHead = (tmpHead + 1) % txBufferSize;
 	}
 
 	// Critical section!

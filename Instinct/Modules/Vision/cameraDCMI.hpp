@@ -27,6 +27,14 @@
 
 class CameraDCMI {
 	public:
+		/// @brief Camera pipeline and throughput statistics.
+		struct Statistics {
+			uint32_t frames = 0;
+			uint32_t drops = 0;
+			uint32_t dmaErrors = 0;
+			float fps = 0.0f;
+		};
+
 		/// @brief DCMI events
 		enum class Event : uint8_t {
 			FrameComplete = 0,
@@ -77,12 +85,24 @@ class CameraDCMI {
 		/// @return Camera instance.
 		OV9281& GetSensor() { return sensor; }
 
+		/// @brief Returns pipeline performance statistics.
+		Statistics GetStatistics() const { return this->stats; }
+
+		/// @brief Resets pipeline statistics counters.
+		void ResetStatistics() { 
+			this->stats = {}; 
+			this->frameTimestamp = 0;
+		}
+
 	private:
 		Dcmi& dcmiInterface;
 		// OV7670& sensor;
 		OV9281& sensor;
 		DMAChannel& dmaChannel;
+
 		Config config;
+		Statistics stats = {};
+		uint32_t frameTimestamp = 0;
 
 		// Capture context
 		VisionFrame* frame;

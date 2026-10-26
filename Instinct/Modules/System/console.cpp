@@ -24,6 +24,8 @@ void Console::Init(UART* uart) {
 	RegisterI2CCommands();
 	RegisterI3CCommands();
 	RegisterGPIOCommands();
+	RegisterParamCommands();
+	RegisterPWMCommands();
 	// RegisterSerialCommands();
 	RegisterCameraCommands();
 	// RegisterPWMCommands();

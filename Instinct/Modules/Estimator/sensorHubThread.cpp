@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/Estimation/sensorHubThread.cpp
  */
@@ -46,7 +46,7 @@ void SensorHubThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Sensor Hub"),
 													SensorHubThread::Run, 0,
 													threadStack, sizeof(threadStack),
-													2, 2,
+													3, 3,
 													TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Sensor Hub Thread Create Failed.");

@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/Math/pid.hpp
  * Author:	NotBlackMagic
@@ -28,10 +28,15 @@ class PID {
 
 		PID();
 
-		/// @brief EKF prediction.
+		/// @brief PID controller initialization.
 		/// @param config PID controller configuration.
 		/// @return Status::Ok if initialization succeeded.
 		Status Init(const Config& config);
+
+		/// @brief PID controller parameter update, without resting internal states.
+		/// @param config PID controller configuration.
+		/// @return Status::Ok if configuration change succeeded.
+		Status SetConfig(const Config& config);
 
 		/// @brief PID controller update step (runs once).
 		/// @param target 		Desired target or set point.
@@ -46,6 +51,7 @@ class PID {
 	private:
 		// PID filter configurations
 		Config config;
+		bool isFirstUpdate;
 
 		// Internal PID state tracking
 		float integSum;

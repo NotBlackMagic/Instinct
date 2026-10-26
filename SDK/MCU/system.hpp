@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	SDK/MCU/system.hpp
  * Author:	NotBlackMagic
@@ -66,6 +66,19 @@ struct System {
 		Unknown
 	};
 
+	/// @brief Defines allowable memory allocations for Cortex-M55 ITCM from FlexMem (AXISRAM1).
+	enum class ITCMSize : uint32_t {
+		Size64KB = 0x07,
+		Size128KB = 0x08,
+		Size256KB = 0x09
+	};
+
+	/// @brief Defines allowable memory allocations for Cortex-M55 DTCM from FlexMem (AXISRAM1).
+	enum class DTCMSize : uint32_t {
+		Size128KB = 0x08,
+		Size256KB = 0x09
+	};
+
 	/// @brief Initializes the overall system clock tree.
 	static void InitClock(void);
 
@@ -83,11 +96,21 @@ struct System {
 	/// @brief Disables the SysTick timer.
 	static void DisableSysTick(void);
 
+	/// @brief Partitions FLEXMEM (AXISRAM1) between ITCM, DTCM, and remaining AXI SRAM.
+	/// @note Must be called early in boot before the C runtime initializes or relocates sections to TCM/AXISRAM1.
+	/// @param itcmSize Desired ITCM allocation size.
+	/// @param dtcmSize Desired DTCM allocation size.
+	static void ConfigureFLEXMEM(ITCMSize itcmSize, DTCMSize dtcmSize);
+
 	/// @brief Enables all AXISRAM blocks.
 	static void EnableAXISRAM(void);
 
 	/// @brief Enables all VENCSRAM blocks.
 	static void EnableVENCSRAM(void);
+
+	/// @brief Configures the Resource Isolation Framework (RIF/RISAF) for all internal SRAM banks.
+	/// @note Unlocks all Compartment IDs (CIDs 0-3) for unrestricted Read/Write and clears privilege gating.
+	static void ConfigureRIF(void);
 
 	/// @brief Enables the debug interface in flash run mode.
 	static void EnableDebug(void);

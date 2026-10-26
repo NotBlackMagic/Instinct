@@ -267,11 +267,28 @@ Status CameraMIPI::CaptureWait(uint32_t timeoutTicks) {
 
 	Status status = this->dcmiPPInterface.CaptureWait(Dcmipp::PipeID::Main, timeoutTicks);
 	if(status == Status::Ok) {
+		VisionFrame* readyFrame = this->activeFrames[this->currentFrameIdx];
+
 		// Automatically invalidate the cache for whichever buffer the hardware just completed
 		if(this->currentMode != Mode::Partial) {
-			VisionFrame* readyFrame = this->activeFrames[this->currentFrameIdx];
 			System::InvalidateCache((uint32_t*)readyFrame->startAddress, readyFrame->payloadSize);
 		}
+
+		// Frame timestamp & FPS calculation
+		uint32_t nowUs = Time::GetUs();
+		if(readyFrame != nullptr) {
+			readyFrame->timestampUs = nowUs;
+		}
+		this->stats.frames = this->stats.frames + 1;
+
+		if(this->lastUs != 0) {
+			uint32_t dt = nowUs - this->lastUs;
+			if(dt > 0) {
+				float instantFps = 1000000.0f / static_cast<float>(dt);
+				this->stats.fps = (this->stats.fps == 0.0f) ? instantFps : (0.8f * this->stats.fps + 0.2f * instantFps);
+			}
+		}
+		this->lastUs = nowUs;
 
 		// State Machine Management
 		if(this->currentMode == Mode::Continuous) {
@@ -288,6 +305,8 @@ Status CameraMIPI::CaptureWait(uint32_t timeoutTicks) {
 		}
 	}
 	else {
+		this->stats.errors = this->stats.errors + 1;
+		
 		// Disable Interface
 		this->CaptureAbort();
 	}

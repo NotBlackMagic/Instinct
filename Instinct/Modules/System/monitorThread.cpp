@@ -16,7 +16,7 @@ void MonitorThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Monitor"),
 											MonitorThread::Run, 0,
 											threadStack, sizeof(threadStack),
-											0, 0,
+											1, 1,
 											TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Monitor Thread Create Failed.");

@@ -23,6 +23,13 @@
 /// @brief Driver for the DCMI peripheral.
 class Dcmi {
 	public:
+		/// @brief DCMI low-level hardware bus statistics.
+		struct Statistics {
+			uint32_t frames = 0;
+			uint32_t overruns = 0;
+			uint32_t syncErrors = 0;
+		};
+
 		/// @brief DCMI frame capture mode.
 		enum class CaptureMode {
 			Continuous,
@@ -85,6 +92,12 @@ class Dcmi {
 		/// @return Status::Ok.
 		Status Stop();
 
+		/// @brief Returns DCMI hardware statistics.
+		Statistics GetStatistics() const { return this->stats; }
+
+		/// @brief Resets DCMI statistics counters.
+		void ResetStatistics() { this->stats = {}; }
+
 		/// @brief Interrupt Service Routine handler.
 		/// @warning This function is called by the NVIC. Do not call manually.
 		void InterruptHandler();
@@ -93,4 +106,6 @@ class Dcmi {
 		DCMI_TypeDef *instance;
 		IRQn_Type irqCall;
 		uint8_t irqPriority;
+
+		Statistics stats = {};
 };

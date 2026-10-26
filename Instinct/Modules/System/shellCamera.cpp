@@ -10,6 +10,8 @@
 static void PrintHelp() {
 	Logger::Instance().Write("--- Camera Commands ---\r\n");
 	Logger::Instance().Write("  <target> info              - Return connected camera sensor info\r\n");
+	Logger::Instance().Write("  <target> stats             - Interface & hardware driver stats\r\n");
+	Logger::Instance().Write("  <target> reset             - Reset driver statistics\r\n");
 	Logger::Instance().Write("  <target> start             - Start capture\r\n");
 	Logger::Instance().Write("  <target> stop              - Stop capture\r\n");
 	Logger::Instance().Write("  <target> fps [val]         - Set camera sensor FPS\r\n");
@@ -176,6 +178,52 @@ static bool CommandCam(const char* args) {
 		if(routeDcmi == true) {
 			cameraSD.GetSensor().SetTestPattern(enable);
 			Logger::Instance().Printf("DCMI Test pattern %s.\r\n", enable ? "ENABLED" : "DISABLED");
+		}
+		return true;
+	}
+
+	if(strcmp(action, "stats") == 0) {
+		if(routeDcmi == true) {
+			CameraDCMI::Statistics camStats = cameraSD.GetStatistics();
+			Dcmi::Statistics busStats = dcmi.GetStatistics();
+
+			Logger::Instance().Write("\r\n--- DCMI CAMERA STATS ---\r\n");
+			Logger::Instance().Printf("  FPS:         %.1f\r\n", camStats.fps);
+			Logger::Instance().Printf("  Frames:      %lu (Drops: %lu, DMA Err: %lu)\r\n", camStats.frames, camStats.drops, camStats.dmaErrors);
+			Logger::Instance().Write("[HARDWARE BUS]\r\n");
+			Logger::Instance().Printf("  DCMI:        Captured: %lu, Overrun: %lu, Sync Err: %lu\r\n", busStats.frames, busStats.overruns, busStats.syncErrors);
+			Logger::Instance().Write("-------------------------\r\n");
+		}
+
+		if(routeMipi == true) {
+			CameraMIPI::Statistics camStats = cameraHD.GetStatistics();
+			Csi::Statistics csiStats = cameraHD.GetCSIStatistics();
+			Dcmipp::Statistics pipeStats = cameraHD.GetPipeStatistics(Dcmipp::PipeID::Main);
+
+			Logger::Instance().Write("\r\n--- MIPI CAMERA STATS ---\r\n");
+			Logger::Instance().Printf("  FPS:         %.1f\r\n", camStats.fps);
+			Logger::Instance().Printf("  Frames:      %lu (Drops: %lu, Errors: %lu)\r\n", camStats.frames, camStats.drops, camStats.errors);
+			Logger::Instance().Write("[HARDWARE BUS]\r\n");
+			Logger::Instance().Printf("  CSI:         Frames: %lu, CRC: %lu, ECC: %lu, Sync: %lu\r\n", csiStats.frameCount, csiStats.crcErrors, csiStats.eccErrors, csiStats.syncErrors);
+			Logger::Instance().Printf("  CSI Timing:  Duration: %lu us\r\n", csiStats.frameDurationUs);
+			Logger::Instance().Printf("  DCMIPP:      Frames: %lu, Overrun: %lu, Lines: %lu\r\n", pipeStats.frameCount, pipeStats.overrunErrors, pipeStats.lineEvents);
+			Logger::Instance().Printf("  DCMIPP Time: Slice: %lu us\r\n", pipeStats.sliceDurationUs);
+			Logger::Instance().Write("-------------------------\r\n");
+		}
+		return true;
+	}
+
+	if(strcmp(action, "reset") == 0) {
+		if(routeDcmi == true) {
+			cameraSD.ResetStatistics();
+			dcmi.ResetStatistics();
+			Logger::Instance().Write("DCMI camera statistics reset.\r\n");
+		}
+		if(routeMipi == true) {
+			cameraHD.ResetStatistics();
+			csi.ResetStatistics();
+			dcmipp.ResetPipeStatistics(Dcmipp::PipeID::Main);
+			Logger::Instance().Write("MIPI camera statistics reset.\r\n");
 		}
 		return true;
 	}

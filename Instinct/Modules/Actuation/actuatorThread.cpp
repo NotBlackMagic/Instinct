@@ -48,7 +48,7 @@ void ActuatorThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Actuator"),
 													ActuatorThread::Run, 0,
 													threadStack, sizeof(threadStack),
-													1, 1,
+													2, 2,
 													TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX ACT Loop Thread Create Failed.");

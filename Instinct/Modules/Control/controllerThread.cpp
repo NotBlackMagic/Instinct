@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/Control/controllerThread.cpp
  */
@@ -34,11 +34,61 @@ PID ControllerThread::pidVelocity[3];
 PID ControllerThread::pidRate[3];
 ControllerThread::MixerGeometry ControllerThread::currentMixer{};
 
+// Parameters regsitered in the parameter service
+ControllerThread::ControllerParams ControllerThread::params{};
+ParamService::ParamList ControllerThread::paramList{};
+// Null-terminated parameter definition table placed in Flash (.rodata)
+const ParamService::ParamEntry ControllerThread::paramEntries[] = {
+	// Name, Pointer, Default, Min, Max, Flags
+	// Attitude
+	ParamService::ParamEntry("MC_ATT_P", &ControllerThread::params.attP, 0.00f, 0.00f, 15.00f),
+
+	// Position Loop
+	ParamService::ParamEntry("MPC_POS_P", &ControllerThread::params.posKp, 0.00f, 0.00f, 5.00f),
+	ParamService::ParamEntry("MPC_POS_VEL_LIM", &ControllerThread::params.posVelLimit, 0.00f, 1.00f, 20.00f),
+
+	// Velocity Loop
+	ParamService::ParamEntry("MPC_VEL_P", &ControllerThread::params.velKp, 0.00f, 0.00f, 10.00f),
+	ParamService::ParamEntry("MPC_VEL_I", &ControllerThread::params.velKi, 0.00f, 0.00f, 5.00f),
+	ParamService::ParamEntry("MPC_VEL_D", &ControllerThread::params.velKd, 0.00f, 0.00f, 1.00f),
+	ParamService::ParamEntry("MPC_VEL_ILIM", &ControllerThread::params.velIntLim, 0.00f, 0.00f, 5.00f),
+	ParamService::ParamEntry("MPC_VEL_ACC_LIM", &ControllerThread::params.velAccelLimit, 0.00f, 0.00f, 30.00f),
+	ParamService::ParamEntry("MPC_VEL_D_LPF", &ControllerThread::params.velDlpHz, 0.00f, 0.00f, 60.00f),
+	ParamService::ParamEntry("MPC_THR_HOVER", &ControllerThread::params.hoverThrust, 0.00f, 0.00f, 0.80f),
+
+	// Roll Rate PID
+	ParamService::ParamEntry("MC_ROLLRATE_P", &ControllerThread::params.rollRateKp, 0.00f, 0.00f, 2.00f),
+	ParamService::ParamEntry("MC_ROLLRATE_I", &ControllerThread::params.rollRateKi, 0.00f, 0.00f, 2.00f),
+	ParamService::ParamEntry("MC_ROLLRATE_D", &ControllerThread::params.rollRateKd, 0.00f, 0.00f, 0.10f),
+	ParamService::ParamEntry("MC_ROLLRATE_ILIM", &ControllerThread::params.rollRateIntLim, 0.00f, 0.00f, 1.00f),
+
+	// Pitch Rate PID
+	ParamService::ParamEntry("MC_PITCHRATE_P", &ControllerThread::params.pitchRateKp, 0.00f, 0.00f, 2.00f),
+	ParamService::ParamEntry("MC_PITCHRATE_I", &ControllerThread::params.pitchRateKi, 0.00f, 0.00f, 2.00f),
+	ParamService::ParamEntry("MC_PITCHRATE_D", &ControllerThread::params.pitchRateKd, 0.00f, 0.00f, 0.10f),
+	ParamService::ParamEntry("MC_PITCHRATE_ILIM", &ControllerThread::params.pitchRateIntLim,0.00f, 0.00f, 1.00f),
+
+	// Yaw Rate PID
+	ParamService::ParamEntry("MC_YAWRATE_P", &ControllerThread::params.yawRateKp, 0.00f, 0.00f, 2.00f),
+	ParamService::ParamEntry("MC_YAWRATE_I", &ControllerThread::params.yawRateKi, 0.00f, 0.00f, 2.00f),
+	ParamService::ParamEntry("MC_YAWRATE_D", &ControllerThread::params.yawRateKd, 0.00f, 0.00f, 0.05f),
+	ParamService::ParamEntry("MC_YAWRATE_ILIM", &ControllerThread::params.yawRateIntLim, 0.00f, 0.00f, 1.00f),
+
+	ParamService::ParamEntry("MC_RATE_D_LPF", &ControllerThread::params.rateDlpHz, 0.00f, 0.00f, 100.00f),
+
+	// Motor Limits
+	ParamService::ParamEntry("MOT_SPIN_MIN",&ControllerThread::params.motorSpinMin,0.00f, 0.00f,0.20f, ParamFlags::Protected),
+	ParamService::ParamEntry("MOT_SPIN_MAX",&ControllerThread::params.motorSpinMax,1.00f, 0.50f,1.00f, ParamFlags::Protected),
+
+	// Sentinel to mark end of array
+	ParamService::ParamEntry()
+};
+
 void ControllerThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Controller"),
 													ControllerThread::Run, 0,
 													threadStack, sizeof(threadStack),
-													2, 0, 
+													3, 3, 
 													TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX CTRL Loop Thread Create Failed.");
@@ -47,23 +97,20 @@ void ControllerThread::Init() {
 	// Register the output topic to the Broker
 	Broker::RegisterTopic(&topicActuators);
 
-	// Initialize PIDs (Drone Defaults): { kp, ki, kd, kf, integLim, outLim, diffFcHz }
-	PID::Config posCfg = { 1.5f, 0.0f, 0.0f, 0.0f, 0.0f, 5.0f, 0.0f };			// P-only, max 5 m/s
-	PID::Config velCfg = { 2.0f, 0.5f, 0.1f, 0.0f, 2.0f, 10.0f, 20.0f };		// Full PID for velocity
-	PID::Config rateCfg = { 0.15f, 0.05f, 0.005f, 0.0f, 0.5f, 1.0f, 40.0f };	// Full PID for rates, output clamped to -1.0 to 1.0
-	for(uint8_t i = 0; i < 3; i++) {
-		pidPosition[i].Init(posCfg);
-		pidVelocity[i].Init(velCfg);
-		pidRate[i].Init(rateCfg);
-	}
+	// Register parameters and load factory defaults into ControllerThread::params
+	ParamService::RegisterParams(&paramList, paramEntries);
 
-	// Initialize the mixer matrix, default mapping to a drone
-	// Clear the mixer matrix and limits
+	// Set motor limits from loaded parameters
 	currentMixer.geometry = Matrix<16, 6>();
 	for(uint8_t i = 0; i < 16; i++) {
 		currentMixer.outMin[i] = 0.0f;
 		currentMixer.outMax[i] = 0.0f;
 	}
+
+	// Initialize Rate PIDs using the registered defaults
+	ReloadParams();
+
+	// Initialize the mixer matrix, default mapping to a drone
 
 	// Set/"load" mixer matrix values for a "X"-Quadcopter geometry
 	// Columns: 0=Fx, 1=Fy, 2=Fz, 3=Tx, 4=Ty, 5=Tz
@@ -92,12 +139,6 @@ void ControllerThread::Init() {
 	currentMixer.geometry.data[3 * 6 + 3] = -1.0f; 
 	currentMixer.geometry.data[3 * 6 + 4] = 1.0f;
 	currentMixer.geometry.data[3 * 6 + 5] = -1.0f; 
-
-	// Set motor limits (Unidirectional: 0% to 100%)
-	for(uint8_t i = 0; i < 4; i++) {
-		currentMixer.outMin[i] = 0.0f;
-		currentMixer.outMax[i] = 1.0f;
-	}
 }
 
 void ControllerThread::Run(ULONG input) {
@@ -128,6 +169,7 @@ void ControllerThread::Run(ULONG input) {
 	// Initialize default safe status
 	currentStatus.arming = ArmingStatus::Disarmed;
 	currentStatus.mode = ControlMode::ManualRate;
+
 	// Tracking for state changes (edge-case transitions)
 	bool wasArmed = false;
 	ControlMode previousMode = ControlMode::ManualRate;
@@ -135,13 +177,17 @@ void ControllerThread::Run(ULONG input) {
 	while(1) {
 		// Control Heartbeat: Synchronize with the EKF state output
 		if(topicState->Take(&subState, stateMsg, TX_WAIT_FOREVER) == true) {
+			// Check if any controller parameters changed (single-cycle check when false)
+			if(ParamService::HasUpdate(&paramList) == true) {
+				ReloadParams();
+			}
+
 			// Calculate dt based on the EKF state timestamps
 			float dt = (float)(stateMsg.timestamp - lastStateTimestamp) / 1000000.0f;
 			if(dt <= 0.0f || dt > 0.01f) {
 				dt = 0.001f; // Fallback to nominal 1kHz loop time
 			}
 			lastStateTimestamp = stateMsg.timestamp;
-
 
 			// Update Arming Status and Setpoint (Only updates variables if new data arrived)
 			if(topicStatus != nullptr) {
@@ -152,9 +198,16 @@ void ControllerThread::Run(ULONG input) {
 			}
 
 			// Catch Arming Transition or Mode Switch
-			bool justArmed = (!wasArmed && currentStatus.arming == ArmingStatus::Armed);
+			bool isArmed = (currentStatus.arming == ArmingStatus::Armed);
+			bool justArmed = (!wasArmed && isArmed);
 			bool modeChanged = (previousMode != currentStatus.mode);
-			wasArmed = (currentStatus.arming == ArmingStatus::Armed);
+
+			if(wasArmed != isArmed) {
+				// Lock protected parameters while armed, unlock when disarmed
+				ParamService::SetProtectedLock(isArmed);
+			}
+
+			wasArmed = isArmed;
 			previousMode = currentStatus.mode;
 
 			if(justArmed == true || modeChanged == true) {
@@ -172,31 +225,34 @@ void ControllerThread::Run(ULONG input) {
 			currentWrench.torque = {0.0f, 0.0f, 0.0f};
 
 			// Execute Control Math
-			if(currentStatus.arming == ArmingStatus::Armed) {
+			if(isArmed == true) {
+				// Copy to a working struct so cascade overwrites don't corrupt currentSetpoint
+				ControlSetpointMsg workingSetpoint = currentSetpoint;
+				
 				// Cascade from highest active mode down to rates
-				if(currentSetpoint.activeMask & (SetpointMask::PositionXY | SetpointMask::PositionZ)) {
-					RunPositionController(stateMsg, currentSetpoint, dt);
+				if(workingSetpoint.activeMask & (SetpointMask::PositionXY | SetpointMask::PositionZ)) {
+					RunPositionController(stateMsg, workingSetpoint, dt);
 				}
 
-				if(currentSetpoint.activeMask & (SetpointMask::VelocityXY | SetpointMask::VelocityZ)) {
-					RunVelocityController(stateMsg, currentSetpoint, dt);
+				if(workingSetpoint.activeMask & (SetpointMask::VelocityXY | SetpointMask::VelocityZ)) {
+					RunVelocityController(stateMsg, workingSetpoint, dt);
 				}
 
-				if(currentSetpoint.activeMask & SetpointMask::Attitude) {
-					RunAttitudeController(stateMsg, currentSetpoint, dt);
+				if(workingSetpoint.activeMask & SetpointMask::Attitude) {
+					RunAttitudeController(stateMsg, workingSetpoint, dt);
 				}
 
-				if(currentSetpoint.activeMask & SetpointMask::AngularRate) {
-					RunRateController(stateMsg, currentSetpoint, currentWrench, dt);
+				if(workingSetpoint.activeMask & SetpointMask::AngularRate) {
+					RunRateController(stateMsg, workingSetpoint, currentWrench, dt);
 				}
 
 				// Direct linear effort, e.g. Throttle
-				if(currentSetpoint.activeMask & SetpointMask::LinearEffortXY) {
-					currentWrench.force.x = currentSetpoint.linearEffort.x;
-					currentWrench.force.y = currentSetpoint.linearEffort.y;
+				if(workingSetpoint.activeMask & SetpointMask::LinearEffortXY) {
+					currentWrench.force.x = workingSetpoint.linearEffort.x;
+					currentWrench.force.y = workingSetpoint.linearEffort.y;
 				}
-				if(currentSetpoint.activeMask & SetpointMask::LinearEffortZ) {
-					currentWrench.force.z = currentSetpoint.linearEffort.z;
+				if(workingSetpoint.activeMask & SetpointMask::LinearEffortZ) {
+					currentWrench.force.z = workingSetpoint.linearEffort.z;
 				}
 
 				// Actuator output mixer
@@ -238,8 +294,8 @@ void ControllerThread::RunVelocityController(const StateMsg& state, ControlSetpo
 	targetAccel.z = pidVelocity[2].Update(setpoint.velocity.z, state.velocity.z, dt);
 
 	// Drone Specific Kinematics: Z-Accel to Throttle
-	float totalZAccel = targetAccel.z - gravity; // Gravity is positive Z (Down)
-	setpoint.linearEffort.z = hoverThrust * (totalZAccel / -gravity); 
+	float totalZAccel = targetAccel.z - gravity;	// Gravity is positive Z (Down)
+	setpoint.linearEffort.z = params.hoverThrust * (totalZAccel / -gravity);
 
 	// Clamp
 	if(setpoint.linearEffort.z > 1.0f) {
@@ -281,11 +337,10 @@ void ControllerThread::RunAttitudeController(const StateMsg& state, ControlSetpo
 		qErr.z = -qErr.z;
 	}
 
-	// Convert vector part to angular rates using a simple P-gain (e.g., 4.5f)
-	float attP = 4.5f; 
-	setpoint.angularRates.x = 2.0f * attP * qErr.x;
-	setpoint.angularRates.y = 2.0f * attP * qErr.y;
-	setpoint.angularRates.z = 2.0f * attP * qErr.z;
+	// Convert vector part to angular rates
+	setpoint.angularRates.x = 2.0f * params.attP * qErr.x;
+	setpoint.angularRates.y = 2.0f * params.attP * qErr.y;
+	setpoint.angularRates.z = 2.0f * params.attP * qErr.z;
 
 	setpoint.activeMask = setpoint.activeMask | SetpointMask::AngularRate;
 }
@@ -350,4 +405,47 @@ void ControllerThread::AllocateActuators(const ControlWrench& wrench, ActuatorMs
 		}
 		actuators.outputs[i] = output;
 	}
+}
+
+void ControllerThread::ReloadParams() {
+	// Position Controllers
+	PID::Config posCfg = { params.posKp, 0.0f, 0.0f, 0.0f, 0.0f, params.posVelLimit, 0.0f };
+	pidPosition[0].SetConfig(posCfg);
+	pidPosition[1].SetConfig(posCfg);
+	pidPosition[2].SetConfig(posCfg);
+
+	// Velocity Controllers
+	PID::Config velCfg = {params.velKp, params.velKi, params.velKd, 0.0f, params.velIntLim, params.velAccelLimit, params.velDlpHz};
+	pidVelocity[0].SetConfig(velCfg);
+	pidVelocity[1].SetConfig(velCfg);
+	pidVelocity[2].SetConfig(velCfg);
+
+	// Roll Rate PID Config
+	PID::Config rollRateCfg = {
+		params.rollRateKp, params.rollRateKi, params.rollRateKd,
+		0.0f, params.rollRateIntLim, 1.0f, params.rateDlpHz
+	};
+	pidRate[0].SetConfig(rollRateCfg);
+
+	// Pitch Rate PID Config
+	PID::Config pitchRateCfg = {
+		params.pitchRateKp, params.pitchRateKi, params.pitchRateKd,
+		0.0f, params.pitchRateIntLim, 1.0f, params.rateDlpHz
+	};
+	pidRate[1].SetConfig(pitchRateCfg);
+
+	// Yaw Rate PID Config
+	PID::Config yawRateCfg = {
+		params.yawRateKp, params.yawRateKi, params.yawRateKd,
+		0.0f, params.yawRateIntLim, 1.0f, params.rateDlpHz
+	};
+	pidRate[2].SetConfig(yawRateCfg);
+
+	// Set motor limits (Unidirectional: 0% to 100%)
+	for(uint8_t i = 0; i < 4; i++) {
+		currentMixer.outMin[i] = params.motorSpinMin;
+		currentMixer.outMax[i] = params.motorSpinMax;
+	}
+
+	LOG_INFO("Controller: Parameters reloaded.");
 }

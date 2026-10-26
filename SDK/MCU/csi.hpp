@@ -120,6 +120,9 @@ class Csi {
 		/// @brief Returns driver performance statistics.
 		Statistics GetStatistics() const { return stats; }
 
+		/// @brief Resets drives statistics counters.
+		void ResetStatistics() { this->stats = {}; }
+
 		/// @brief Interrupt Service Routine handler for CSI (Line errors, ECC, CRC, etc.).
 		void InterruptHandler();
 

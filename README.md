@@ -31,8 +31,8 @@ Although the firmware is written for the **PlumaN6 HD** board, its modular desig
 		- **`Estimator/`:** Invariant EKF based state estimator.
 		- **`Math/`:** Common math library (matrix, rotation, pid, etc...).
 		- **`Messaging/`:** Custom PubSub messaging system.
-		- **`Navigation/`:** TBD
-		- **`Payloads/`:** TBD  
+		- **`Navigation/`:** TBD: Trajectory generation, waypoints, obstacle avoidance, etc...
+		- **`Payloads/`:** TBD: Gimbals, etc...
 		- **`System/`:** Basic system modules such as the console, shell and logger.
 		- **`Vision/`:** Vision stack modules such as DCMI camera acquisition, image file writer, etc...
 	- **`Source/`:** 

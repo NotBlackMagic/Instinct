@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:    Instinct/Modules/Acquisitions/auxiliaryThread.cpp
  */
@@ -19,7 +19,7 @@ void AuxiliaryThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Auxiliary"),
 											AuxiliaryThread::Run, 0,
 											threadStack, sizeof(threadStack),
-											4, 4,
+											5, 5,
 											TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX ACQ Aux Thread Create Failed.");

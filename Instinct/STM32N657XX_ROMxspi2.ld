@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:    Instinct/STM32N657XX_AXISRAM2_fsbl.ld
  * Author:  NotBlackMagic
@@ -18,14 +18,19 @@ _Min_Stack_Size = 0x1000;	/* required amount of stack */
 /* Memories definition */
 MEMORY
 {
-	ITCM	(rx)	: ORIGIN = 0x10000000,	LENGTH = 128K
-	DTCM	(rw)	: ORIGIN = 0x30000000,	LENGTH = 128K
-	ROM		(xrw)	: ORIGIN = 0x70100400,	LENGTH = 2048K
-	RAM		(xrw)	: ORIGIN = 0x34180000,	LENGTH = 512K
+	ITCM		(rx)	: ORIGIN = 0x10000000, LENGTH = 256K	/* ITCM Baseline (0x10000000 - 0x1000FFFF); ITCM FLEXMEM Extension (0x10010000 - 0x1003FFFF) */
+	DTCM		(rw)	: ORIGIN = 0x30000000, LENGTH = 256K	/* DTCM Baseline (0x30000000 - 0x3001FFFF); DTCM FELXMEM Extension (0x30020000 - 0x3003FFFF) */
+	ROM			(xrw)	: ORIGIN = 0x70100400, LENGTH = 2048K	/* XSPI2 */
+	AXISRAM1	(xrw)	: ORIGIN = 0x34064000, LENGTH = 624K	/* AXISRAM1 (0x34000000 - 0x340FFFFF); Remaining AXISRAM1 past the 400KB FLEXMEM + ECC carve-out */
+	AXISRAM2	(xrw)	: ORIGIN = 0x34100000, LENGTH = 1024K	/* AXISRAM2 (0x34100000 - 0x341FFFFF) */
+	AXISRAM3	(xrw)	: ORIGIN = 0x34200000, LENGTH = 448K	/* AXISRAM3 (0x34200000 - 0x3426FFFF) */
+	AXISRAM4	(xrw)	: ORIGIN = 0x34270000, LENGTH = 448K	/* AXISRAM4 (0x34270000 - 0x342DFFFF) */
+	AXISRAM5	(xrw)	: ORIGIN = 0x342E0000, LENGTH = 448K	/* AXISRAM5 (0x342E0000 - 0x3434FFFF) */
+	AXISRAM6	(xrw)	: ORIGIN = 0x34350000, LENGTH = 448K	/* AXISRAM6 (0x34350000 - 0x343BFFFF) */
 }
 
 /* Highest address of the user mode stack */
-_estack = ORIGIN(RAM) + LENGTH(RAM); /* end of "RAM" Ram type memory */
+_estack = ORIGIN(AXISRAM2) + LENGTH(AXISRAM2); /* end of "RAM" Ram type memory */
 _sstack = _estack - _Min_Stack_Size;
 
 /* Export DTCM bounds for initialization */
@@ -34,7 +39,7 @@ _eDTCM = ORIGIN(DTCM) + LENGTH(DTCM);
 
 /* Export capacities for system shell / monitor */
 _rom_capacity = LENGTH(ROM);
-_ram_capacity = LENGTH(RAM);
+_ram_capacity = LENGTH(AXISRAM2);
 
 /* Sections */
 SECTIONS
@@ -154,7 +159,7 @@ SECTIONS
 		*(.data)           /* .data sections */
 		*(.data*)          /* .data* sections */
 		. = ALIGN(4);
-	} >RAM AT> ROM
+	} >AXISRAM2 AT> ROM
 
 	/* Initialized TLS data section */
 	.tdata : ALIGN(4)
@@ -164,7 +169,7 @@ SECTIONS
 		_edata = .;        /* define a global symbol at data end */
 		PROVIDE(__data_end = .);
 		PROVIDE(__tdata_end = .);
-	} >RAM AT> ROM
+	} >AXISRAM2 AT> ROM
 
 	PROVIDE( __tdata_start = ADDR(.tdata) );
 	PROVIDE( __tdata_size = __tdata_end - __tdata_start );
@@ -187,7 +192,7 @@ SECTIONS
 		KEEP(*(.noncacheable))
 		. = ALIGN(8);
 		__enoncacheable = .;  /* create symbol for end of section */
-	} > RAM
+	} > AXISRAM2
 
 	/* Uninitialized data section into "RAM" Ram type memory */
 	/* Uninitialized TLS data section */
@@ -198,7 +203,7 @@ SECTIONS
 		*(.tbss .tbss.*)
 		. = ALIGN(4);
 		PROVIDE( __tbss_end = . );
-	} >RAM
+	} >AXISRAM2
 
 	PROVIDE( __tbss_start = ADDR(.tbss) );
 	PROVIDE( __tbss_size = __tbss_end - __tbss_start );
@@ -221,7 +226,7 @@ SECTIONS
 		_ebss = .;         /* define a global symbol at bss end */
 		__bss_end__ = _ebss;
 		PROVIDE( __bss_end = .);
-	} >RAM
+	} >AXISRAM2
 
 	PROVIDE( __non_tls_bss_start = ADDR(.bss) );
 	PROVIDE( __bss_start = __tbss_start );
@@ -247,7 +252,7 @@ SECTIONS
 		. = . + _Min_Heap_Size;
 		. = . + _Min_Stack_Size;
 		. = ALIGN(8);
-	} >RAM
+	} >AXISRAM2
 
 	/* Remove information from the compiler libraries */
 	/DISCARD/ :

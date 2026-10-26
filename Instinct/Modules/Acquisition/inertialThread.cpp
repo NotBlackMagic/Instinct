@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	SDK/Acquisition/inertialThread.cpp
  * Author:	NotBlackMagic
@@ -42,7 +42,7 @@ void InertialThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Inertial"),
 													InertialThread::Run, 0,
 													threadStack, sizeof(threadStack),
-													3, 3,
+													4, 4,
 													TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX ACQ Inert Thread Create Failed.");

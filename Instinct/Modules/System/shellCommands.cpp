@@ -286,6 +286,10 @@ static bool CommandReboot(const char* args) {
 }
 
 static bool CommandLog(const char* args) {
+	if(args == nullptr) {
+		Logger::Instance().Write("Usage: log <0-6>\r\n");
+		return true;
+	}
 	int level = atoi(args);
 	if(level >= 0 && level <= 6) {
 		Logger::Instance().SetConsoleLevel((Logger::LogLevel)level);

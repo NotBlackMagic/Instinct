@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/Control/controllerThread.hpp
  * Author:	NotBlackMagic
@@ -13,6 +13,7 @@
 
 #include "logger.hpp"
 #include "matrix.hpp"
+#include "paramService.hpp"
 #include "pid.hpp"
 #include "pubSub.hpp"
 #include "rotations.hpp"
@@ -67,6 +68,53 @@ class ControllerThread {
 
 		static MixerGeometry currentMixer;
 
+		// Structure holding local controller parameters
+		struct ControllerParams {
+			// Attitude P
+			float attP;
+
+			// Position Loop
+			float posKp;
+			float posVelLimit;
+
+			// Velocity Loop
+			float velKp;
+			float velKi;
+			float velKd;
+			float velIntLim;
+			float velAccelLimit;
+			float velDlpHz;
+			float hoverThrust;
+			
+			// Rate Loop (Roll)
+			float rollRateKp;
+			float rollRateKi;
+			float rollRateKd;
+			float rollRateIntLim;
+
+			// Rate Loop (Pitch)
+			float pitchRateKp;
+			float pitchRateKi;
+			float pitchRateKd;
+			float pitchRateIntLim;
+
+			// Rate Loop (Yaw)
+			float yawRateKp;
+			float yawRateKi;
+			float yawRateKd;
+			float yawRateIntLim;
+
+			// Rate Filtering & Motor Limits
+			float rateDlpHz;
+			float motorSpinMin;
+			float motorSpinMax;
+		};
+
+		// Parameter service registry variables
+		static ControllerParams params;
+		static ParamService::ParamList paramList;
+		static const ParamService::ParamEntry paramEntries[];
+
 		/// @brief Main 1000Hz RTOS loop, synchronized to EKF StateMsg.
 		static void Run(ULONG input);
 		
@@ -85,4 +133,7 @@ class ControllerThread {
 		
 		/// @brief Matrix Mixer mapping a 6-DOF Wrench to hardware actuator outputs.
 		static void AllocateActuators(const ControlWrench& wrench, ActuatorMsg& actuators);
+
+		/// @brief Reconfigures active PID filters and gains from current params.
+		static void ReloadParams();
 };

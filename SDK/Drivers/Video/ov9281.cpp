@@ -29,7 +29,7 @@ static constexpr OV9281::RegisterValuePair ov9281GlobalInit[] = {
 	{static_cast<OV9281::Register>(0x030D),	0x50},	// Bit [7:0]: PLL2 Multiplier [7:0] (Default: 0x50)
 	{static_cast<OV9281::Register>(0x030E),	0x02},	// Bit [2:0]: PLL2 SYS DIV (Default: 0x02)
 
-	{static_cast<OV9281::Register>(0x3001),	0x00},
+	{static_cast<OV9281::Register>(0x3001),	0x20},	// Bit [6:5] Drive capability (00: 1x; 01: 2x; 10: 3x; 11: 4x)
 	{static_cast<OV9281::Register>(0x3004),	0x00},
 	{static_cast<OV9281::Register>(0x3005),	0x00},
 	{OV9281::Register::SC_CTRL_06,			0x04},

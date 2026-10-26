@@ -151,6 +151,14 @@ class Dcmipp {
 		/// @brief Returns driver performance statistics.
 		Statistics GetPipeStatistics(PipeID pipe) const { return stats[static_cast<uint8_t>(pipe)]; }
 
+		/// @brief Resets drives statistics counters.
+		void ResetPipeStatistics(PipeID pipe) { this->stats[static_cast<uint8_t>(pipe)] = {}; }
+		void ResetStatistics() {
+			this->stats[0] = {};
+			this->stats[1] = {};
+			this->stats[2] = {};
+		}
+
 		/// @brief Interrupt Service Routine handler for DCMIPP (Frame End, Limit, Overrun).
 		void InterruptHandler();
 

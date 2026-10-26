@@ -2,9 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Messaging/PubSub/topicBase.hpp
- * Author:  NotBlackMagic
- * Brief:   PubSub TopicBase structure, required base class for broker registration system.
+ * File:	Instinct/Modules/Messaging/PubSub/topicBase.hpp
+ * Author:	NotBlackMagic
+ * Brief:	PubSub TopicBase structure, required base class for broker registration system.
  */
 
 #pragma once
@@ -57,7 +57,9 @@ class TopicBase {
 			if (averagePeriodUs == 0) {
 				rate = 0.0f;
 			}
-			rate = 1000000.0f / static_cast<float>(averagePeriodUs);
+			else {
+				rate = 1000000.0f / static_cast<float>(averagePeriodUs);
+			}
 		}
 
 		// List pointer used by the Broker

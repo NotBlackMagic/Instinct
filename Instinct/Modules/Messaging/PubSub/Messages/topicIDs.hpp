@@ -47,5 +47,8 @@ enum class TopicID : uint8_t {
 	Actuator = 70,
 
 	// Payloads
-	Gimbal = 80
+	Gimbal = 80,
+
+	// System / Configuration
+	ParamUpdate = 200
 };

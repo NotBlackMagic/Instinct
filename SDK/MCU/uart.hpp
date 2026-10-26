@@ -85,7 +85,7 @@ class UART {
 		uint32_t Receive(uint8_t *buf, uint32_t maxLen);
 
 		/// @brief Blocks/waits until TX ring buffer is empty and last byte ISR was called.
-		/// @return 
+		/// @return None
 		void Flush(void);
 
 		/// @brief Get number of bytes available to read from internal ring buffer.

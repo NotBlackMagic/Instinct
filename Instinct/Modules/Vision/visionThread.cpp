@@ -165,7 +165,7 @@ void VisionThread::Run(ULONG input) {
 	vencConfig.lineWrap = static_cast<Venc::LineCount>(lineWrap);
 	vencConfig.lineTrigger = static_cast<Venc::LineCount>(lineTrigger);
 	// 64 lines = 4 MB rows per slice
-	vencConfig.codingControl.sliceSize = 4;	// 0 = encode whole frame as one slice
+	vencConfig.codingControl.sliceSize = 4;
 #else
 	vencConfig.enableStreamingMode = false;
 	vencConfig.codingControl.sliceSize = 0;	// 0 = encode whole frame as one slice
@@ -576,8 +576,8 @@ void VisionThread::Run(ULONG input) {
 							// HD-CAM & Venc Pool, Proc. Buffer in SRAM, rest in HyperRAM & Code in SRAM:		Cap 43988 us, To YUYV  18947 us, Enc 3711 us
 							// HD-CAM & Venc Pool, Proc., Out Buffer in SRAM, rest in HyperRAM & Code in SRAM:	Cap 43979 us, To YUYV  18889 us, Enc 3684 us
 
-							//Note: Removing all Clean/Invalidate cache from VENCEncoder and VENC reduces Encoding by ~1000us
-							//Alternative (better), optimized cache clean/invalidates calls to minimum reduced about 500us. Using full cache clean on large buffers (like the video buffer) reduced it a further 400us:
+							// Note: Removing all Clean/Invalidate cache from VENCEncoder and VENC reduces Encoding by ~1000us
+							// Alternative (better), optimized cache clean/invalidates calls to minimum reduced about 500us. Using full cache clean on large buffers (like the video buffer) reduced it a further 400us:
 							// Performance values for VGA 640x480 on VENC JPEG Encoder (all with HyperRAM@200M) after cache handling optimization:
 							// HD-CAM & All Buf in HyperRAM & Code in SRAM:										Cap 47166 us, To YUYV  15704 us, Enc 3763 us
 							// HD-CAM & Venc Pool in SRAM, rest in HyperRAM & Code in SRAM:						Cap 47329 us, To YUYV  15705 us, Enc 3602 us

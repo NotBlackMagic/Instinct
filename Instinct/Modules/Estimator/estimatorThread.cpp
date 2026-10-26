@@ -33,7 +33,7 @@ void EstimatorThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Estimator"),
 													EstimatorThread::Run, 0,
 													threadStack, sizeof(threadStack),
-													1, 1,
+													2, 2,
 													TX_NO_TIME_SLICE, TX_AUTO_START);
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX EST InEKF Thread Create Failed.");
@@ -99,6 +99,7 @@ void EstimatorThread::Run(ULONG input) {
 	RangeMsg rangeMsg{};
 	FlowMsg flowMsg{};
 	bool magInitialized = false;
+	bool baroInitialized = false;
 	float latestRangeM = 0.0f;
 
 	StateMsg currentState{};
@@ -158,6 +159,13 @@ void EstimatorThread::Run(ULONG input) {
 			// Barometer Right-Invariant Update
 			if(topicVirtualBaro != nullptr && topicVirtualBaro->Take(&subVirtualBaro, baroMsg, TX_NO_WAIT) == true) {
 				if(baroMsg.timestamp != 0) {
+					if(filter.IsConverged() == true && baroInitialized == false) {
+						// Drone is level and stable. Lock/save local barometer pressure
+						filter.InitializeBaroReference(baroMsg.pressure);
+						baroInitialized = true;
+						LOG_INFO("Estimator: Barometer Reference Initialized (%.2f).", baroMsg.pressure);
+					}
+					// Normal operation
 					filter.UpdateBaro(baroMsg.pressure);
 				}
 			}
@@ -184,7 +192,7 @@ void EstimatorThread::Run(ULONG input) {
 				// Current state is:
 				// From XIP: "EST Thread: TOTAL 142/1243 us, PRED 70 us, UPT G 48 us"
 				// From XIP (new, unverified): "EST Thread: TOTAL 93/1274 us, PRED 64 us, UPT G 49 us"
-				LOG_INFO("EST Thread: TOTAL %d/%d us, PRED %d us, UPT G %d us", timeCycle, timePeriod, timePred, timeUpd);
+				// LOG_INFO("EST Thread: TOTAL %d/%d us, PRED %d us, UPT G %d us", timeCycle, timePeriod, timePred, timeUpd);
 				deltaTime = Time::GetMs() + 5000;
 			}
 

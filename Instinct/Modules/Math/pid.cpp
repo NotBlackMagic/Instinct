@@ -1,8 +1,8 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
- * File:    Instinct/Modules/Math/pid.cpp
+ * File:	Instinct/Modules/Math/pid.cpp
  */
 
 #include "pid.hpp"
@@ -18,16 +18,41 @@ Status PID::Init(const Config& config) {
 	return Status::Ok;
 }
 
+Status PID::SetConfig(const Config& config) {
+	this->config = config;
+
+	// If Ki was disabled during tuning, clear trapped integral
+	// Otherwise clamp existing integral to new limits (bumpless transfer)
+	if(this->config.ki <= 0.0f) {
+		integSum = 0.0f;
+	}
+	else if(integSum > this->config.integLim) {
+		integSum = this->config.integLim;
+	}
+	else if(integSum < -this->config.integLim) {
+		integSum = -this->config.integLim;
+	}
+
+	return Status::Ok;
+}
+
 void PID::Reset() {
 	integSum = 0.0f;
 	prevErr = 0.0f;
 	prevMeas = 0.0f;
 	prevD = 0.0f;
+	isFirstUpdate = true;
 }
 
 float PID::Update(float target, float measurement, float dt) {
 	if(dt <= 0.0f) {
 		return 0.0f;
+	}
+
+	if(isFirstUpdate == true) {
+		prevMeas = measurement;
+		prevErr = target - measurement;
+		isFirstUpdate = false;
 	}
 
 	float error = target - measurement;

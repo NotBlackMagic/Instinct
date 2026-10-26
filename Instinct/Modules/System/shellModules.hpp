@@ -28,6 +28,8 @@ void RegisterFDCANCommands();
 void RegisterI2CCommands();
 void RegisterI3CCommands();
 void RegisterGPIOCommands();
+void RegisterParamCommands();
+void RegisterPWMCommands();
 void RegisterSerialCommands();
 void RegisterCameraCommands();
 void RegisterPWMCommands();

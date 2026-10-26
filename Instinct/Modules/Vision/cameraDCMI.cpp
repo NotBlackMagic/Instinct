@@ -42,6 +42,8 @@ Status CameraDCMI::Init(const Config &config) {
 	if(status != Status::Ok) {
 		return status;
 	}
+	// Set hardware cropping, even if no "real" cropping used to prevent any HSYNC glitch from shifting rows
+	this->dcmiInterface.ConfigureCrop(0, 0, config.width, config.height);
 
 	// Initialize the DMA Channel
 	DMAChannel::Config dmaConfig{};
@@ -59,6 +61,11 @@ Status CameraDCMI::Init(const Config &config) {
 }
 
 Status CameraDCMI::CaptureAsync(VisionFrame &buffer) {
+	if(this->frame != nullptr) {
+		this->stats.drops = this->stats.drops + 1;
+		return Status::Error;
+	}
+	
 	// Alignment check, for DMA cache stuff
 	if(((uint32_t)(buffer.startAddress) & 0x1F) != 0) {
 		return Status::Error;
@@ -72,6 +79,8 @@ Status CameraDCMI::CaptureAsync(VisionFrame &buffer) {
 
 	Status status = this->dmaChannel.TransferAsync((uint32_t)&DCMI->DR, (uint32_t)buffer.startAddress, buffer.payloadSize);
 	if(status != Status::Ok) {
+		this->frame = nullptr;
+		this->stats.dmaErrors = this->stats.dmaErrors + 1;
 		return status;
 	}
 
@@ -107,6 +116,10 @@ Status CameraDCMI::CaptureAbort() {
 	// Abort the ongoing DMA transfer
 	this->dmaChannel.TransferStop();
 
+	if(this->frame != nullptr) {
+		this->stats.drops = this->stats.drops + 1;
+	}
+
 	// Clear capture context
 	this->frame = nullptr;
 	
@@ -135,12 +148,26 @@ void CameraDCMI::OnDMAComplete(void* ctx, Status status) {
 
 		// Frame timestamp
 		completedFrame->timestampUs = Time::GetUs();
+		self->stats.frames = self->stats.frames + 1;
+
+		if(self->frameTimestamp != 0) {
+			uint32_t dt = completedFrame->timestampUs - self->frameTimestamp;
+			if(dt > 0) {
+				float instantFps = 1000000.0f / static_cast<float>(dt);
+				self->stats.fps = (self->stats.fps == 0.0f) ? instantFps : (0.8f * self->stats.fps + 0.2f * instantFps);
+			}
+		}
+		self->frameTimestamp = completedFrame->timestampUs;
 
 		if(self->config.EventCallback != nullptr) {
 			self->config.EventCallback(self->config.callbackContext, Event::FrameComplete);
 		}
 	}
 	else {
+		self->stats.dmaErrors = self->stats.dmaErrors + 1;
+
+		// Harvest any pending DCMI status flags before disabling the peripheral
+		self->dcmiInterface.InterruptHandler();
 		self->dcmiInterface.Stop();
 
 		if(self->config.EventCallback != nullptr) {

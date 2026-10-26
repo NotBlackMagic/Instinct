@@ -9,7 +9,7 @@
 
 Dcmi::Dcmi(DCMI_TypeDef *instance) {
 	this->instance = instance;
-	this->irqPriority = 0x0E; 	// Lowest priority
+	this->irqPriority = 0x05; 	// Match DMA priority
 }
 
 Status Dcmi::Init(const Config &config) {
@@ -46,9 +46,9 @@ Status Dcmi::Init(const Config &config) {
 	// Configure Interrupts
 	NVIC_SetPriority(this->irqCall, this->irqPriority);
 	NVIC_EnableIRQ(this->irqCall);
-	// MODIFY_REG(this->instance->IER, DCMI_IER_FRAME_IE, DCMI_IER_FRAME_IE);	// Capture complete interrupt enable
-	MODIFY_REG(this->instance->IER, DCMI_IER_OVR_IE, DCMI_IER_OVR_IE);			// Overrun interrupt enable
-	MODIFY_REG(this->instance->IER, DCMI_IER_ERR_IE, DCMI_IER_ERR_IE);			// Synchronization error interrupt enable
+	MODIFY_REG(this->instance->IER, DCMI_IER_FRAME_IE, DCMI_IER_FRAME_IE);	// Capture complete interrupt enable
+	MODIFY_REG(this->instance->IER, DCMI_IER_OVR_IE, DCMI_IER_OVR_IE);		// Overrun interrupt enable
+	MODIFY_REG(this->instance->IER, DCMI_IER_ERR_IE, DCMI_IER_ERR_IE);		// Synchronization error interrupt enable
 	// MODIFY_REG(this->instance->IER, DCMI_IER_VSYNC_IE, DCMI_IER_VSYNC_IE);	// VSYNC interrupt enable
 	// MODIFY_REG(this->instance->IER, DCMI_IER_LINE_IE, DCMI_IER_LINE_IE);		// Line interrupt enable
 
@@ -64,7 +64,7 @@ Status Dcmi::ConfigureCrop(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
 	// Configure crop window start
 	WRITE_REG(this->instance->CWSTRTR, (static_cast<uint32_t>(y) << DCMI_CWSTRT_VST_Pos) | (static_cast<uint32_t>(x) << DCMI_CWSTRT_HOFFCNT_Pos));
 	// Configure crop window size
-	WRITE_REG(this->instance->CWSIZER, (static_cast<uint32_t>(w) << DCMI_CWSIZE_VLINE_Pos) | (static_cast<uint32_t>(h) << DCMI_CWSIZE_CAPCNT_Pos));
+	WRITE_REG(this->instance->CWSIZER, (static_cast<uint32_t>(w - 1) << DCMI_CWSIZE_VLINE_Pos) | (static_cast<uint32_t>(h - 1) << DCMI_CWSIZE_CAPCNT_Pos));
 
 	return Status::Ok;
 }
@@ -145,20 +145,25 @@ Status Dcmi::Stop() {
 // IRQ Handler
 // ---------------------------------------------------------
 void Dcmi::InterruptHandler() {
+	uint32_t misr = this->instance->MISR;
+
 	// Handle Overrun
-	if(READ_BIT(this->instance->MISR, DCMI_MIS_OVR_MIS) == DCMI_IER_OVR_IE) {
+	if((misr & DCMI_MIS_OVR_MIS) != 0U) {
+		this->stats.overruns = this->stats.overruns + 1;
 		// Clear Interrupt
 		MODIFY_REG(this->instance->ICR, DCMI_ICR_OVR_ISC, DCMI_ICR_OVR_ISC);
 	}
 
 	// Handle Synchronization Error
-	if(READ_BIT(this->instance->MISR, DCMI_MIS_ERR_MIS) == DCMI_IER_ERR_IE) {
+	if((misr & DCMI_MIS_ERR_MIS) != 0U) {
+		this->stats.syncErrors = this->stats.syncErrors + 1;
 		// Clear Interrupt
 		MODIFY_REG(this->instance->ICR, DCMI_ICR_ERR_ISC, DCMI_ICR_ERR_ISC);
 	}
 
 	//Handle Capture Complete
-	if(READ_BIT(this->instance->MISR, DCMI_MIS_FRAME_MIS) == DCMI_IER_FRAME_IE) {
+	if((misr & DCMI_MIS_FRAME_MIS) != 0U) {
+		this->stats.frames = this->stats.frames + 1;
 		//Clear Interrupt
 		MODIFY_REG(this->instance->ICR, DCMI_ICR_FRAME_ISC, DCMI_ICR_FRAME_ISC);
 	}
