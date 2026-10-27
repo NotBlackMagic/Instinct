@@ -54,6 +54,18 @@ class Broker {
 			return nullptr; // Topic not found
 		}
 
+		/// @brief Type-erased lookup used by InstinctLink for dynamic streaming and injection
+		static TopicBase* GetTopicBase(uint8_t topicId, uint8_t instance = 0) {
+			TopicBase* curr = head;
+			while(curr != nullptr) {
+				if(curr->GetTopicID() == topicId && curr->GetInstance() == instance) {
+					return curr;
+				}
+				curr = curr->nextTopic;
+			}
+			return nullptr;
+		}
+
 		static void EnableLogging(uint8_t topicId, uint16_t instance = allInstancesID, uint32_t rateHz = 0) {
 			TopicBase* curr = head;
 			while(curr != nullptr) {

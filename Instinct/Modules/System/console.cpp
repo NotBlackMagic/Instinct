@@ -20,26 +20,28 @@ void Console::Init(UART* uart) {
 
 	// Register all active command modules
 	RegisterSystemCommands();
+	RegisterCameraCommands();
 	RegisterFDCANCommands();
+	// RegisterFlashCommands();
 	RegisterI2CCommands();
 	RegisterI3CCommands();
 	RegisterGPIOCommands();
 	RegisterParamCommands();
+	RegisterPubSubCommands();
 	RegisterPWMCommands();
 	// RegisterSerialCommands();
-	RegisterCameraCommands();
-	// RegisterPWMCommands();
-	// RegisterFlashCommands();
-	RegisterPubSubCommands();
 	RegisterStorageCommands();
-	RegisterVisionCommands();
 	RegisterUSBCommands();
+	RegisterVisionCommands();
 
 	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Console"),
 													Console::Run, 0,
 													threadStack, sizeof(threadStack),
 													15, 15,
 													TX_NO_TIME_SLICE, TX_AUTO_START);
+	if(status != TX_SUCCESS) {
+		LOG_ERR("ThreadX Console Thread Create Failed.");
+	}
 }
 
 void Console::Run(ULONG input) {

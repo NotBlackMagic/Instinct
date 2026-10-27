@@ -421,24 +421,15 @@ void ControllerThread::ReloadParams() {
 	pidVelocity[2].SetConfig(velCfg);
 
 	// Roll Rate PID Config
-	PID::Config rollRateCfg = {
-		params.rollRateKp, params.rollRateKi, params.rollRateKd,
-		0.0f, params.rollRateIntLim, 1.0f, params.rateDlpHz
-	};
+	PID::Config rollRateCfg = {params.rollRateKp, params.rollRateKi, params.rollRateKd, 0.0f, params.rollRateIntLim, 1.0f, params.rateDlpHz};
 	pidRate[0].SetConfig(rollRateCfg);
 
 	// Pitch Rate PID Config
-	PID::Config pitchRateCfg = {
-		params.pitchRateKp, params.pitchRateKi, params.pitchRateKd,
-		0.0f, params.pitchRateIntLim, 1.0f, params.rateDlpHz
-	};
+	PID::Config pitchRateCfg = {params.pitchRateKp, params.pitchRateKi, params.pitchRateKd, 0.0f, params.pitchRateIntLim, 1.0f, params.rateDlpHz};
 	pidRate[1].SetConfig(pitchRateCfg);
 
 	// Yaw Rate PID Config
-	PID::Config yawRateCfg = {
-		params.yawRateKp, params.yawRateKi, params.yawRateKd,
-		0.0f, params.yawRateIntLim, 1.0f, params.rateDlpHz
-	};
+	PID::Config yawRateCfg = {params.yawRateKp, params.yawRateKi, params.yawRateKd, 0.0f, params.yawRateIntLim, 1.0f, params.rateDlpHz};
 	pidRate[2].SetConfig(yawRateCfg);
 
 	// Set motor limits (Unidirectional: 0% to 100%)

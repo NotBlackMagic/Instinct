@@ -36,6 +36,7 @@ class Topic : public TopicBase {
 		/// @brief Subscribe to this topic.
 		/// @param sub Pointer to subscriber instance.
 		/// @param enableEvent Set true if thread blocks with TX_WAIT_FOREVER/timeout; false if only polling with TX_NO_WAIT.
+		/// @return True if subscribed successfully, false if not.
 		bool Subscribe(Subscriber<T>* sub, bool enableEvent = true) {
 			if(sub == nullptr) {
 				return false;
@@ -273,6 +274,27 @@ class Topic : public TopicBase {
 			}
 
 			return false;
+		}
+
+		uint8_t GetPayloadSize() const override {
+			return static_cast<uint8_t>(sizeof(T));
+		}
+
+		bool CopyPayload(uint8_t* outBuf, uint8_t maxLen, uint32_t* outVersion = nullptr) override {
+			if(outBuf == nullptr || maxLen < sizeof(T)) {
+				return false;
+			}
+
+			// Read directly into destination buffer under the seqlock
+			return Peek(*reinterpret_cast<T*>(outBuf), outVersion);
+		}
+
+		bool PublishRaw(const uint8_t* inBuf, uint8_t len) override {
+			if(inBuf == nullptr || len != sizeof(T)) {
+				return false;
+			}
+			Publish(*reinterpret_cast<const T*>(inBuf));
+			return true;
 		}
 
 	private:

@@ -212,11 +212,55 @@ Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timest
 		this->config.accelBiasWalkVar * dt
 	};
 
+	// UPDATE: Correct covariance clamping while preserving positive-definiteness
 	for(int b = 0; b < 5; b++) {
-		P[b][b].data[0] = fmaxf(this->minCovDiag, P[b][b].data[0] + dtQ[b]);
-		P[b][b].data[4] = fmaxf(this->minCovDiag, P[b][b].data[4] + dtQ[b]);
-		P[b][b].data[8] = fmaxf(this->minCovDiag, P[b][b].data[8] + dtQ[b]);
+		for(int a = 0; a < 3; a++) {
+			int diagIdx = a * 3 + a;
+			float diagVal = P[b][b].data[diagIdx] + dtQ[b];
+
+			if(diagVal < this->minCovDiag) {
+				// Adding positive variance to a diagonal always strengthens positive-definiteness
+				P[b][b].data[diagIdx] = this->minCovDiag;
+			}
+			else if(diagVal > this->maxCovDiag) {
+				// Scale entire row (b, a) and column (b, a) across the 15x15 matrix
+				// P_new = D * P * D preserves correlation ratios and positive-definiteness!
+				P[b][b].data[diagIdx] = diagVal;
+				float scale;
+				arm_sqrt_f32(this->maxCovDiag / diagVal, &scale);
+
+				// Scale row 'a' across all 5 column blocks
+				for(int c = 0; c < 5; c++) {
+					P[b][c].data[a * 3 + 0] *= scale;
+					P[b][c].data[a * 3 + 1] *= scale;
+					P[b][c].data[a * 3 + 2] *= scale;
+				}
+
+				// Scale col 'a' across all 5 row blocks
+				for(int r = 0; r < 5; r++) {
+					P[r][b].data[0 * 3 + a] *= scale;
+					P[r][b].data[1 * 3 + a] *= scale;
+					P[r][b].data[2 * 3 + a] *= scale;
+				}
+
+				// Explicitly pin the diagonal to avoid float rounding drift
+				P[b][b].data[diagIdx] = this->maxCovDiag;
+			}
+			else {
+				P[b][b].data[diagIdx] = diagVal;
+			}
+		}
 	}
+
+	// for(int b = 0; b < 5; b++) {
+	// 	P[b][b].data[0] = fmaxf(this->minCovDiag, P[b][b].data[0] + dtQ[b]);
+	// 	P[b][b].data[4] = fmaxf(this->minCovDiag, P[b][b].data[4] + dtQ[b]);
+	// 	P[b][b].data[8] = fmaxf(this->minCovDiag, P[b][b].data[8] + dtQ[b]);
+	// 	// UPDATE: Added max covariance limit 
+	// 	// P[b][b].data[0] = fminf(this->maxCovDiag, fmaxf(this->minCovDiag, P[b][b].data[0] + dtQ[b]));
+	// 	// P[b][b].data[4] = fminf(this->maxCovDiag, fmaxf(this->minCovDiag, P[b][b].data[4] + dtQ[b]));
+	// 	// P[b][b].data[8] = fminf(this->maxCovDiag, fmaxf(this->minCovDiag, P[b][b].data[8] + dtQ[b]));
+	// }
 
 	// Matrix Orthogonalization Hook: Periodically snap the manifold back to a perfect SO(3) rotation matrix
 	if(sampleCount % 100 == 0) {
@@ -267,13 +311,12 @@ Status InEKF::UpdateGravity(const float accel[3]) {
 	// HP[c] = hAtt * P[0][c] + P[4][c]
 	Matrix3f HP[5];
 	for(int c = 0; c < 5; c++) {
-		// HP[c] = P[4][c];
-		Matrix3f::MultiplyAccumulate3x3(hAtt, P[0][c], HP[c]);
+		Matrix3f::Multiply3x3(hAtt, P[0][c], HP[c]);
 	}
 
 	// S = HP[0] * hAtt^T + HP[4] + R_Noise
-	Matrix3f S = HP[4];
-	Matrix3f::MultiplyAccumulateTransposedB3x3(HP[0], hAtt, S);
+	Matrix3f S(InitType::Uninitialized);
+	Matrix3f::MultiplyTransposedB3x3(HP[0], hAtt, S);
 	S.data[0] += this->config.gravityMeasVar;
 	S.data[4] += this->config.gravityMeasVar;
 	S.data[8] += this->config.gravityMeasVar;
@@ -407,14 +450,24 @@ Status InEKF::UpdateVerticalPosition(float range, float rNoise) {
 	float hx = -p.data[0];
 
 	// Compute H * P (which evaluates to a 1x15 row vector)
+	// UPDATE: Only "observe" vertical position "p.data[2]"
+	// H is 1.0 at index 8 (p.z) and 0.0 elsewhere when horizontal position is not globally anchored
 	float hpRow[15];
 	for(int c = 0; c < 5; c++) {
-		const float* p0 = P[0][c].data;
 		const float* p2 = P[2][c].data;
-		hpRow[c * 3 + 0] = (hy * p0[0]) + (hx * p0[3]) + p2[6];
-		hpRow[c * 3 + 1] = (hy * p0[1]) + (hx * p0[4]) + p2[7];
-		hpRow[c * 3 + 2] = (hy * p0[2]) + (hx * p0[5]) + p2[8];
+		hpRow[c * 3 + 0] = p2[6];
+		hpRow[c * 3 + 1] = p2[7];
+		hpRow[c * 3 + 2] = p2[8];
 	}
+
+	// float hpRow[15];
+	// for(int c = 0; c < 5; c++) {
+	// 	const float* p0 = P[0][c].data;
+	// 	const float* p2 = P[2][c].data;
+	// 	hpRow[c * 3 + 0] = (hy * p0[0]) + (hx * p0[3]) + p2[6];
+	// 	hpRow[c * 3 + 1] = (hy * p0[1]) + (hx * p0[4]) + p2[7];
+	// 	hpRow[c * 3 + 2] = (hy * p0[2]) + (hx * p0[5]) + p2[8];
+	// }
 
 	// Compute S = H * P * H^T + R_Noise
 	float sVal = (hpRow[0] * hy) + (hpRow[1] * hx) + hpRow[8] + rNoise;
@@ -856,6 +909,15 @@ void InEKF::ApplyErrorState(const float delta[15]) {
 }
 
 void InEKF::MirrorCovarianceLower() {
+	// UPDATE: Symmetrize the 5 diagonal 3x3 blocks (safety to ALWAYS make sure the covariance matrix is symmetric!)
+	for(int b = 0; b < 5; b++) {
+		float* d = P[b][b].data;
+		d[1] = d[3] = 0.5f * (d[1] + d[3]);
+		d[2] = d[6] = 0.5f * (d[2] + d[6]);
+		d[5] = d[7] = 0.5f * (d[5] + d[7]);
+	}
+
+	// Mirror upper off-diagonal 3x3 blocks to lower triangle
 	for(int r = 1; r < 5; r++) {
 		for(int c = 0; c < r; c++) {
 			Matrix3f::Transpose3x3(P[c][r], P[r][c]);

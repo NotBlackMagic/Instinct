@@ -14,6 +14,7 @@
 #include "controllerThread.hpp"
 #include "estimatorThread.hpp"
 #include "inertialThread.hpp"
+#include "instinctLink.hpp"
 #include "loggerThread.hpp"
 #include "monitorThread.hpp"
 #include "opticalFlowThread.hpp"
@@ -24,6 +25,7 @@
 #include "visionThread.hpp"
 
 #include "blackboxConfig.hpp"
+#include "instinctLinkConfig.hpp"
 #include "mavlinkConfig.hpp"
 
 #include "console.hpp"
@@ -189,17 +191,20 @@ void tx_application_define(void *first_unused_memory) {
 	AuxiliaryThread::Init();
 	OpticalFlowThread::Init();
 	RadioThread::Init();
-	MavlinkThread::Init();
+	// MavlinkThread::Init();
 	SensorHubThread::Init();
 	EstimatorThread::Init();
 	ControllerThread::Init();
 	CommanderThread::Init();
 	// ActuatorThread::Init();
+	InstinctLink::Init(&gps1);
 
 	// Configure blackbox (data logging to SD card) logging profile
 	// BlackboxConfig::ApplyTuningProfile();
 	// Configure Mavlink stream (telemetry) rates
 	MavlinkConfig::ApplyStandardProfile();
+	// Configure Instinct Link stream rates
+	InstinctLinkConfig::ApplyTuningProfile();
 
 	// Create a byte memory pool from which to allocate the thread stacks
 	uint32_t status = tx_byte_pool_create(&threadBytePool, const_cast<char*>("Static Thread Byte Pool"), tx_byte_pool_buffer, THREADX_BUFFER_POOL_SIZE);

@@ -30,7 +30,7 @@ enum ParamFlags : uint8_t {
 	Volatile = 0x04 	// Tuned dynamically (e.g. ML/AutoTune)
 };
 
-union ParamValue {
+union __attribute__((packed)) ParamValue {
 	float fVal;
 	int32_t iVal;
 

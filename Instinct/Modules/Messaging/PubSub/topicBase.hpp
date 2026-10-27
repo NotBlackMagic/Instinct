@@ -32,6 +32,10 @@ class TopicBase {
 		uint8_t GetTopicID() const { return topicID; }
 		uint8_t GetInstance() const { return instance; }
 
+		virtual uint8_t GetPayloadSize() const = 0;
+		virtual bool CopyPayload(uint8_t* outBuf, uint8_t maxLen, uint32_t* outVersion = nullptr) = 0;
+		virtual bool PublishRaw(const uint8_t* inBuf, uint8_t len) = 0;
+
 		/// @brief Enable binary SD logging for this topic
 		/// @param rateHz Target log rate in Hz. Set to 0 to log at native publish rate.
 		void EnableLogging(uint32_t rateHz = 0) {
