@@ -62,7 +62,7 @@ void InEKF::InitializeState(uint64_t timestamp) {
 }
 
 Status InEKF::InitializeMagReference(const float magInit[3]) {
-	Vector3fMat magBody;
+	Vector3fMat magBody(InitType::Uninitialized);
 	magBody.data[0] = magInit[0];
 	magBody.data[1] = magInit[1];
 	magBody.data[2] = magInit[2];
@@ -114,6 +114,12 @@ Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timest
 	Vector3fMat oldV = v;
 	Vector3fMat oldP = p;
 
+	// Cache specific force * dt before adding gravity for 3D Right-Invariant attitude-velocity coupling:
+	// Phi_10 = -Skew(R * aUnbiased) * dt. In hover (aGlobal = [0, 0, -g]), this equals +Skew([0, 0, g]) * dt, and during horizontal accelerations it provides dynamic Yaw observability from GPS/Flow
+	const float axDt = -aGlobal.data[0] * dt;
+	const float ayDt = -aGlobal.data[1] * dt;
+	const float azDt = -aGlobal.data[2] * dt; // +g * dt in hover
+
 	// Update Kinematics
 	Matrix3f::Multiply3x3(oldR, expR, R);
 
@@ -124,44 +130,49 @@ Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timest
 		p.data[i] = oldP.data[i] + (oldV.data[i] * dt) + (aGlobal.data[i] * dtSqHalf);
 	}
 
-	// Construct non-zero blocks of Discrete Transition Matrix Phi directly:
-	// vR = -dt * Skew(oldV) * oldR, pR = -dt * Skew(oldP) * oldR, negR_dt = -dt * oldR
-	Matrix3f vR(InitType::Uninitialized);
-	Matrix3f pR(InitType::Uninitialized);
+	// Construct non-zero blocks of SE_2(3) Discrete Transition Matrix Phi:
+	// vR = -dt * Skew(oldV) * oldR, negR_dt = -dt * oldR
 	Matrix3f negR_dt(InitType::Uninitialized);
-
-	Matrix3f::SkewMultiplyScalar3x3(oldV, oldR, -dt, vR);
-	Matrix3f::SkewMultiplyScalar3x3(oldP, oldR, -dt, pR);
 	Matrix3f::MultiplyScalar3x3(oldR, -dt, negR_dt);
 
-	float gDt = this->gVal * dt;
+	// Uninitialized array avoids 15 redundant memset calls (540 bytes) per IMU sample
+	Matrix3f Y[3][5] = {
+		{Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized)},
+		{Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized)},
+		{Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized)}
+	};
 
 	// Y = Phi * P (Only rows 0, 1, 2 change; rows 3 and 4 of Phi are Identity!)
-	Matrix3f Y[3][5];
 	for(int c = 0; c < 5; c++) {
 		// Row 0: P[0][c] + negR_dt * P[3][c]
 		Y[0][c] = P[0][c];
 		Matrix3f::MultiplyAccumulate3x3(negR_dt, P[3][c], Y[0][c]);
 
-		// Row 1: P[1][c] + Skew(g)*dt * P[0][c] + vR * P[3][c] + negR_dt * P[4][c]
-		// Note: Skew([0, 0, g*dt]) * M only subtracts Row 1 into Row 0 and adds Row 0 into Row 1!
-		Y[1][c] = P[1][c];
+		// Row 1: P[1][c] + Skew([axDt, ayDt, azDt]) * P[0][c] + negR_dt * P[4][c]
 		const float* p0 = P[0][c].data;
-		Y[1][c].data[0] -= gDt * p0[3];
-		Y[1][c].data[1] -= gDt * p0[4];
-		Y[1][c].data[2] -= gDt * p0[5];
-		Y[1][c].data[3] += gDt * p0[0];
-		Y[1][c].data[4] += gDt * p0[1];
-		Y[1][c].data[5] += gDt * p0[2];
+		const float* p1 = P[1][c].data;
+		float* y1 = Y[1][c].data;
 
-		Matrix3f::MultiplyAccumulate3x3(vR, P[3][c], Y[1][c]);
+		y1[0] = p1[0] + (ayDt * p0[6] - azDt * p0[3]);
+		y1[1] = p1[1] + (ayDt * p0[7] - azDt * p0[4]);
+		y1[2] = p1[2] + (ayDt * p0[8] - azDt * p0[5]);
+
+		y1[3] = p1[3] + (azDt * p0[0] - axDt * p0[6]);
+		y1[4] = p1[4] + (azDt * p0[1] - axDt * p0[7]);
+		y1[5] = p1[5] + (azDt * p0[2] - axDt * p0[8]);
+
+		y1[6] = p1[6] + (axDt * p0[3] - ayDt * p0[0]);
+		y1[7] = p1[7] + (axDt * p0[4] - ayDt * p0[1]);
+		y1[8] = p1[8] + (axDt * p0[5] - ayDt * p0[2]);
+
 		Matrix3f::MultiplyAccumulate3x3(negR_dt, P[4][c], Y[1][c]);
 
-		// Row 2: P[2][c] + dt * P[1][c] + pR * P[3][c]
+		// Row 2: P[2][c] + dt * P[1][c]
+		const float* p2 = P[2][c].data;
+		float* y2 = Y[2][c].data;
 		for(int i = 0; i < 9; i++) {
-			Y[2][c].data[i] = P[2][c].data[i] + (P[1][c].data[i] * dt);
+			y2[i] = p2[i] + (p1[i] * dt);
 		}
-		Matrix3f::MultiplyAccumulate3x3(pR, P[3][c], Y[2][c]);
 	}
 
 	// Upper triangle of P_new = Y * Phi^T
@@ -175,24 +186,32 @@ Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timest
 		// Col 1 (for r <= 1)
 		if(r <= 1) {
 			P[r][1] = Y[r][1];
-			// Y[r][0] * (Skew(g)*dt)^T: Col 0 += gDt * Col 1, Col 1 -= gDt * Col 0
+			// Y[r][0] * (Skew([axDt, ayDt, azDt]))^T
 			const float* y0 = Y[r][0].data;
-			P[r][1].data[0] -= gDt * y0[1];
-			P[r][1].data[1] += gDt * y0[0];
-			P[r][1].data[3] -= gDt * y0[4];
-			P[r][1].data[4] += gDt * y0[3];
-			P[r][1].data[6] -= gDt * y0[7];
-			P[r][1].data[7] += gDt * y0[6];
+			float* pr1 = P[r][1].data;
 
-			Matrix3f::MultiplyAccumulateTransposedB3x3(Y[r][3], vR, P[r][1]);
+			pr1[0] += (ayDt * y0[2] - azDt * y0[1]);
+			pr1[1] += (azDt * y0[0] - axDt * y0[2]);
+			pr1[2] += (axDt * y0[1] - ayDt * y0[0]);
+
+			pr1[3] += (ayDt * y0[5] - azDt * y0[4]);
+			pr1[4] += (azDt * y0[3] - axDt * y0[5]);
+			pr1[5] += (axDt * y0[4] - ayDt * y0[3]);
+
+			pr1[6] += (ayDt * y0[8] - azDt * y0[7]);
+			pr1[7] += (azDt * y0[6] - axDt * y0[8]);
+			pr1[8] += (axDt * y0[7] - ayDt * y0[6]);
+
 			Matrix3f::MultiplyAccumulateTransposedB3x3(Y[r][4], negR_dt, P[r][1]);
 		}
 
 		// Col 2 (for r <= 2)
+		const float* yr1 = Y[r][1].data;
+		const float* yr2 = Y[r][2].data;
+		float* pr2 = P[r][2].data;
 		for(int i = 0; i < 9; i++) {
-			P[r][2].data[i] = Y[r][2].data[i] + (Y[r][1].data[i] * dt);
+			pr2[i] = yr2[i] + (yr1[i] * dt);
 		}
-		Matrix3f::MultiplyAccumulateTransposedB3x3(Y[r][3], pR, P[r][2]);
 
 		// Col 3 & 4
 		P[r][3] = Y[r][3];
@@ -292,6 +311,14 @@ Status InEKF::UpdateGravity(const float accel[3]) {
 		return Status::Ok;
 	}
 
+	// Normalize measured specific force to gVal so Z-axis scale/bias errors never tilt the horizon when pitching/rolling
+	float normU;
+	arm_sqrt_f32(normSq, &normU);
+	float scaleG = gVal / normU;
+	u0 *= scaleG;
+	u1 *= scaleG;
+	u2 *= scaleG;
+
 	// Expected specific force in body frame: R^T * [0, 0, -g]^T + accelBias
 	// Since [0, 0, -g] only has Z, R^T * [0, 0, -g] is simply -g * Row 2 of R!
 	Vector3fMat z(InitType::Uninitialized);
@@ -299,62 +326,77 @@ Status InEKF::UpdateGravity(const float accel[3]) {
 	z.data[1] = u1 - (-gVal * R.data[7]);
 	z.data[2] = u2 - (-gVal * R.data[8]);
 
-	// hAttitude = R^T * Skew([0, 0, -g]):
-	// Col 0 = -g * Col 1 of R^T = -g * Row 1 of R
-	// Col 1 = +g * Col 0 of R^T = +g * Row 0 of R
-	// Col 2 = 0
-	Matrix3f hAtt(InitType::Uninitialized);
-	hAtt.data[0] = -gVal * R.data[3]; hAtt.data[1] = gVal * R.data[0]; hAtt.data[2] = 0.0f;
-	hAtt.data[3] = -gVal * R.data[4]; hAtt.data[4] = gVal * R.data[1]; hAtt.data[5] = 0.0f;
-	hAtt.data[6] = -gVal * R.data[5]; hAtt.data[7] = gVal * R.data[2]; hAtt.data[8] = 0.0f;
+	// Right-Invariant hAttitude = R^T * Skew([0, 0, -g]): Col 2 is identically zero (Yaw is 100% decoupled!)
+	const float h00 = -gVal * R.data[3], h01 = gVal * R.data[0];
+	const float h10 = -gVal * R.data[4], h11 = gVal * R.data[1];
+	const float h20 = -gVal * R.data[5], h21 = gVal * R.data[2];
 
-	// HP[c] = hAtt * P[0][c] + P[4][c]
-	Matrix3f HP[5];
+	// Exploit 2-column sparsity of hAtt to compute HP[c] = hAtt * P[0][c]
+	Matrix3f HP[5] = {
+		Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized),
+		Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized)
+	};
 	for(int c = 0; c < 5; c++) {
-		Matrix3f::Multiply3x3(hAtt, P[0][c], HP[c]);
+		const float* p0 = P[0][c].data;
+		float* hp = HP[c].data;
+		hp[0] = h00 * p0[0] + h01 * p0[3]; hp[1] = h00 * p0[1] + h01 * p0[4]; hp[2] = h00 * p0[2] + h01 * p0[5];
+		hp[3] = h10 * p0[0] + h11 * p0[3]; hp[4] = h10 * p0[1] + h11 * p0[4]; hp[5] = h10 * p0[2] + h11 * p0[5];
+		hp[6] = h20 * p0[0] + h21 * p0[3]; hp[7] = h20 * p0[1] + h21 * p0[4]; hp[8] = h20 * p0[2] + h21 * p0[5];
 	}
 
-	// S = HP[0] * hAtt^T + HP[4] + R_Noise
+	// S = HP[0] * hAtt^T + R_Noise (exploiting Col 2 of hAtt == 0)
+	const float* hp0 = HP[0].data;
 	Matrix3f S(InitType::Uninitialized);
-	Matrix3f::MultiplyTransposedB3x3(HP[0], hAtt, S);
-	S.data[0] += this->config.gravityMeasVar;
-	S.data[4] += this->config.gravityMeasVar;
-	S.data[8] += this->config.gravityMeasVar;
+	S.data[0] = hp0[0] * h00 + hp0[1] * h01 + this->config.gravityMeasVar;
+	S.data[1] = hp0[0] * h10 + hp0[1] * h11;
+	S.data[2] = hp0[0] * h20 + hp0[1] * h21;
+	S.data[3] = S.data[1];
+	S.data[4] = hp0[3] * h10 + hp0[4] * h11 + this->config.gravityMeasVar;
+	S.data[5] = hp0[3] * h20 + hp0[4] * h21;
+	S.data[6] = S.data[2];
+	S.data[7] = S.data[5];
+	S.data[8] = hp0[6] * h20 + hp0[7] * h21 + this->config.gravityMeasVar;
 
 	Matrix3f sInv = S.Inverse3x3();
 
 	Vector3fMat sInvZ(InitType::Uninitialized);
 	Matrix3f::Multiply3x3Vector3(sInv, z, sInvZ);
 	float mahalanobisSq = (z.data[0] * sInvZ.data[0]) + (z.data[1] * sInvZ.data[1]) + (z.data[2] * sInvZ.data[2]);
-	if(mahalanobisSq > this->gate3Sigma3D) {
+	if(!(mahalanobisSq >= 0.0f && mahalanobisSq <= this->gate3Sigma3D)) {
 		return Status::Ok;
 	}
 
-	// Exploit symmetry: (P * H^T)_r = (H * P)_r^T = HP[r]^T
-	float delta[15];
-	Matrix3f K[5];
-	for(int r = 0; r < 5; r++) {
+	// Exact Schmidt-Kalman update for Attitude (r = 0) and Gyro Bias (r = 3)
+	// Velocity (r = 1) and Position (r = 2) are untouched so attitude updates never move v or p!
+	float delta[15] = {0.0f};
+	const int activeRows[2] = {0, 3}; // Only Attitude (0) and Gyro Bias (3)
+	for(int idx = 0; idx < 2; idx++) {
+		int r = activeRows[idx];
+
 		Matrix3f hpT(InitType::Uninitialized);
 		Matrix3f::Transpose3x3(HP[r], hpT);
-		Matrix3f::Multiply3x3(hpT, sInv, K[r]);
+
+		Matrix3f Kr(InitType::Uninitialized);
+		Matrix3f::Multiply3x3(hpT, sInv, Kr);
 
 		Vector3fMat deltaBlk(InitType::Uninitialized);
 		Matrix3f::MultiplyTransposed3x3Vector3(HP[r], sInvZ, deltaBlk);
 		delta[r * 3 + 0] = deltaBlk.data[0];
 		delta[r * 3 + 1] = deltaBlk.data[1];
 		delta[r * 3 + 2] = deltaBlk.data[2];
+
+		// Update entire row 'r' of P: P[r][c] -= Kr * HP[c]
+		for(int c = 0; c < 5; c++) {
+			Matrix3f::MultiplySubtract3x3(Kr, HP[c], P[r][c]);
+		}
 	}
+
+	// Keep upper triangle in sync for row 3's off-diagonal columns (r = 1, 2 < 3)
+	Matrix3f::Transpose3x3(P[3][1], P[1][3]);
+	Matrix3f::Transpose3x3(P[3][2], P[2][3]);
 
 	// Compute and Apply Error Correction
 	ApplyErrorState(delta);
-
-	// Covariance Update P = P - K * (H * P)
-	// Calculate ONLY the upper triangle (c >= r).
-	for(int r = 0; r < 5; r++) {
-		for(int c = r; c < 5; c++) {
-			Matrix3f::MultiplySubtract3x3(K[r], HP[c], P[r][c]);
-		}
-	}
 
 	// Mirror upper triangle to lower triangle
 	MirrorCovarianceLower();
@@ -386,9 +428,11 @@ Status InEKF::UpdateMag(const float mag[3]) {
 	hMagAtt.data[6] = mz * R.data[5]; hMagAtt.data[7] = mx * R.data[8] - mz * R.data[2]; hMagAtt.data[8] = -mx * R.data[5];
 
 	// Compute H * P: An array of five 3x3 blocks
-	Matrix3f HP[5];
+	Matrix3f HP[5] = {
+		Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized),
+		Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized)
+	};
 	for(int c = 0; c < 5; c++) {
-		// Since H is zero everywhere except block 0, HP[c] = hMagAtt * P[0][c]
 		Matrix3f::Multiply3x3(hMagAtt, P[0][c], HP[c]);
 	}
 
@@ -402,39 +446,43 @@ Status InEKF::UpdateMag(const float mag[3]) {
 	Matrix3f sInv = S.Inverse3x3();
 
 	// Innovation Gating: Mahalanobis distance for 3D vectors: z^T * S_inv * z
-	static Vector3fMat sInvZ(InitType::Uninitialized);
+	Vector3fMat sInvZ(InitType::Uninitialized);
 	Matrix3f::Multiply3x3Vector3(sInv, z, sInvZ);
 	float mahalanobisSq = (z.data[0] * sInvZ.data[0]) + (z.data[1] * sInvZ.data[1]) + (z.data[2] * sInvZ.data[2]);
-	// A threshold of 11.3 means anything outside 3 standard deviations is rejected
-	if(mahalanobisSq > this->gate3Sigma3D) {
-		return Status::Ok;	// Reject outlier
+	if(!(mahalanobisSq >= 0.0f && mahalanobisSq <= this->gate3Sigma3D)) {
+		return Status::Ok;
 	}
 
-	// Use symmetry of P: P * H^T = HP^T, and delta_r = HP[r]^T * sInvZ
-	float delta[15];
-	Matrix3f K[5];
-	for(int r = 0; r < 5; r++) {
+	// Exact Schmidt-Kalman update for Attitude (r = 0) and Gyro Bias (r = 3)
+	float delta[15] = {0.0f};
+	const int activeRows[2] = {0, 3}; // Only Attitude (0) and Gyro Bias (3)
+	for(int idx = 0; idx < 2; idx++) {
+		int r = activeRows[idx];
+
 		Matrix3f hpT(InitType::Uninitialized);
 		Matrix3f::Transpose3x3(HP[r], hpT);
-		Matrix3f::Multiply3x3(hpT, sInv, K[r]);
+
+		Matrix3f Kr(InitType::Uninitialized);
+		Matrix3f::Multiply3x3(hpT, sInv, Kr);
 
 		Vector3fMat deltaBlk(InitType::Uninitialized);
 		Matrix3f::MultiplyTransposed3x3Vector3(HP[r], sInvZ, deltaBlk);
 		delta[r * 3 + 0] = deltaBlk.data[0];
 		delta[r * 3 + 1] = deltaBlk.data[1];
 		delta[r * 3 + 2] = deltaBlk.data[2];
+
+		// Update entire row 'r' of P: P[r][c] -= Kr * HP[c]
+		for(int c = 0; c < 5; c++) {
+			Matrix3f::MultiplySubtract3x3(Kr, HP[c], P[r][c]);
+		}
 	}
+
+	// Keep upper triangle in sync for row 3's off-diagonal columns (r = 1, 2 < 3)
+	Matrix3f::Transpose3x3(P[3][1], P[1][3]);
+	Matrix3f::Transpose3x3(P[3][2], P[2][3]);
 
 	// Compute and Apply Error Correction
 	ApplyErrorState(delta);
-
-	// Covariance Update P = P - K * (H * P)
-	// Calculate ONLY the upper triangle (c >= r).
-	for(int r = 0; r < 5; r++) {
-		for(int c = r; c < 5; c++) {
-			Matrix3f::MultiplySubtract3x3(K[r], HP[c], P[r][c]);
-		}
-	}
 
 	// Mirror upper triangle to lower triangle
 	MirrorCovarianceLower();
@@ -445,13 +493,9 @@ Status InEKF::UpdateMag(const float mag[3]) {
 Status InEKF::UpdateVerticalPosition(float range, float rNoise) {
 	// In the NED frame standard, Down is positive, meaning Altitude points along the negative axis
 	float z = range - p.data[2];	// Innovation error calculation
-	// Manifold Jacobian: H_att = -Skew(p). The 3rd row of -Skew(p) isolates the Z-axis attitude coupling
-	float hy = p.data[1];
-	float hx = -p.data[0];
-
+	
 	// Compute H * P (which evaluates to a 1x15 row vector)
-	// UPDATE: Only "observe" vertical position "p.data[2]"
-	// H is 1.0 at index 8 (p.z) and 0.0 elsewhere when horizontal position is not globally anchored
+	// H = 1.0 at index 8 (p.z) and 0.0 elsewhere
 	float hpRow[15];
 	for(int c = 0; c < 5; c++) {
 		const float* p2 = P[2][c].data;
@@ -460,51 +504,41 @@ Status InEKF::UpdateVerticalPosition(float range, float rNoise) {
 		hpRow[c * 3 + 2] = p2[8];
 	}
 
-	// float hpRow[15];
-	// for(int c = 0; c < 5; c++) {
-	// 	const float* p0 = P[0][c].data;
-	// 	const float* p2 = P[2][c].data;
-	// 	hpRow[c * 3 + 0] = (hy * p0[0]) + (hx * p0[3]) + p2[6];
-	// 	hpRow[c * 3 + 1] = (hy * p0[1]) + (hx * p0[4]) + p2[7];
-	// 	hpRow[c * 3 + 2] = (hy * p0[2]) + (hx * p0[5]) + p2[8];
-	// }
-
 	// Compute S = H * P * H^T + R_Noise
-	float sVal = (hpRow[0] * hy) + (hpRow[1] * hx) + hpRow[8] + rNoise;
-	// Innovation Gating: z^2 / S gives the Mahalanobis distance squared
-	// A threshold of 9.0 means anything outside 3 standard deviations is rejected
-	if((z * z) > (this->gate3Sigma1D * sVal)) {
+	float sVal = hpRow[8] + rNoise;
+	if(!(sVal > 1e-7f) || (z * z) > (this->gate3Sigma1D * sVal)) {
 		return Status::Ok;
 	}
 
 	float invS = 1.0f / sVal;
-	float scaledZ = z * invS; // Combine z * invS so delta[i] = hpRow[i] * scaledZ!
-	float kFlat[15];
-	float delta[15];
+	float scaledZ = z * invS;
 
-	// K is the 8th column of P, scaled by invS.
-	// Because P is mathematically symmetric, P * H^T is identical to (H * P)^T
-	for(int i = 0; i < 15; i++) {
-		kFlat[i] = hpRow[i] * invS;
-		delta[i] = hpRow[i] * scaledZ;
-	}
+	// 1D Vertical Sensor Subspace Lock:
+	// Only correct Vertical Velocity v.z (index 5) and Vertical Position p.z (index 8) so pitching/rolling
+	// never pushes horizontal (p.x, p.y) or (v.x, v.y) via tilted covariance cross-terms!
+	float kVz = hpRow[5] * invS;
+	float kPz = hpRow[8] * invS;
 
-	// Compute and Apply Error Correction
-	ApplyErrorState(delta);
+	v.data[2] += hpRow[5] * scaledZ;
+	p.data[2] += hpRow[8] * scaledZ;
 
-	// Covariance Update P = P - K * (H * P)
-	// Calculate ONLY the upper triangle (c >= r).
+	// Update Row 5 (r = 1, row 2) and Row 8 (r = 2, row 2) of P
 	for(int c = 0; c < 5; c++) {
-		for(int r = 0; r <= c; r++) {
-			float* pBlk = P[r][c].data;
-			for(int i = 0; i < 3; i++) {
-				float kVal = kFlat[r * 3 + i];
-				pBlk[i * 3 + 0] -= kVal * hpRow[c * 3 + 0];
-				pBlk[i * 3 + 1] -= kVal * hpRow[c * 3 + 1];
-				pBlk[i * 3 + 2] -= kVal * hpRow[c * 3 + 2];
-			}
-		}
+		float* p1c = P[1][c].data;
+		float* p2c = P[2][c].data;
+		p1c[6] -= kVz * hpRow[c * 3 + 0];
+		p1c[7] -= kVz * hpRow[c * 3 + 1];
+		p1c[8] -= kVz * hpRow[c * 3 + 2];
+
+		p2c[6] -= kPz * hpRow[c * 3 + 0];
+		p2c[7] -= kPz * hpRow[c * 3 + 1];
+		p2c[8] -= kPz * hpRow[c * 3 + 2];
 	}
+
+	// Keep upper-triangle blocks P[0][1], P[0][2], P[1][2] consistent before MirrorCovarianceLower
+	P[0][1].data[2] = P[1][0].data[6]; P[0][1].data[5] = P[1][0].data[7]; P[0][1].data[8] = P[1][0].data[8];
+	P[0][2].data[2] = P[2][0].data[6]; P[0][2].data[5] = P[2][0].data[7]; P[0][2].data[8] = P[2][0].data[8];
+	P[1][2].data[2] = P[2][1].data[6]; P[1][2].data[5] = P[2][1].data[7];
 
 	// Mirror upper triangle to lower triangle
 	MirrorCovarianceLower();
@@ -606,7 +640,7 @@ Status InEKF::UpdateOpticalFlow(const float flowRate[2], const float gyro[3], fl
 	float s11 = (hp1[3] * h1x + hp1[4] * h1y + hp1[5] * h1z) + rNoise;
 
 	float detS = (s00 * s11) - (s01 * s01);
-	if(detS <= 1e-7f) {
+	if(!(detS > 1e-7f)) {
 		return Status::Ok;
 	}
 	float invDetS = 1.0f / detS;
@@ -618,7 +652,8 @@ Status InEKF::UpdateOpticalFlow(const float flowRate[2], const float gyro[3], fl
 	// Precompute sInvZ = S^-1 * z (2 floats)
 	float sInvZ0 = sInv00 * z0 + sInv01 * z1;
 	float sInvZ1 = sInv01 * z0 + sInv11 * z1;
-	if((z0 * sInvZ0 + z1 * sInvZ1) > this->gate3Sigma2D) {
+	float mahalanobisSq = z0 * sInvZ0 + z1 * sInvZ1;
+	if(!(mahalanobisSq >= 0.0f && mahalanobisSq <= this->gate3Sigma2D)) {
 		return Status::Ok;
 	}
 
@@ -669,24 +704,8 @@ Status InEKF::UpdateGPSPosition(const float position[3]) {
 	z.data[2] = position[2] - p.data[2];
 
 	// Right-Invariant Jacobian Block 0: hPosAtt = -Skew(p)
-	// H = [ -Skew(p) | 0 | I_3 | 0 | 0 ]
-	Matrix3f hPosAtt(InitType::Uninitialized);
-	hPosAtt.data[0] = 0.0f; hPosAtt.data[1] = p.data[2]; hPosAtt.data[2] = -p.data[1];
-	hPosAtt.data[3] = -p.data[2]; hPosAtt.data[4] = 0.0f; hPosAtt.data[5] = p.data[0];
-	hPosAtt.data[6] = p.data[1]; hPosAtt.data[7] = -p.data[0]; hPosAtt.data[8] = 0.0f;
-
-	// HP[c] = hPosAtt * P[0][c] + P[2][c]
-	Matrix3f HP[5];
-	for(int c = 0; c < 5; c++) {
-		HP[c] = P[2][c];
-		Matrix3f::MultiplyAccumulate3x3(hPosAtt, P[0][c], HP[c]);
-	}
-
-	// S = HP[0] * hPosAtt^T + HP[2] + R_Noise
-	Matrix3f S = HP[2];
-	Matrix3f::MultiplyAccumulateTransposedB3x3(HP[0], hPosAtt, S);
-
-	// GPS vertical accuracy (VDOP) is typically ~1.5x-2x worse than horizontal (HDOP)
+	// H = [ 0 | 0 | I_3 | 0 | 0 ] -> HP[c] = P[2][c], S = P[2][2] + R_Noise
+	Matrix3f S = P[2][2];
 	S.data[0] += config.gpsHorizPosVar;
 	S.data[4] += config.gpsHorizPosVar;
 	S.data[8] += config.gpsVertPosVar;
@@ -697,19 +716,26 @@ Status InEKF::UpdateGPSPosition(const float position[3]) {
 	Vector3fMat sInvZ(InitType::Uninitialized);
 	Matrix3f::Multiply3x3Vector3(sInv, z, sInvZ);
 	float mahalanobisSq = (z.data[0] * sInvZ.data[0]) + (z.data[1] * sInvZ.data[1]) + (z.data[2] * sInvZ.data[2]);
-	if(mahalanobisSq > gate3Sigma3D) {
+	if(!(mahalanobisSq >= 0.0f && mahalanobisSq <= gate3Sigma3D)) {
 		return Status::Ok;
 	}
 
+	// Cache HP[c] = P[2][c] before modifying P in-place
+	Matrix3f HP[5] = {
+		P[2][0], P[2][1], P[2][2], P[2][3], P[2][4]
+	};
+
 	float delta[15];
-	Matrix3f K[5];
+	Matrix3f K[5] = {
+		Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized),
+		Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized)
+	};
 	for(int r = 0; r < 5; r++) {
-		Matrix3f hpT(InitType::Uninitialized);
-		Matrix3f::Transpose3x3(HP[r], hpT);
-		Matrix3f::Multiply3x3(hpT, sInv, K[r]);
+		// Since P is symmetric, (P * H^T)_r = P[r][2] = HP[r]^T
+		Matrix3f::Multiply3x3(P[r][2], sInv, K[r]);
 
 		Vector3fMat deltaBlk(InitType::Uninitialized);
-		Matrix3f::MultiplyTransposed3x3Vector3(HP[r], sInvZ, deltaBlk);
+		Matrix3f::Multiply3x3Vector3(P[r][2], sInvZ, deltaBlk);
 		delta[r * 3 + 0] = deltaBlk.data[0];
 		delta[r * 3 + 1] = deltaBlk.data[1];
 		delta[r * 3 + 2] = deltaBlk.data[2];
@@ -738,47 +764,34 @@ Status InEKF::UpdateGPSVelocity(const float velocity[3]) {
 	z.data[1] = velocity[1] - v.data[1];
 	z.data[2] = velocity[2] - v.data[2];
 
-	// Right-Invariant Jacobian Block 0: hVelAtt = -Skew(v)
-	// H = [ -Skew(v) | I_3 | 0 | 0 | 0 ]
-	Matrix3f hVelAtt(InitType::Uninitialized);
-	hVelAtt.data[0] = 0.0f; hVelAtt.data[1] = v.data[2]; hVelAtt.data[2] = -v.data[1];
-	hVelAtt.data[3] = -v.data[2]; hVelAtt.data[4] = 0.0f; hVelAtt.data[5] = v.data[0];
-	hVelAtt.data[6] = v.data[1]; hVelAtt.data[7] = -v.data[0]; hVelAtt.data[8] = 0.0f;
-
-	// HP[c] = hVelAtt * P[0][c] + P[1][c]
-	Matrix3f HP[5];
-	for(int c = 0; c < 5; c++) {
-		HP[c] = P[1][c];
-		Matrix3f::MultiplyAccumulate3x3(hVelAtt, P[0][c], HP[c]);
-	}
-
-	// S = HP[0] * hVelAtt^T + HP[1] + R_Noise
-	Matrix3f S = HP[1];
-	Matrix3f::MultiplyAccumulateTransposedB3x3(HP[0], hVelAtt, S);
-
+	Matrix3f S = P[1][1];
 	S.data[0] += config.gpsVelVar;
 	S.data[4] += config.gpsVelVar;
 	S.data[8] += config.gpsVelVar;
 
 	Matrix3f sInv = S.Inverse3x3();
 
-	// 3D Mahalanobis Gate (3-sigma for 3 DOF = 11.3f)
 	Vector3fMat sInvZ(InitType::Uninitialized);
 	Matrix3f::Multiply3x3Vector3(sInv, z, sInvZ);
 	float mahalanobisSq = (z.data[0] * sInvZ.data[0]) + (z.data[1] * sInvZ.data[1]) + (z.data[2] * sInvZ.data[2]);
-	if(mahalanobisSq > gate3Sigma3D) {
+	if(!(mahalanobisSq >= 0.0f && mahalanobisSq <= gate3Sigma3D)) {
 		return Status::Ok;
 	}
 
+	Matrix3f HP[5] = {
+		P[1][0], P[1][1], P[1][2], P[1][3], P[1][4]
+	};
+
 	float delta[15];
-	Matrix3f K[5];
+	Matrix3f K[5] = {
+		Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized),
+		Matrix3f(InitType::Uninitialized), Matrix3f(InitType::Uninitialized)
+	};
 	for(int r = 0; r < 5; r++) {
-		Matrix3f hpT(InitType::Uninitialized);
-		Matrix3f::Transpose3x3(HP[r], hpT);
-		Matrix3f::Multiply3x3(hpT, sInv, K[r]);
+		Matrix3f::Multiply3x3(P[r][1], sInv, K[r]);
 
 		Vector3fMat deltaBlk(InitType::Uninitialized);
-		Matrix3f::MultiplyTransposed3x3Vector3(HP[r], sInvZ, deltaBlk);
+		Matrix3f::Multiply3x3Vector3(P[r][1], sInvZ, deltaBlk);
 		delta[r * 3 + 0] = deltaBlk.data[0];
 		delta[r * 3 + 1] = deltaBlk.data[1];
 		delta[r * 3 + 2] = deltaBlk.data[2];
@@ -872,37 +885,20 @@ void InEKF::NormalizeRotation() {
 
 void InEKF::ApplyErrorState(const float delta[15]) {
 	Vector3fMat w(InitType::Uninitialized);
-	Vector3fMat u(InitType::Uninitialized);
-	Vector3fMat dPos(InitType::Uninitialized);
+	w.data[0] = delta[0];
+	w.data[1] = delta[1];
+	w.data[2] = delta[2];
 
-	for(int i = 0; i < 3; i++) {
-		w.data[i] = delta[i];
-		u.data[i] = delta[i + 3];
-		dPos.data[i] = delta[i + 6];
-	}
-
-	// Compute R_delta = ExpSO3(w) and Left Jacobian JL directly in 3x3 without 5x5 Matrix5f overhead
-	Matrix3f rDelta(InitType::Uninitialized);
-	Matrix3f JL(InitType::Uninitialized);
-	LieGroups::CalculateKinematicsSO3(w, rDelta, JL);
-
-	Vector3fMat ju(InitType::Uninitialized);
-	Vector3fMat jv(InitType::Uninitialized);
-	Matrix3f::Multiply3x3Vector3(JL, u, ju);
-	Matrix3f::Multiply3x3Vector3(JL, dPos, jv);
-
+	// Right-Invariant SO(3) retraction: R_new = ExpSO3(w) * R
+	Matrix3f rDelta = LieGroups::ExpSO3(w);
 	Matrix3f newR(InitType::Uninitialized);
 	Matrix3f::Multiply3x3(rDelta, R, newR);
 	R = newR;
 
-	Vector3fMat rV(InitType::Uninitialized);
-	Vector3fMat rP(InitType::Uninitialized);
-	Matrix3f::Multiply3x3Vector3(rDelta, v, rV);
-	Matrix3f::Multiply3x3Vector3(rDelta, p, rP);
-
+	// Decoupled Euclidean retraction on R^3 (never rotates v or p around world origin!)
 	for(int i = 0; i < 3; i++) {
-		v.data[i] = rV.data[i] + ju.data[i];
-		p.data[i] = rP.data[i] + jv.data[i];
+		v.data[i] += delta[i + 3];
+		p.data[i] += delta[i + 6];
 		gyroBias.data[i] += delta[i + 9];
 		accelBias.data[i] += delta[i + 12];
 	}
