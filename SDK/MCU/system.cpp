@@ -201,11 +201,11 @@ void System::InitClock(void) {
 	LL_RCC_IC11_SetDivider(4);
 	nodeFrequencies.ic11 = 900000000;
 	// Set IC17 output to PLL1 / 4 = 3200 MHz / 10 = 320 MHz (Clock to DCMIPP)
-	LL_RCC_IC17_SetSource(LL_RCC_ICCLKSOURCE_PLL1); 
+	LL_RCC_IC17_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
 	LL_RCC_IC17_SetDivider(10);
 	nodeFrequencies.ic17 = 320000000;
 	// Set IC18 output to PLL1 / 160 = 3200 MHz / 160 = 20 MHz (This is clock to CSI-PHY!! Max is 27MHz). See chapter 14.6.8 pg. 442 in reference manual (Clock to CSI-PHY)
-	LL_RCC_IC18_SetSource(LL_RCC_ICCLKSOURCE_PLL1); 
+	LL_RCC_IC18_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
 	LL_RCC_IC18_SetDivider(160);
 	nodeFrequencies.ic18 = 20000000;
 	// Set IC19 output to PLL1 / 32 = 3200 MHz / 32 = 100 MHz (Clock to FDCAN)
@@ -361,8 +361,14 @@ void System::DisableSysTick(void) {
 }
 
 void System::ConfigureFLEXMEM(ITCMSize itcmSize, DTCMSize dtcmSize) {
+	// Ensure SYSCFG clock is active
+	LL_APB4_GRP2_EnableClock(LL_APB4_GRP2_PERIPH_SYSCFG);
+
 	// Set ITCM and DTCM sizes. Values above smallest size gets allocated from the AXISRAM1 lower words.
 	MODIFY_REG(SYSCFG->CM55TCMCR, SYSCFG_CM55TCMCR_CFGITCMSZ | SYSCFG_CM55TCMCR_CFGDTCMSZ, (static_cast<uint32_t>(itcmSize) << SYSCFG_CM55TCMCR_CFGITCMSZ_Pos) | (static_cast<uint32_t>(dtcmSize) << SYSCFG_CM55TCMCR_CFGDTCMSZ_Pos));
+
+	__DSB();
+	__ISB();
 }
 
 void System::EnableAXISRAM(void) {
@@ -513,6 +519,87 @@ void System::InvalidateCache(void* addr, uint32_t size) {
 
 void System::Reset() {
 
+}
+
+// ============================================================================
+// PMU implementations
+// ============================================================================
+void Pmu::Init() {
+	// Enable Trace CoreDebug monitor to unlock DWT and PMU access
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+
+	// Reset cycle counter and event counters, enable PMU globally
+	PMU->CTRL = (1UL << 0) | (1UL << 1) | (1UL << 2);
+
+	// Clear any pending overflows
+	PMU->OVSCLR = 0xFFFFFFFFUL;
+}
+
+void Pmu::Start() {
+	// Enable CCNTR (bit 31) and all 8 event counters (bits 0-7)
+	PMU->CNTENSET = (1UL << 31) | 0xFFUL;
+}
+
+void Pmu::Stop() {
+	// Disable CCNTR and all event counters
+	PMU->CNTENCLR = (1UL << 31) | 0xFFUL;
+}
+
+void Pmu::Reset() {
+	// Bit 1: Reset event counters, Bit 2: Reset cycle counter
+	PMU->CTRL |= (1UL << 1) | (1UL << 2);
+	PMU->OVSCLR = 0xFFFFFFFFUL;
+}
+
+void Pmu::ConfigureCounter(uint8_t index, Event event) {
+	if(index < 8) {
+		PMU->EVTYPER[index] = static_cast<uint32_t>(event);
+	}
+}
+
+void Pmu::ConfigureChained(uint8_t index, Event event) {
+	if(index < maxChainedPairs) {
+		uint8_t lowIdx = index * 2;
+		PMU->EVTYPER[lowIdx] = static_cast<uint32_t>(event);
+		PMU->EVTYPER[lowIdx + 1] = static_cast<uint32_t>(Event::Chain);
+	}
+}
+
+void Pmu::ConfigureChained(Event event0, Event event1, Event event2, Event event3) {
+	ConfigureChained(0, event0);
+	ConfigureChained(1, event1);
+	ConfigureChained(2, event2);
+	ConfigureChained(3, event3);
+}
+
+uint32_t Pmu::GetCycles() {
+	return DWT->CYCCNT;
+}
+
+uint16_t Pmu::ReadCounter(uint8_t index) {
+	if(index < 8) {
+		return static_cast<uint16_t>(PMU->EVCNTR[index] & 0xFFFFU);
+	}
+	return 0;
+}
+
+uint32_t Pmu::ReadChained(uint8_t index) {
+	if(index >= maxChainedPairs) {
+		return 0;
+	}
+	uint8_t lowIdx = index * 2;
+	uint8_t highIdx = lowIdx + 1;
+
+	// Carry-safe double-read
+	uint32_t hi1 = PMU->EVCNTR[highIdx] & 0xFFFFU;
+	uint32_t lo = PMU->EVCNTR[lowIdx] & 0xFFFFU;
+	uint32_t hi2 = PMU->EVCNTR[highIdx] & 0xFFFFU;
+
+	if(hi1 != hi2) {
+		lo = PMU->EVCNTR[lowIdx] & 0xFFFFU;
+		hi1 = hi2;
+	}
+	return (hi1 << 16) | lo;
 }
 
 // ============================================================================

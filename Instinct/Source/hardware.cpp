@@ -192,16 +192,16 @@ USBClassUVC usbUVC;
 USBPD usbPD(UCPD1);
 extern "C" void UCPD1_IRQHandler(void) { usbPD.InterruptHandler(); }
 
-DMAChannel csiDMAChannel(HPDMA1, LL_DMA_CHANNEL_3);
+DMAChannel csiDMAChannel(HPDMA1, LL_DMA_CHANNEL_3, "CSI");
 extern "C" void HPDMA1_Channel3_IRQHandler(void) { csiDMAChannel.InterruptHandler(); }
 
-DMAChannel dcmiDMAChannel(HPDMA1, LL_DMA_CHANNEL_15);
+DMAChannel dcmiDMAChannel(HPDMA1, LL_DMA_CHANNEL_15, "DCMI");
 extern "C" void HPDMA1_Channel15_IRQHandler(void) { dcmiDMAChannel.InterruptHandler(); }
 
-DMAChannel jpegEncInDMAChannel(HPDMA1, LL_DMA_CHANNEL_0);
+DMAChannel jpegEncInDMAChannel(HPDMA1, LL_DMA_CHANNEL_0, "JPEG IN");
 extern "C" void HPDMA1_Channel0_IRQHandler(void) { jpegEncInDMAChannel.InterruptHandler(); }
 
-DMAChannel jpegEncOutDMAChannel(HPDMA1, LL_DMA_CHANNEL_1);
+DMAChannel jpegEncOutDMAChannel(HPDMA1, LL_DMA_CHANNEL_1, "JPEG OUT");
 extern "C" void HPDMA1_Channel1_IRQHandler(void) { jpegEncOutDMAChannel.InterruptHandler(); }
 
 // EXTI Interrupt Routing
@@ -530,11 +530,11 @@ void HardwareInit() {
 	gps2.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 57600, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
 	ldrUART.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 57600, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
 	hdrUART.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 57600, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false});
-	telem2.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 57600, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false, .swapTxRx = true});
+	telem2.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC9), .baudrate = 921600, .dataBits = UART::DataBits::DataBits_8, .stopBits = UART::StopBits::StopBits_1, .parity = UART::Parity::None, .hwFlowControl = false, .swapTxRx = true});
 	LOG_INFO("UARTs Init OK.");
 
 	// Initialize FDCANs
-	fdcan1.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC19), .nominalBaudrate = 500000, .dataBaudrate = 500000, .fdMode = false});
+	fdcan1.Init({.sourceClockHz = System::GetNodeFrequency(System::ClockNode::IC19), .nominalBaudrate = 500000, .dataBaudrate = 500000, .fdMode = false, .EventCallback = nullptr, .callbackContext = nullptr});
 	LOG_INFO("FDCANs Init OK.");
 
 	// Initialize I2Cs

@@ -11,11 +11,12 @@
 
 static void PrintVisionHelp() {
 	Logger::Instance().Write("--- Vision Commands ---\r\n");
-	Logger::Instance().Write("  stats        - Pipeline throughput & latency stats\r\n");
-	Logger::Instance().Write("  iframe       - Force IDR keyframe on next frame\r\n");
-	Logger::Instance().Write("  record       - Toggle onboard SD video stream recording\r\n");
-	Logger::Instance().Write("  snap         - Capture a single high-res snapshot\r\n");
-	Logger::Instance().Write("  reset        - Reset telemetry accumulators\r\n");
+	Logger::Instance().Write("  capture [on|off] - Toggle or set HD-CAM capture\r\n");
+	Logger::Instance().Write("  record [on|off]  - Toggle onboard SD video stream recording\r\n");
+	Logger::Instance().Write("  snap             - Capture a single high-res snapshot\r\n");
+	Logger::Instance().Write("  stats            - Pipeline throughput & latency stats\r\n");
+	Logger::Instance().Write("  iframe           - Force IDR keyframe on next frame\r\n");
+	Logger::Instance().Write("  reset            - Reset telemetry accumulators\r\n");
 	Logger::Instance().Write("-----------------------\r\n");
 }
 
@@ -68,21 +69,57 @@ static bool CommandVision(const char* args) {
 		return true;
 	}
 
-	if(strcmp(action, "iframe") == 0) {
-		// vencEncoder.ForceKeyframe();
-		Logger::Instance().Write("Forced next frame to IDR Keyframe.\r\n");
+	if(strcmp(action, "capture") == 0 || strcmp(action, "cap") == 0) {
+		char state[8] = {0};
+		if(sscanf(args, "%*s %7s", state) == 1) {
+			if(strcmp(state, "on") == 0 || strcmp(state, "1") == 0) {
+				VisionThread::SetCapture(true);
+			}
+			else if(strcmp(state, "off") == 0 || strcmp(state, "0") == 0) {
+				VisionThread::SetCapture(false);
+			}
+			else {
+				Logger::Instance().Write("Usage: vision capture [on|off]\r\n");
+				return true;
+			}
+		}
+		else {
+			VisionThread::SetCapture(!VisionThread::IsCapturing());
+		}
+		Logger::Instance().Printf("HD-CAM Capture: %s\r\n", VisionThread::IsCapturing() ? "ENABLED" : "DISABLED");
 		return true;
-	}
+    }
 
-	if(strcmp(action, "record") == 0) {
-		// VisionThread::ToggleRecording();
-		// Logger::Instance().Printf("Video stream recording: %s\r\n", VisionThread::IsRecording() ? "STARTED" : "STOPPED");
+	if(strcmp(action, "record") == 0 || strcmp(action, "rec") == 0) {
+		char state[8] = {0};
+		if(sscanf(args, "%*s %7s", state) == 1) {
+			if(strcmp(state, "on") == 0 || strcmp(state, "1") == 0) {
+				VisionThread::SetRecording(true);
+			}
+			else if(strcmp(state, "off") == 0 || strcmp(state, "0") == 0) {
+				VisionThread::SetRecording(false);
+			}
+			else {
+				Logger::Instance().Write("Usage: vision record [on|off]\r\n");
+				return true;
+			}
+		}
+		else {
+			VisionThread::SetRecording(!VisionThread::IsRecording());
+		}
+		Logger::Instance().Printf("HD-CAM Recording: %s\r\n", VisionThread::IsRecording() ? "ENABLED" : "DISABLED");
 		return true;
 	}
 
 	if(strcmp(action, "snap") == 0) {
 		// VisionThread::TriggerSnapshot();
 		Logger::Instance().Write("Snapshot scheduled for next frame.\r\n");
+		return true;
+	}
+
+	if(strcmp(action, "iframe") == 0) {
+		// vencEncoder.ForceKeyframe();
+		Logger::Instance().Write("Forced next frame to IDR Keyframe.\r\n");
 		return true;
 	}
 

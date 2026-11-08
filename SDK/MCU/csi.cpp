@@ -149,7 +149,7 @@ Status Csi::Init(const Config &config) {
 
 	// Set DLL target oscillation frequency
 	WritePhyRegister(0x00, 0xE3, (oscFreq >> 8) & 0xFF);
-	WritePhyRegister(0x00, 0xE3, oscFreq & 0xFF);
+	WritePhyRegister(0x00, 0xE2, oscFreq & 0xFF);
 
 	// Set Base direction to RX (Synopsys 1 RX, 0 TX) + freq range
 	WRITE_REG(this->instance->PFCR, (0x28U << CSI_PFCR_CCFR_Pos) | (hsFreq << CSI_PFCR_HSFR_Pos) | CSI_PFCR_DLD);
@@ -321,29 +321,27 @@ Status Csi::GetLastPacketInfo(VirtualChannel& vc, MIPIDataType& dataType, uint16
 
 void Csi::WritePhyRegister(uint32_t regMsb, uint32_t regLsb, uint32_t val) {
 	// Based on STM HALL: https://github.com/STMicroelectronics/stm32n6xx-hal-driver/blob/cf84d98ae66419c7bfdc25f6c65954585a4e3811/Src/stm32n6xx_hal_dcmipp.c#L8161
-
-	SET_BIT(this->instance->PTCR1, CSI_PTCR1_TWM);		// Set testen to high
+	WRITE_REG(this->instance->PTCR1, CSI_PTCR1_TWM);	// Set testen to high and 0x00 in testdin
 	SET_BIT(this->instance->PTCR0, CSI_PTCR0_TCKEN);	// Set testclk to high
-	SET_BIT(this->instance->PTCR1, CSI_PTCR1_TWM);		// Place 0x00 in testdin
 	CLEAR_REG(this->instance->PTCR0);					// Set testclk to low (with the falling edge on testclk, the testdin signal content is latched internally)
 	CLEAR_REG(this->instance->PTCR1);					// Set testen to low
 
 	// Write MSB
-	SET_BIT(this->instance->PTCR1, regMsb & 0xFFU);		// Place the 8-bit word corresponding to the testcode MSBs in testdin
+	WRITE_REG(this->instance->PTCR1, regMsb & 0xFFU);	// Place the 8-bit word corresponding to the testcode MSBs in testdin
 	SET_BIT(this->instance->PTCR0, CSI_PTCR0_TCKEN);	// Set testclk to high
 	CLEAR_REG(this->instance->PTCR0);					// Set testclk to low
 
 	// Write LSB
-	SET_BIT(this->instance->PTCR1, CSI_PTCR1_TWM);		// Set testen to high
+	WRITE_REG(this->instance->PTCR1, CSI_PTCR1_TWM | (regLsb & 0xFFU));	// Place the 8-bit word test data in testdin
 	SET_BIT(this->instance->PTCR0, CSI_PTCR0_TCKEN);	// Set testclk to high
-	SET_BIT(this->instance->PTCR1, CSI_PTCR1_TWM | (regLsb & 0xFFU));	// Place the 8-bit word test data in testdin
 	CLEAR_REG(this->instance->PTCR0);					// Set testclk to low (with the falling edge on testclk, the testdin signal content is latched internally)
 	CLEAR_REG(this->instance->PTCR1);					// Set testen to low
 
 	// Write Value
-	SET_BIT(this->instance->PTCR1, val & 0xFFU);		// Place the 8-bit word corresponding to the page offset in testdin
+	WRITE_REG(this->instance->PTCR1, val & 0xFFU);		// Place the 8-bit word corresponding to the page offset in testdin
 	SET_BIT(this->instance->PTCR0, CSI_PTCR0_TCKEN);	// Set testclk to high (test data is programmed internally)
 	CLEAR_REG(this->instance->PTCR0);					// Finish by setting testclk to low
+	CLEAR_REG(this->instance->PTCR1);
 }
 
 // ---------------------------------------------------------
@@ -358,6 +356,9 @@ void Csi::InterruptHandler() {
 
 	// Handle Clock changer FIFO full
 	if(((sr0 & CSI_SR0_CCFIFOFF) == CSI_SR0_CCFIFOFF) && ((ier0 & CSI_IER0_CCFIFOFIE) == CSI_IER0_CCFIFOFIE)) {
+		// Disable interrupt to prevent interrupt strom
+		CLEAR_BIT(this->instance->IER0, CSI_IER0_CCFIFOFIE);
+
 		// Clear Interrupt
 		WRITE_REG(this->instance->FCR0, CSI_SR0_CCFIFOFF);
 	}

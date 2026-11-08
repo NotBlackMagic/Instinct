@@ -31,7 +31,7 @@ class CameraDCMI {
 		struct Statistics {
 			uint32_t frames = 0;
 			uint32_t drops = 0;
-			uint32_t dmaErrors = 0;
+			uint32_t errors = 0;
 			float fps = 0.0f;
 		};
 
@@ -72,6 +72,12 @@ class CameraDCMI {
 		/// @return Status::Ok if the transfer started, or Status::Busy if device is locked by another thread, or Status::Error if failed.
 		Status CaptureAsync(VisionFrame &buffer);
 
+		/// @brief Starts continuous double-buffered capture.
+		/// @param buffer0 Frame buffer A structure (double buffer).
+		/// @param buffer1 Frame buffer B structure (double buffer).
+		/// @return Status::Ok if the transfer started, or Status::Busy if device is locked by another thread, or Status::Error if failed.
+		Status CaptureAsync(VisionFrame &buffer0, VisionFrame &buffer1);
+
 		/// @brief Blocks the current thread until the Async capture completes.
 		/// @param timeoutTicks Max wait time in OS ticks.
 		/// @return Status::Ok if the transfer completed successfully, Status::Timeout if it expired, or Status::Error on hardware faults.
@@ -91,7 +97,7 @@ class CameraDCMI {
 		/// @brief Resets pipeline statistics counters.
 		void ResetStatistics() { 
 			this->stats = {}; 
-			this->frameTimestamp = 0;
+			this->timestamp = 0;
 		}
 
 	private:
@@ -102,10 +108,14 @@ class CameraDCMI {
 
 		Config config;
 		Statistics stats = {};
-		uint32_t frameTimestamp = 0;
+		uint32_t timestamp = 0;
 
 		// Capture context
-		VisionFrame* frame;
+		enum class Mode { Idle, Snapshot, Continuous, Partial };
+		Mode currentMode = Mode::Idle;
+		uint8_t currentFrameIdx = 0;
+		VisionFrame* activeFrames[2] = {nullptr, nullptr};
 
-		static void OnDMAComplete(void* ctx, Status status);
+		static void OnDMAComplete(void* ctx, DMAChannel::Event evt);
+		static void OnDCMIEvent(void* ctx, Dcmi::Event evt);
 };

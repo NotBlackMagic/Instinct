@@ -26,7 +26,7 @@ Status CameraMIPI::Init(const Config &config) {
 	ov5645Cnfg.powerDownPin = nullptr;
 
 	// MIPI CSI-2 requires that 8-bit YUV422 to be transmitted as UYVY. Overwrite all other formats to this and let the DCMIPP hardware handle translations
-	if(config.format == PixelFormat::YUV422_YUYV || config.format == PixelFormat::YUV422_YVYU || config.format == PixelFormat::YUV422_UYVY) {
+	if(config.format == PixelFormat::YUV422_YUYV || config.format == PixelFormat::YUV422_YVYU || config.format == PixelFormat::YUV422_UYVY || config.format == PixelFormat::YUV420_NV12) {
 		ov5645Cnfg.format = PixelFormat::YUV422_UYVY;
 	}
 	else {
@@ -84,7 +84,7 @@ Status CameraMIPI::Init(const Config &config) {
 			break;
 		case PixelFormat::YUV420_NV12:
 			dcmiPipe.format = Dcmipp::OutputFormat::YUV420_NV21;
-			dcmiPipe.swapRBUV = true;
+			dcmiPipe.swapRBUV = false;
 			dcmiPipe.pixelPitch = config.width;
 			mipiDataType = Csi::MIPIDataType::YUV422_8bit;
 			break;
@@ -117,6 +117,11 @@ Status CameraMIPI::Init(const Config &config) {
 }
 
 Status CameraMIPI::CaptureAsync(VisionFrame &buffer) {
+	// Empty pointer check
+	if(buffer.startAddress == nullptr) {
+		return Status::Error;
+	}
+
 	// Alignment check, for DMA cache stuff
 	if(((uint32_t)(buffer.startAddress) & 0x1F) != 0) {
 		return Status::Error;
@@ -166,6 +171,11 @@ Status CameraMIPI::CaptureAsync(VisionFrame &buffer) {
 }
 
 Status CameraMIPI::CaptureAsync(VisionFrame &buffer0, VisionFrame &buffer1) {
+	// Empty pointer check
+	if(buffer0.startAddress == nullptr || buffer1.startAddress == nullptr) {
+		return Status::Error;
+	}
+
 	// Alignment check, for DMA cache stuff
 	if(((uint32_t)(buffer0.startAddress) & 0x1F) != 0 || ((uint32_t)(buffer1.startAddress) & 0x1F) != 0) {
 		return Status::Error;
@@ -194,10 +204,12 @@ Status CameraMIPI::CaptureAsync(VisionFrame &buffer0, VisionFrame &buffer1) {
 	if(buffer0.format == PixelFormat::YUV420_NV12) {
 		dest.isSemiPlanar = true;
 		dest.uAddress = dest.primaryAddress + (buffer0.width * buffer0.height);
+		dest.vAddress = dest.secondaryAddress + (buffer1.width * buffer1.height);
 	}
 	else {
 		dest.isSemiPlanar = false;
 		dest.uAddress = 0;
+		dest.vAddress = 0;
 	}
 
 	// Enable interface (Receiver side first)
@@ -216,6 +228,11 @@ Status CameraMIPI::CaptureAsync(VisionFrame &buffer0, VisionFrame &buffer1) {
 }
 
 Status CameraMIPI::CaptureAsync(VisionFrame& buffer, Dcmipp::LineCount lineMult, Dcmipp::LineCount wrapAddress) {
+	// Empty pointer check
+	if(buffer.startAddress == nullptr) {
+		return Status::Error;
+	}
+
 	// Alignment check, for DMA cache stuff
 	if(((uint32_t)(buffer.startAddress) & 0x1F) != 0) {
 		return Status::Error;
@@ -270,7 +287,7 @@ Status CameraMIPI::CaptureWait(uint32_t timeoutTicks) {
 		VisionFrame* readyFrame = this->activeFrames[this->currentFrameIdx];
 
 		// Automatically invalidate the cache for whichever buffer the hardware just completed
-		if(this->currentMode != Mode::Partial) {
+		if(this->currentMode != Mode::Partial && readyFrame != nullptr) {
 			System::InvalidateCache((uint32_t*)readyFrame->startAddress, readyFrame->payloadSize);
 		}
 
@@ -281,14 +298,14 @@ Status CameraMIPI::CaptureWait(uint32_t timeoutTicks) {
 		}
 		this->stats.frames = this->stats.frames + 1;
 
-		if(this->lastUs != 0) {
-			uint32_t dt = nowUs - this->lastUs;
+		if(this->timestamp != 0) {
+			uint32_t dt = nowUs - this->timestamp;
 			if(dt > 0) {
 				float instantFps = 1000000.0f / static_cast<float>(dt);
 				this->stats.fps = (this->stats.fps == 0.0f) ? instantFps : (0.8f * this->stats.fps + 0.2f * instantFps);
 			}
 		}
-		this->lastUs = nowUs;
+		this->timestamp = nowUs;
 
 		// State Machine Management
 		if(this->currentMode == Mode::Continuous) {

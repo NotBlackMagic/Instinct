@@ -27,7 +27,7 @@
 #include "tx_api.h"
 #include "fx_api.h"
 
-#define USE_LINE_MODE						1	// 1 = Hardware line mode (64 lines), 0 = Full-frame ping-pong
+#define USE_LINE_MODE						0	// 1 = Hardware line mode (64 lines), 0 = Full-frame ping-pong
 
 class VisionThread {
 	public:
@@ -68,6 +68,12 @@ class VisionThread {
 		
 		static void Init();
 
+		// Capture & Recording controls
+		static void SetCapture(bool enable);
+		static bool IsCapturing();
+		static void SetRecording(bool enable);
+		static bool IsRecording();
+
 		// Thread-safe telemetry snapshot accessors
 		static void GetStatistics(Statistics& out);
 		static void ResetStatistics();
@@ -87,6 +93,11 @@ class VisionThread {
 		static TX_MUTEX mutex;
 		static Statistics stats;
 		static uint32_t pipelineRestartCounter;
+
+		// Pipeline state flags
+		static volatile bool captureEnabled;
+		static volatile bool recordingRequested;
+		static volatile bool isRecording;
 
 		static void Run(ULONG input);
 		static void OnUVCStreamState(USBClassUVC::StreamEvent event);

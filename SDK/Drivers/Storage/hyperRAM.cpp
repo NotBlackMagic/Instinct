@@ -29,13 +29,13 @@ Status HyperRAM::Init(const Config &config) {
 	}
 	hyperBusCnfg.initialLatency = config.initialLatency;
 	hyperBusCnfg.rwRecoveryTime = config.rwRecoveryTime;
-	if(config.writeZeroLatency == true) {
-		hyperBusCnfg.writeZeroLatency = true;
-	}
-	else {
-		hyperBusCnfg.writeZeroLatency = false;
-	}
+	hyperBusCnfg.writeZeroLatency = config.writeZeroLatency;
 	uint32_t busClockFreq = config.frequencyHz;
+
+	hyperBusCnfg.csBoundary = 10;	// Each row has 1KB
+	uint32_t cyclesPer4us = (config.frequencyHz / 1000000U) * 4U;	// Set access time limit to 4us, same as refresh rate
+	hyperBusCnfg.maxTransfer = (cyclesPer4us > 64U) ? cyclesPer4us : 64U;
+
 	hyperBusCnfg.refreshRate = this->config.refreshRateUs * (busClockFreq / 1000000);	//Convert from ns to clock cycles
 	
 	// Initialize the Bus Hardware

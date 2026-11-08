@@ -45,8 +45,8 @@ class JPEGEncoder {
 		static constexpr uint32_t EVT_ERR = 0x02;
 
 		// Static callbacks to pass into the DMA Config
-		static void DMAInStateCallback(void* ctx, bool enable);
-		static void DMAOutStateCallback(void* ctx, bool enable);
+		static void DMAInStateCallback(void* ctx, DMAChannel::Event evt);
+		static void DMAOutStateCallback(void* ctx, DMAChannel::Event evt);
 
 		static void EventCallback(void* ctx, Jpeg::Event evt);
 };

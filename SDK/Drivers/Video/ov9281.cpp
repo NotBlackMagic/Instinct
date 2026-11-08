@@ -10,6 +10,14 @@
 constexpr uint32_t xclk = 24000000;
 constexpr uint32_t sysClk = 64000000;	// sys_clk: XCLK (24 MHz) / 1.5 * 40 (VCO = 640 MHz) / 5 / 2 = 64 MHz
 
+// Clocks:
+// VCO1: XVCLK * pre_div0(0x030A[0]) * pre_div(0x0300[2:0]) * multiplier(0x0301[1:0] 0x0302[7:0])
+// PLL1 Pixel Clock: VCO1 * M_Div(0x0303[3:0]) * MIPI_div(0x0304[1:0])
+// PLL1 System Clock: VCO1 * sys_pre_div(0x0305[1:0]) * sys_div(0x0306[0])
+// VCO2: XVCLK * pre_div0(0x0314[0]) * pre_div(0x030B[2:0]) * multiplier(0x030C[1:0] 0x030D[7:0])
+// PLL2 ADC Clock: VCO2 * ADC_div(0x0313[3:0])
+// PLL2 Analog Clock: VCO2 * ana_div(0x0312[3:0])
+// PLL2 System Clock: VCO2 * sys_pre_div(0x030F[3:0]) * sys_div(0x030E[2:0])
 static constexpr OV9281::RegisterValuePair ov9281GlobalInit[] = {
 	{OV9281::Register::SC_SOFTWARE_RESET,	0x01},
 	// Clock config/PLL config: SYS: 640MHz

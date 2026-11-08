@@ -26,6 +26,15 @@
 /// @note This driver integrates with ThreadX mutexes for thread safety.
 class UART {
 	public:
+		/// @brief UART throughput and error statistics.
+		struct Statistics {
+			uint32_t txBytes = 0;
+			uint32_t rxBytes = 0;
+			uint32_t txDrops = 0;
+			uint32_t rxDrops = 0;
+			uint32_t hwErrors = 0;
+		};
+		
 		/// @brief Defines the UART data width.
 		enum class DataBits : uint32_t {
 			DataBits_7 = LL_USART_DATAWIDTH_7B,
@@ -92,6 +101,14 @@ class UART {
 		/// @return Number of bytes read.
 		uint32_t Available();
 
+		/// @brief Returns UART performance statistics.
+		Statistics GetStatistics() const { return this->stats; }
+
+		/// @brief Resets UART statistics counters.
+		void ResetStatistics() {
+			this->stats = {};
+		}
+
 		/// @brief Interrupt Service Routine handler.
 		/// @warning This function is called by the NVIC. Do not call manually.
 		void InterruptHandler();
@@ -102,6 +119,7 @@ class UART {
 		uint8_t irqPriority;
 
 		bool isInitialized;
+		Statistics stats = {};
 
 		// Transaction Context
 		static constexpr uint16_t rxBufferSize = 256;

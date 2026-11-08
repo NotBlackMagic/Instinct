@@ -47,6 +47,9 @@ defined in linker script */
 .word _siitcm
 .word _sitcm
 .word _eitcm
+.word _sidtcm_data
+.word _sdtcm_data
+.word _edtcm_data
 .word _sdtcm_bss
 .word _edtcm_bss
 
@@ -67,6 +70,21 @@ Reset_Handler:
   msr   MSPLIM, r0
   ldr   r0, =_estack
   mov   sp, r0          /* set stack pointer */
+
+/* Fill the MSP stack with watermark pattern (0xEFEEFEEF) */
+  ldr   r0, =_sstack
+  ldr   r1, =_estack
+  ldr   r2, =0xEFEEFEEF
+  b     LoopFillStack
+
+FillStack:
+  str   r2, [r0]
+  adds  r0, r0, #4
+
+LoopFillStack:
+  cmp   r0, r1
+  bcc   FillStack
+
 /* Call the clock system initialization function.*/
   bl  SystemInit
 
@@ -101,7 +119,7 @@ LoopFillZerobss:
   cmp r2, r4
   bcc FillZerobss
 
-/* Copy the ITCM code segment from ROM to ITCM */
+/* Copy the ITCM code segment from ROM */
   ldr r0, =_sitcm
   ldr r1, =_eitcm
   ldr r2, =_siitcm
@@ -117,6 +135,27 @@ LoopCopyITCMInit:
   adds r4, r0, r3
   cmp r4, r1
   bcc CopyITCMInit
+
+  /* Memory synchronization barrier after writing code to ITCM */
+  dsb   sy
+  isb
+
+/* Copy the DTCM data segment from ROM to DTCM */
+  ldr r0, =_sdtcm_data
+  ldr r1, =_edtcm_data
+  ldr r2, =_sidtcm_data
+  movs r3, #0
+  b LoopCopyDTCMInit
+
+CopyDTCMInit:
+  ldr r4, [r2, r3]
+  str r4, [r0, r3]
+  adds r3, r3, #4
+
+LoopCopyDTCMInit:
+  adds r4, r0, r3
+  cmp r4, r1
+  bcc CopyDTCMInit
 
 /* Zero fill the DTCM bss segment */
   ldr r2, =_sdtcm_bss
@@ -139,7 +178,6 @@ LoopFillZeroDTCMbss:
 
 LoopForever:
   b LoopForever
-
   .size Reset_Handler, .-Reset_Handler
 
 /**

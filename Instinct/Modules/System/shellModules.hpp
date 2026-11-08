@@ -12,9 +12,10 @@
 #include "BoardInfo.hpp"
 #include "hardware.hpp"
 #include "logger.hpp"
-#include "shell.hpp"
-#include "version.hpp"
 #include "memoryTest.hpp"
+#include "shell.hpp"
+#include "system.hpp"
+#include "version.hpp"
 
 #include "system_stm32n6xx.h"
 #include "tx_thread.h"
@@ -25,6 +26,7 @@ void RegisterSystemCommands();
 
 // Hardware Peripherals
 void RegisterFDCANCommands();
+void RegisterInstinctLinkCommands();
 void RegisterI2CCommands();
 void RegisterI3CCommands();
 void RegisterGPIOCommands();

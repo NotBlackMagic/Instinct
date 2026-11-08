@@ -36,7 +36,7 @@ Status JPEGEncoder::Init() {
 	dmaInCfg.requestLine = LL_HPDMA1_REQUEST_JPEG_RX;
 	dmaInCfg.srcBurstLength = 8;
 	dmaInCfg.dstBurstLength = 8;
-	dmaInCfg.StateCallback = JPEGEncoder::DMAInStateCallback;
+	dmaInCfg.EventCallback = JPEGEncoder::DMAInStateCallback;
 	dmaInCfg.callbackContext = this;
 
 	status = this->dmaIn.Init(dmaInCfg);
@@ -56,7 +56,7 @@ Status JPEGEncoder::Init() {
 	dmaOutCfg.srcBurstLength = 8;
 	dmaOutCfg.dstBurstLength = 8;
 	// On second try/test, this is not required: Disable DMA while reloading buffer
-	dmaOutCfg.StateCallback = nullptr;		// JPEGEncoder::DMAOutStateCallback;
+	dmaOutCfg.EventCallback = nullptr;		// JPEGEncoder::DMAOutStateCallback;
 	dmaOutCfg.callbackContext = nullptr;	// this;
 
 	return this->dmaOut.Init(dmaOutCfg);
@@ -168,14 +168,34 @@ Status JPEGEncoder::EncodeAbort() {
 	return Status::Ok;
 }
 
-void JPEGEncoder::DMAInStateCallback(void* ctx, bool enable) {
-	JPEGEncoder* encoder = static_cast<JPEGEncoder*>(ctx);
-	encoder->jpegInstance.EnableRxDMA(enable);
+void JPEGEncoder::DMAInStateCallback(void* ctx, DMAChannel::Event evt) {
+	if(ctx == nullptr) {
+		return;
+	}
+
+	if(evt == DMAChannel::Event::RequestDisable) {
+		JPEGEncoder* encoder = static_cast<JPEGEncoder*>(ctx);
+		encoder->jpegInstance.EnableRxDMA(false);
+	}
+	else if(evt == DMAChannel::Event::RequestEnable) {
+		JPEGEncoder* encoder = static_cast<JPEGEncoder*>(ctx);
+		encoder->jpegInstance.EnableRxDMA(true);
+	}
 }
 
-void JPEGEncoder::DMAOutStateCallback(void* ctx, bool enable) {
-	JPEGEncoder* encoder = static_cast<JPEGEncoder*>(ctx);
-	encoder->jpegInstance.EnableTxDMA(enable);
+void JPEGEncoder::DMAOutStateCallback(void* ctx, DMAChannel::Event evt) {
+	if(ctx == nullptr) {
+		return;
+	}
+	
+	if(evt == DMAChannel::Event::RequestDisable) {
+		JPEGEncoder* encoder = static_cast<JPEGEncoder*>(ctx);
+		encoder->jpegInstance.EnableTxDMA(false);
+	}
+	else if(evt == DMAChannel::Event::RequestEnable) {
+		JPEGEncoder* encoder = static_cast<JPEGEncoder*>(ctx);
+		encoder->jpegInstance.EnableTxDMA(true);
+	}
 }
 
 void JPEGEncoder::EventCallback(void* ctx, Jpeg::Event evt) {

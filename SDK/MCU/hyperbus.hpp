@@ -69,6 +69,10 @@ class HyperBus {
 			bool writeZeroLatency;		///< True if memory supports 0-latency writes
 			
 			uint32_t refreshRate;		///< Max CS low time (for refresh and only for PSRAM)
+
+			// Boundary & Latency Safety
+			uint8_t csBoundary = 10;	///< 2^10 = 1024 bytes (1KB row boundary)
+			uint16_t maxTransfer = 0;	///< Clamped transfer cycles for tCMS (0 = disabled)
 		};
 
 		// Delete copy constructors.

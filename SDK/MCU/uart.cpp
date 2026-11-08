@@ -146,6 +146,7 @@ Status UART::Transmit(uint8_t *buf, uint16_t len) {
 
 	// Reject write if payload cannot fit
 	if(len > freeSpace) {
+		this->stats.txDrops = this->stats.txDrops + 1;
 #if defined (USE_RTOS)
 		if(useLock == true) {
 			tx_mutex_put(&mutex);
@@ -159,6 +160,7 @@ Status UART::Transmit(uint8_t *buf, uint16_t len) {
 		txBuffer[tmpHead] = buf[i];
 		tmpHead = (tmpHead + 1) % txBufferSize;
 	}
+	this->stats.txBytes = this->stats.txBytes + len;
 
 	// Critical section!
 #if defined (USE_RTOS)
@@ -222,6 +224,7 @@ uint32_t UART::Receive(uint8_t *buf, uint32_t maxLen) {
 		}
 	}
 
+	this->stats.rxBytes = this->stats.rxBytes + toRead;
 	return toRead;
 }
 
@@ -264,21 +267,25 @@ void UART::StartTX() {
 void UART::InterruptHandler() {
 	// Handle ORE (Overrun error)
 	if(LL_USART_IsActiveFlag_ORE(instance) == 0x01) {
+		this->stats.hwErrors = this->stats.hwErrors + 1;
 		// Clear ORE flag
 		LL_USART_ClearFlag_ORE(instance);
 	}
 	// Handle FE (Framing error)
 	if(LL_USART_IsActiveFlag_FE(instance) == 0x01) {
+		this->stats.hwErrors = this->stats.hwErrors + 1;
 		// Clear FE flag
 		LL_USART_ClearFlag_FE(instance);
 	}
 	// Handle PE (Parity error)
 	if(LL_USART_IsActiveFlag_PE(instance) == 0x01) {
+		this->stats.hwErrors = this->stats.hwErrors + 1;
 		// Clear PE flag
 		LL_USART_ClearFlag_PE(instance);
 	}
 	// Handle NE (Noise detection flag)
 	if(LL_USART_IsActiveFlag_NE(instance) == 0x01) {
+		this->stats.hwErrors = this->stats.hwErrors + 1;
 		// Clear NE flag
 		LL_USART_ClearFlag_NE(instance);
 	}
@@ -305,6 +312,9 @@ void UART::InterruptHandler() {
 		if(nextHead != rxBufTail) {
 			rxBuffer[rxBufHead] = byte;
 			rxBufHead = nextHead;
+		}
+		else {
+			this->stats.rxDrops = this->stats.rxDrops + 1;
 		}
 		
 		// if(rxLength != 0x00) {

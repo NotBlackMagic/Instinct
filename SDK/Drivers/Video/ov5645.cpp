@@ -370,27 +370,35 @@ static constexpr OV5645::RegisterValuePair ov5645FHD[] = {
 	{ static_cast<OV5645::Register>(0x3601), 0x33 },
 	{ static_cast<OV5645::Register>(0x3708), 0x63 },
 	{ static_cast<OV5645::Register>(0x370c), 0xc0 },
+
 	{ static_cast<OV5645::Register>(0x3800), 0x01 },	// X address start
 	{ static_cast<OV5645::Register>(0x3801), 0x50 },
 	{ static_cast<OV5645::Register>(0x3802), 0x01 },	// Y address start
-	{ static_cast<OV5645::Register>(0x3803), 0xb2 },
+	{ static_cast<OV5645::Register>(0x3803), 0xae },
 	{ static_cast<OV5645::Register>(0x3804), 0x08 },	// X address end
 	{ static_cast<OV5645::Register>(0x3805), 0xef },
 	{ static_cast<OV5645::Register>(0x3806), 0x05 },	// Y address end
-	{ static_cast<OV5645::Register>(0x3807), 0xf1 },
+	{ static_cast<OV5645::Register>(0x3807), 0xf5 },
+
+	// DVP Output Active Resolution: 1920 x 1088
 	{ static_cast<OV5645::Register>(0x3808), 0x07 },	// Horizontal width, DVPHO = 1920
 	{ static_cast<OV5645::Register>(0x3809), 0x80 },
-	{ static_cast<OV5645::Register>(0x380a), 0x04 },	// Vertical height, DVPVO = 1080
-	{ static_cast<OV5645::Register>(0x380b), 0x38 },
+	{ static_cast<OV5645::Register>(0x380a), 0x04 },	// Vertical height, DVPVO = 1088
+	{ static_cast<OV5645::Register>(0x380b), 0x40 },
+
+	// Blanking and Total Size: HTS = 2500, VTS = 1120
 	{ static_cast<OV5645::Register>(0x380c), 0x09 },	// Total horizontal size, 2500
 	{ static_cast<OV5645::Register>(0x380d), 0xc4 },
 	{ static_cast<OV5645::Register>(0x380e), 0x04 },	// Total vertical size, 1120
 	{ static_cast<OV5645::Register>(0x380f), 0x60 },
+
 	{ static_cast<OV5645::Register>(0x3813), 0x04 },
 	{ static_cast<OV5645::Register>(0x3814), 0x11 },
 	{ static_cast<OV5645::Register>(0x3815), 0x11 },
 	{ static_cast<OV5645::Register>(0x3820), 0x47 },
 	{ static_cast<OV5645::Register>(0x4514), 0x88 },
+
+	// AEC Limits (tied to VTS = 1120)
 	{ static_cast<OV5645::Register>(0x3a02), 0x04 },
 	{ static_cast<OV5645::Register>(0x3a03), 0x60 },
 	{ static_cast<OV5645::Register>(0x3a08), 0x01 },
@@ -615,6 +623,14 @@ Status OV5645::Init(const Config &config) {
 	// 	return Status::Error;
 	// }
 
+	// Set resolution
+	status = this->SetResolution(this->config.width, this->config.height);
+	if(status != Status::Ok) {
+		return status;
+	}
+	sensorInfo.width = this->config.width;
+	sensorInfo.height = this->config.height;
+
 	// Set Clock/frame rate
 	status = this->SetFPS(this->config.fps);
 	if(status != Status::Ok) {
@@ -626,14 +642,6 @@ Status OV5645::Init(const Config &config) {
 	if(status != Status::Ok) {
 		return status;
 	}
-
-	// Set resolution
-	status = this->SetResolution(this->config.width, this->config.height);
-	if(status != Status::Ok) {
-		return status;
-	}
-	sensorInfo.width = this->config.width;
-	sensorInfo.height = this->config.height;
 
 	// Set Test Pattern
 	status = this->SetTestPattern(false);
@@ -738,7 +746,8 @@ Status OV5645::SetResolution(uint16_t width, uint16_t height) {
 			break;
 		case InternalResolution::FHD:
 			this->config.width = 1920;
-			this->config.height = 1080;
+			// Respect 1088 if requested, otherwise default to 1088 for macroblock alignment
+			this->config.height = (height == 1080) ? 1080 : 1088;
 			//PLL1 = 24M * 1/3 * 84 = 672MHz
 			//MIPI_CLK = 672MHz * 1/1 * 1/1 * 1/2 = 336MHz
 			this->mipiBitrate = 2 * 336000000;	//DDR for MIPI
@@ -900,7 +909,7 @@ Status OV5645::SetWhiteBalance(uint8_t redGain, uint8_t blueGain) {
 	// }
 
 	// Set the Blue channel gain
-	uint16_t gB = redGain << 4;
+	uint16_t gB = blueGain << 4;
 	status = this->WriteRegister(static_cast<OV5645::Register>(0x519C), (gB >> 8) & 0xFF);
 	if(status != Status::Ok) {
 		return status;

@@ -23,6 +23,7 @@ void Console::Init(UART* uart) {
 	RegisterCameraCommands();
 	RegisterFDCANCommands();
 	// RegisterFlashCommands();
+	RegisterInstinctLinkCommands();
 	RegisterI2CCommands();
 	RegisterI3CCommands();
 	RegisterGPIOCommands();

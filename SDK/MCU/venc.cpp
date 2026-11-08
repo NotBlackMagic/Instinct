@@ -130,6 +130,7 @@ Status Venc::EncodeFrame(const FrameBuffer& params, uint32_t& generatedBytes, Fr
 		h264EncIn.outBufSize = params.outBufSize;
 
 		// Fire off hardware block encode execution operation
+		tx_event_flags_set(&this->event, 0, TX_AND);
 		H264EncRet ret = H264EncStrmEncode(this->h264Encoder, &this->h264EncIn, &this->h264EncOut, Venc::SliceReadyCallback, nullptr, this);
 		switch(ret) {
 			case H264ENC_FRAME_READY:
@@ -460,6 +461,7 @@ void Venc::InterruptHandler() {
 Status Venc::InitH264() {
 	// Configure VENC Interface
 	H264EncConfig h264Config = {};
+	// h264Config.refFrameCompress = 1;		// NOT SUPPORTED in this hardware
 	h264Config.frameRateDenom = 1;
 	h264Config.frameRateNum = this->config.imageParams.frameRate;
 	h264Config.width = this->config.imageParams.width;
@@ -496,19 +498,23 @@ Status Venc::InitH264() {
 	// Set processing, coding and rate controls
 	if(this->SetPreProcessing() != Status::Ok) {
 		H264EncRelease(&this->h264Encoder);
+		this->h264Encoder = nullptr;
 		return Status::Error;
 	}
 	if(this->SetCodingControl() != Status::Ok) {
 		H264EncRelease(&this->h264Encoder);
+		this->h264Encoder = nullptr;
 		return Status::Error;
 	}
 	if(this->SetRateControl() != Status::Ok) {
 		H264EncRelease(&this->h264Encoder);
+		this->h264Encoder = nullptr;
 		return Status::Error;
 	}
 
 	// Configure Interrupts
 
+	System::CleanCache((uint32_t*)this->config.poolAddress, this->config.poolSize);
 	return Status::Ok;
 }
 
@@ -523,6 +529,9 @@ Status Venc::InitJPEG() {
 	switch(this->config.imageParams.inputFormat) {
 		case InputFormat::YUV420Planar:
 			jpegCfg.frameType = JPEGENC_YUV420_PLANAR;
+			break;
+		case InputFormat::YUV420SemiPlanar:
+			jpegCfg.frameType = JPEGENC_YUV420_SEMIPLANAR;
 			break;
 		case InputFormat::YUV422InterleavedYUYV:
 			jpegCfg.frameType = JPEGENC_YUV422_INTERLEAVED_YUYV;
@@ -632,7 +641,7 @@ Status Venc::SetCodingControl() {
 		uint32_t triggerLines = 1U << static_cast<uint32_t>(this->config.lineTrigger);
 
 		// Number of handshake triggers per circular buffer cycle: totalLines / triggerLines
-		codingCtrl.inputLineBufDepth = totalLines / triggerLines;
+		codingCtrl.inputLineBufDepth = totalLines / 16;
 	}
 	else {
 		codingCtrl.inputLineBufEn = 0;
@@ -807,9 +816,9 @@ int32_t Venc::WaitHardwareReady(uint32_t* slicesReady) {
 	if(status != TX_SUCCESS) {
 		return EWL_HW_WAIT_TIMEOUT;
 	}
-	// if((events & EVT_ERR) == EVT_ERR) {
-	// 	return EWL_HW_WAIT_ERROR;
-	// }
+	if((events & EVT_ERR) == EVT_ERR) {
+		return EWL_HW_WAIT_ERROR;
+	}
 
 	if(slicesReady != nullptr) {
 		*slicesReady = (LL_VENC_ReadRegister(21UL) >> 16) & 0xFFUL;

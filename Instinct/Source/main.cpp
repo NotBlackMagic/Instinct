@@ -129,11 +129,11 @@ void tx_application_define(void *first_unused_memory) {
 	// Define UVC Capabilities/formats
 	static const FrameFormat formats[] = {
 		{
-			.width = 256,
-			.height = 256,
-			.frameInterval = 2000000, 			// 5 FPS in 100ns units
-			.format = PixelFormat::Grayscale,	// PixelFormat::Unknown
-			.codec = VisionCodec::None			// VisionCodec::H264
+			.width = 1920,
+			.height = 1080,
+			.frameInterval = 333333, 			// 30 FPS in 100ns units
+			.format = PixelFormat::Unknown,	// PixelFormat::Unknown
+			.codec = VisionCodec::H264			// VisionCodec::H264
 		}
 	};
 
@@ -185,19 +185,19 @@ void tx_application_define(void *first_unused_memory) {
 	// Start application threads
 	MonitorThread::Init();
 	StorageThread::Init();
-	// VisionThread::Init();
+	VisionThread::Init();
 	LoggerThread::Init();
 	InertialThread::Init();
 	AuxiliaryThread::Init();
 	OpticalFlowThread::Init();
 	RadioThread::Init();
-	// MavlinkThread::Init();
+	// MavlinkThread::Init(&gps1);
 	SensorHubThread::Init();
 	EstimatorThread::Init();
 	ControllerThread::Init();
 	CommanderThread::Init();
 	// ActuatorThread::Init();
-	InstinctLink::Init(&gps1);
+	// InstinctLink::Init(&telem2);
 
 	// Configure blackbox (data logging to SD card) logging profile
 	// BlackboxConfig::ApplyTuningProfile();

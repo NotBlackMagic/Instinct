@@ -54,7 +54,7 @@ Status HyperBus::Init(const Config &config) {
 	this->ConfigureRIF();
 
 	// Save write latency mode (only for memory access)
-	useWriteZeroLatency = config.writeZeroLatency;
+	this->useWriteZeroLatency = config.writeZeroLatency;
 
 	// Get device size in exponent form
 	// Check if valid device size i.e. > 0 and power of 2
@@ -76,8 +76,8 @@ Status HyperBus::Init(const Config &config) {
 	// Configure OCTOSPI System
 	MODIFY_REG(this->instance->CR, XSPI_CR_MSEL, 0x00);				// Set flash select: Data exchange over IO[3:0] in quad or [7:0] in octal
 	MODIFY_REG(this->instance->CR, XSPI_CR_FMODE, 0x00);			// Set functional mode: Indirect-write mode
-	MODIFY_REG(this->instance->CR, XSPI_CR_NOPREF_AXI, 0x00);		// Set automatic prefetch for signaled AXI: Enabled
-	MODIFY_REG(this->instance->CR, XSPI_CR_NOPREF, 0x00);			// Set automatic prefetch: Enabled
+	MODIFY_REG(this->instance->CR, XSPI_CR_NOPREF_AXI, XSPI_CR_NOPREF_AXI);		// Set automatic prefetch for signaled AXI: Disabled (Improves cache miss refill latency)
+	MODIFY_REG(this->instance->CR, XSPI_CR_NOPREF, XSPI_CR_NOPREF);	// Set automatic prefetch: Disabled
 	MODIFY_REG(this->instance->CR, XSPI_CR_CSSEL, 0x00);			// Set CS selection: NCS1
 	MODIFY_REG(this->instance->CR, XSPI_CR_PMM, 0x00);				// Set polling match mode: AND-match mode
 	MODIFY_REG(this->instance->CR, XSPI_CR_APMS, 0x00);				// Set auto-polling mode stop: Stopped by abort or disabling OCTOSPI
@@ -105,8 +105,8 @@ Status HyperBus::Init(const Config &config) {
 
 	MODIFY_REG(this->instance->DCR2, XSPI_DCR2_WRAPSIZE, 0x00);								// Set wrap size: Wrapped reads are not supported by the memory
 
-	MODIFY_REG(this->instance->DCR3, XSPI_DCR3_CSBOUND, 0x00);		// Set NCS boundary (2^CSBOUND): Disabled
-	MODIFY_REG(this->instance->DCR3, XSPI_DCR3_MAXTRAN, 0x00);		// Set maximum transfer (MAXTRAN + 1): Disabled
+	MODIFY_REG(this->instance->DCR3, XSPI_DCR3_CSBOUND, (static_cast<uint32_t>(config.csBoundary) << XSPI_DCR3_CSBOUND_Pos));		// Set NCS boundary (2^CSBOUND)
+	MODIFY_REG(this->instance->DCR3, XSPI_DCR3_MAXTRAN, (static_cast<uint32_t>(config.maxTransfer) - 1U) << XSPI_DCR3_MAXTRAN_Pos);	// Set maximum transfer (MAXTRAN + 1)
 
 	MODIFY_REG(this->instance->DCR4, XSPI_DCR4_REFRESH, config.refreshRate);	// Set refresh rate: Disabled, only used/required for HyperRAM devices
 
@@ -126,7 +126,7 @@ Status HyperBus::Init(const Config &config) {
 	MODIFY_REG(this->instance->DCR2, XSPI_DCR2_PRESCALER, ((prescaler) << XSPI_DCR2_PRESCALER_Pos));	// Set clock prescaler (Fclk = Fkernel/[value+1])
 	while((this->instance->SR & XSPI_SR_BUSY_Msk) == XSPI_SR_BUSY);	// Wait for calibrations to complete
 
-	MODIFY_REG(this->instance->TCR, (XSPI_TCR_SSHIFT), 0x00);	// Configure sample shifting
+	MODIFY_REG(this->instance->TCR, XSPI_TCR_SSHIFT, 0x00);	// Configure sample shifting
 
 	// HyperBus latency configuration
 	uint32_t writeZeroLatencyVal = 0x00;

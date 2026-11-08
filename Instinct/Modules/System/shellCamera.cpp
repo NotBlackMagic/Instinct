@@ -189,7 +189,7 @@ static bool CommandCam(const char* args) {
 
 			Logger::Instance().Write("\r\n--- DCMI CAMERA STATS ---\r\n");
 			Logger::Instance().Printf("  FPS:         %.1f\r\n", camStats.fps);
-			Logger::Instance().Printf("  Frames:      %lu (Drops: %lu, DMA Err: %lu)\r\n", camStats.frames, camStats.drops, camStats.dmaErrors);
+			Logger::Instance().Printf("  Frames:      %lu (Drops: %lu, DMA Err: %lu)\r\n", camStats.frames, camStats.drops, camStats.errors);
 			Logger::Instance().Write("[HARDWARE BUS]\r\n");
 			Logger::Instance().Printf("  DCMI:        Captured: %lu, Overrun: %lu, Sync Err: %lu\r\n", busStats.frames, busStats.overruns, busStats.syncErrors);
 			Logger::Instance().Write("-------------------------\r\n");

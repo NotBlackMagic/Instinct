@@ -24,6 +24,16 @@
 /// @brief Driver for the DMA peripherals (GPDMA and HPDMA).
 class DMAChannel {
 	public:
+		/// @brief DMA low-level hardware bus and operational statistics.
+		struct Statistics {
+			uint32_t transfers = 0;			// Successfully completed transfers
+			uint32_t transferErrors = 0;	// AXI/AHB slave error or RIF violation (DTE Interrupt/Flag)
+			uint32_t settingErrors = 0;		// Configuration / burst misalignment error (USE Interrupt/Flag)
+			uint32_t triggerOverruns = 0;	// Hardware trigger overrun (TO Interrupt/Flag)
+			uint32_t userAborts = 0;		// Transfers aborted via TransferStop()
+			uint64_t bytesTransferred = 0;	// Total accumulated bytes transferred
+		};
+	
 		/// @brief DMA transfer direction.
 		enum class Direction : uint32_t {
 			PeripheralToMemory = LL_DMA_DIRECTION_PERIPH_TO_MEMORY,
@@ -47,6 +57,16 @@ class DMAChannel {
 			High = LL_DMA_HIGH_PRIORITY
 		};
 
+		/// @brief DMA callback events.
+		enum class Event {
+			TransferComplete,
+			TransferError,		// DTE: AXI/AHB bus fault or RIF access denial
+			SettingError,		// USE: Alignment, burst, or 1KB boundary error
+			TriggerOverrun,		// TO:  Hardware trigger overrun
+			RequestDisable,		// Pre-reload hook: disable peripheral DMA request
+			RequestEnable		// Post-reload hook: re-enable peripheral DMA request
+		};
+
 		struct Config {
 			Direction direction;
 			DataWidth srcWidth;
@@ -60,16 +80,16 @@ class DMAChannel {
 			uint32_t srcBurstLength = 1; 
 			uint32_t dstBurstLength = 1;
 
-			// Transfer completion hook
-			void (*CompleteCallback)(void* ctx, Status status) = nullptr;
+			// Set true if peripheral requires toggling its DMA request between >64KB blocks (e.g., JPEG)
+			bool swBlockReload = false;
 
-			// Multi-block reload hooks for enable/disable DMA requests
-			void (*StateCallback)(void* ctx, bool enable) = nullptr;
+			// Optional event callback
+			void (*EventCallback)(void* ctx, Event evt) = nullptr;
 			void* callbackContext = nullptr;
 
-			// RIF / Security Settings
-			// bool IsSecure;
-			// bool IsPrivileged;
+			// RIF/Security Settings
+			bool isSecure = true;
+			bool isPrivileged = true;
 		};
 
 		// Delete copy constructors
@@ -79,7 +99,8 @@ class DMAChannel {
 		/// @brief Constructor.
 		/// @param type			DMA instance type (GPDMA or HPDMA).
 		/// @param channelIndex	DMA channel index.
-		DMAChannel(DMA_TypeDef *instance, uint8_t channelIndex);
+		/// @param channelName	Optional channel name, used to idenitfy/display in shell.
+		DMAChannel(DMA_TypeDef *instance, uint8_t channelIndex, const char* channelName = "DMA");
 
 		/// @brief Initializes the DMA clock, the dma channel itself, and interrupts.
 		/// @param config DMA channel configuration
@@ -105,7 +126,22 @@ class DMAChannel {
 		/// @return Status::Ok if transfer stopped successfully, or Status::Error otherwise.
 		Status TransferStop();
 
+		/// @brief Returns the number of bytes remaining in the current active transfer.
 		uint32_t GetRemaining();
+
+		/// @brief Retrieves the channel statistics.
+		Statistics GetStatistics() const { return this->stats; }
+
+		/// @brief Resets all statistics counters.
+		void ResetStatistics() { this->stats = {}; }
+
+		// Registry traversal
+		static DMAChannel* GetFirstChannel() { return headChannel; }
+		DMAChannel* GetNextChannel() const { return this->nextChannel; }
+
+		const char* GetName() const { return (this->channelName) ? this->channelName : "Unknown"; }
+		uint8_t GetChannelIndex() const { return this->channelIndex; }
+		DMA_TypeDef* GetInstance() const { return this->instance; }
 
 		/// @brief Interrupt Service Routine handler.
 		/// @warning This function is called by the NVIC. Do not call manually.
@@ -118,16 +154,29 @@ class DMAChannel {
 		};
 
 		DMA_TypeDef* instance;
+		DMA_Channel_TypeDef* channelRegs;
 		uint8_t channelIndex;
 		IRQn_Type irqCall;
 		uint8_t irqPriority;
+		bool isInitialized = false;
+
+		
 		Config config;
+		Statistics stats = {};
+
+		// Linked list of all used/enabled DMA channels, for easy access in shell
+		const char* channelName;
+		DMAChannel* nextChannel = nullptr;
+		static inline DMAChannel* headChannel = nullptr;
+
+		static constexpr uint32_t MAX_SW_BLK_LEN = 65280;	//64-byte burst and JPEG aligned
 
 		// Transaction Context, used for software-managed multi-block transfers (>65k limit and no 2D support, also for when required to disable DMA request between blocks i.e, JPEG)
 		uint32_t currentSrc;
 		uint32_t currentDst;
 		uint32_t blockSize;
 		uint32_t remainingBytes;
+		uint32_t totalTransferLength;
 
 		// Synchronization
 		TX_EVENT_FLAGS_GROUP event;
@@ -138,6 +187,9 @@ class DMAChannel {
 
 		// Timeout defines
 		static constexpr uint32_t TIMEOUT_MUTEX = TX_WAIT_FOREVER;
+
+		/// @brief Safely suspends an active channel, waits for SUSPF, and issues a channel reset.
+		Status SuspendAndReset();
 
 		/// @brief Helper to configure Resource Isolation Framework (RIF)
 		void ConfigureRIF(bool isSecure, bool isPrivileged);

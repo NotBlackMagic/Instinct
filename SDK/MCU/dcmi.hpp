@@ -48,12 +48,23 @@ class Dcmi {
 			Rising = 1
 		};
 
+		/// @brief DCMI events.
+		enum class Event {
+			FrameComplete,
+			OverrunError,
+			SyncError
+		};
+
 		/// @brief DCMI peripheral configuration structure.
 		struct Config {
 			SyncPolarity vSyncPolarity;		// When data is NOT valid
 			SyncPolarity hSyncPolarity;		// When data is NOT valid
 			ClockPolarity pxClkPolarity;	// When data is NOT valid
 			bool embeddedSync;
+
+			// Optional event callbacks
+			void (*EventCallback)(void* ctx, Event evt) = nullptr;
+			void* callbackContext = nullptr;
 		};
 
 		// Delete copy constructors
@@ -107,5 +118,6 @@ class Dcmi {
 		IRQn_Type irqCall;
 		uint8_t irqPriority;
 
+		Config config;
 		Statistics stats = {};
 };

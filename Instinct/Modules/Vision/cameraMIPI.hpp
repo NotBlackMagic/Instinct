@@ -61,7 +61,13 @@ class CameraMIPI {
 		/// @param buffer Frame buffer structure.
 		/// @return Status::Ok if the transfer started, or Status::Busy if device is locked by another thread, or Status::Error if failed.
 		Status CaptureAsync(VisionFrame &buffer);
+
+		/// @brief Starts continuous double-buffered capture.
+		/// @param buffer0 Frame buffer A structure (double buffer).
+		/// @param buffer1 Frame buffer B structure (double buffer).
+		/// @return Status::Ok if the transfer started, or Status::Busy if device is locked by another thread, or Status::Error if failed.
 		Status CaptureAsync(VisionFrame &buffer0, VisionFrame &buffer1);
+
 		Status CaptureAsync(VisionFrame &buffer, Dcmipp::LineCount lineMult, Dcmipp::LineCount wrapAddress);
 
 		/// @brief Blocks until the next frame (or buffer) is complete, handling cache invalidation automatically.
@@ -89,7 +95,7 @@ class CameraMIPI {
 		/// @brief Resets pipeline statistics counters.
 		void ResetStatistics() {
 			this->stats = {};
-			this->lastUs = 0;
+			this->timestamp = 0;
 		}
 
 	private:
@@ -99,7 +105,7 @@ class CameraMIPI {
 		DMAChannel& dmaChannel;
 
 		Statistics stats = {};
-		uint32_t lastUs = 0;
+		uint32_t timestamp = 0;
 
 		// Capture context
 		enum class Mode { Idle, Snapshot, Continuous, Partial };

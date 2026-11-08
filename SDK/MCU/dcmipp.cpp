@@ -53,13 +53,17 @@ Status Dcmipp::Init() {
 	uint32_t fifoSize = 128;	// Each client gets a unform FIFO slice of 1024 bytes
 	uint32_t fifoAddStart = 0;
 	uint32_t fifoAddrEnd = (fifoSize - 1);
+	// INFO:
+	// With otrValue = 2, trafficValue = 2 DOES NOT WORK! (frame dropped like crazy)
+	// With otrValue = 2, trafficValue = 3 Slower i.e. FPS drops from ~18fps to ~16fps
+	uint32_t otrValue = 4;		// Maximum outstanding transaction: 4
+	uint32_t trafficValue = 4;	// Burst size (2^x of 8-byte units i.e. 0->8, 1->16, 2->32, etc...): 4 i.e 128 bytes/burst (recommended in Reference Manual)
 
 	// IP-PLUG Client 1 (Pipe 0) Configuration
 
 	// IP-PLUG Client 2 (Pipe 1, Y/RGB component) Configuration
-	// Max Outstanding Transactions (e.g., 4) and Burst size (default: 4, 128 bytes/burst)
-	WRITE_REG(this->instance->IPC2R1, (0x04 << DCMIPP_IPC1R1_OTR_Pos) | (0x04 << DCMIPP_IPC1R1_TRAFFIC_Pos));
-	// Set ratio of total bandwith, arbitration between clients
+	WRITE_REG(this->instance->IPC2R1, (otrValue << DCMIPP_IPC1R1_OTR_Pos) | (trafficValue << DCMIPP_IPC2R1_TRAFFIC_Pos));
+	// Set ratio of total bandwith, arbitration between clients (default: 1 / (SUM of parts))
 	WRITE_REG(this->instance->IPC2R2, (0U << DCMIPP_IPC1R2_WLRU_Pos));
 	// Set FIFO End/Start address (64-bit word address)
 	WRITE_REG(this->instance->IPC2R3, (fifoAddStart << DCMIPP_IPC1R3_DPREGSTART_Pos) | (fifoAddrEnd << DCMIPP_IPC1R3_DPREGEND_Pos));
@@ -67,14 +71,14 @@ Status Dcmipp::Init() {
 	fifoAddrEnd += fifoSize;
 
 	// IP-PLUG Client 3 (Pipe 1, U component) Configuration
-	WRITE_REG(this->instance->IPC3R1, (0x04 << DCMIPP_IPC1R1_OTR_Pos) | (0x04 << DCMIPP_IPC1R1_TRAFFIC_Pos));
+	WRITE_REG(this->instance->IPC3R1, (otrValue << DCMIPP_IPC3R1_OTR_Pos) | (trafficValue << DCMIPP_IPC3R1_TRAFFIC_Pos));
 	WRITE_REG(this->instance->IPC3R2, (0U << DCMIPP_IPC1R2_WLRU_Pos));
 	WRITE_REG(this->instance->IPC3R3, (fifoAddStart << DCMIPP_IPC1R3_DPREGSTART_Pos) | (fifoAddrEnd << DCMIPP_IPC1R3_DPREGEND_Pos));
 	fifoAddStart = fifoAddrEnd + 1;
 	fifoAddrEnd += fifoSize;
 
 	// IP-PLUG Client 4 (Pipe 1, V component) Configuration
-	WRITE_REG(this->instance->IPC4R1, (0x04 << DCMIPP_IPC1R1_OTR_Pos) | (0x04 << DCMIPP_IPC1R1_TRAFFIC_Pos));
+	WRITE_REG(this->instance->IPC4R1, (otrValue << DCMIPP_IPC4R1_OTR_Pos) | (trafficValue << DCMIPP_IPC4R1_TRAFFIC_Pos));
 	WRITE_REG(this->instance->IPC4R2, (0U << DCMIPP_IPC1R2_WLRU_Pos));
 	WRITE_REG(this->instance->IPC4R3, (fifoAddStart << DCMIPP_IPC1R3_DPREGSTART_Pos) | (fifoAddrEnd << DCMIPP_IPC1R3_DPREGEND_Pos));
 
@@ -322,7 +326,9 @@ Status Dcmipp::CaptureAsync(PipeID pipe, const MemoryDestination &dest, CaptureM
 		// Handle Semi/Full Planar UV Addresses
 		if(dest.isSemiPlanar || dest.isFullPlanar) {
 			WRITE_REG(this->instance->P1PPM1AR1, dest.uAddress);
-			// Note: If Double Buffered + SemiPlanar, P1PPM1AR2 needs configuration here too
+			if(dest.isDoubleBuffered) {
+				WRITE_REG(this->instance->P1PPM1AR2, dest.vAddress);
+			}
 		}
 		
 		if(dest.isFullPlanar) {
@@ -342,7 +348,12 @@ Status Dcmipp::CaptureAsync(PipeID pipe, const MemoryDestination &dest, CaptureM
 		}
 
 		// Enable Interrupts
-		MODIFY_REG(this->instance->CMIER, 0x00, DCMIPP_CMIER_P1FRAMEIE | DCMIPP_CMIER_P1VSYNCIE | DCMIPP_CMIER_P1OVRIE);
+		uint32_t pipe1Irqs = DCMIPP_CMIER_P1FRAMEIE | DCMIPP_CMIER_P1VSYNCIE | DCMIPP_CMIER_P1OVRIE;
+		// if((this->instance->P1PPCR & DCMIPP_P1PPCR_LMAWE) != 0U) {
+		// 	// Enable P1LINEIE interrupt if line wrapping is active
+		// 	pipe1Irqs |= DCMIPP_CMIER_P1LINEIE;
+		// }
+		MODIFY_REG(this->instance->CMIER, 0x00, pipe1Irqs);
 
 		// Enable the Pipe
 		SET_BIT(this->instance->P1FSCR, DCMIPP_P1FSCR_PIPEN);
@@ -400,6 +411,9 @@ Status Dcmipp::CaptureAbort(PipeID pipe) {
 	uint32_t timeout = 10000;
 
 	if(pipe == PipeID::Dump) {
+		// Disable Interrupts first to stop any overrun/error IRQ storm
+		MODIFY_REG(this->instance->CMIER, DCMIPP_CMIER_P0LINEIE | DCMIPP_CMIER_P0FRAMEIE | DCMIPP_CMIER_P0VSYNCIE | DCMIPP_CMIER_P0LIMITIE | DCMIPP_CMIER_P0OVRIE, 0x00);
+
 		// Stop the capture
 		CLEAR_BIT(this->instance->P0FCTCR, DCMIPP_P0FCTCR_CPTREQ);
 
@@ -407,7 +421,8 @@ Status Dcmipp::CaptureAbort(PipeID pipe) {
 		while((this->instance->CMSR1 & DCMIPP_CMSR1_P0CPTACT) != 0U) {
 			timeout = timeout - 1;
 			if(timeout == 0) {
-				return Status::Timeout;
+				// Proceed to force-disable PIPEN below
+				break;
 			}
 		}
 
@@ -416,11 +431,11 @@ Status Dcmipp::CaptureAbort(PipeID pipe) {
 
 		// Disable Pipe Processing
 		CLEAR_BIT(this->instance->P0FSCR, DCMIPP_P0FSCR_PIPEN);
-
-		// Disable Interrupts
-		MODIFY_REG(this->instance->CMIER, DCMIPP_CMIER_P0LINEIE | DCMIPP_CMIER_P0FRAMEIE | DCMIPP_CMIER_P0VSYNCIE | DCMIPP_CMIER_P0LIMITIE | DCMIPP_CMIER_P0OVRIE, 0x00);
 	}
 	else if(pipe == PipeID::Main) {
+		// Disable Interrupts first to stop any overrun/error IRQ storm
+		MODIFY_REG(this->instance->CMIER, DCMIPP_CMIER_P1LINEIE | DCMIPP_CMIER_P1FRAMEIE | DCMIPP_CMIER_P1VSYNCIE | DCMIPP_CMIER_P1OVRIE, 0x00);
+		
 		// Stop the capture
 		CLEAR_BIT(this->instance->P1FCTCR, DCMIPP_P1FCTCR_CPTREQ);
 
@@ -428,7 +443,8 @@ Status Dcmipp::CaptureAbort(PipeID pipe) {
 		while((this->instance->CMSR1 & DCMIPP_CMSR1_P1CPTACT) != 0U) {
 			timeout = timeout - 1;
 			if(timeout == 0) {
-				return Status::Timeout;
+				// Proceed to force-disable PIPEN below
+				break;
 			}
 		}
 
@@ -439,10 +455,13 @@ Status Dcmipp::CaptureAbort(PipeID pipe) {
 		// Disable Pipe Processing
 		CLEAR_BIT(this->instance->P1FSCR, DCMIPP_P1FSCR_PIPEN);
 
-		// Disable Interrupts
-		MODIFY_REG(this->instance->CMIER, DCMIPP_CMIER_P1LINEIE | DCMIPP_CMIER_P1FRAMEIE | DCMIPP_CMIER_P1VSYNCIE | DCMIPP_CMIER_P1OVRIE, 0x00);
+		// Clear any pending flags
+		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP1LINEF | DCMIPP_CMFCR_CP1FRAMEF | DCMIPP_CMFCR_CP1VSYNCF | DCMIPP_CMFCR_CP1OVRF | DCMIPP_CMFCR_CATXERRF);
 	}
 	else if(pipe == PipeID::Auxiliary) {
+		// Disable Interrupts first to stop any overrun/error IRQ storm
+		MODIFY_REG(this->instance->CMIER, DCMIPP_CMIER_P2LINEIE | DCMIPP_CMIER_P2FRAMEIE | DCMIPP_CMIER_P2VSYNCIE | DCMIPP_CMIER_P2OVRIE, 0x00);
+
 		// Stop the capture
 		CLEAR_BIT(this->instance->P2FCTCR, DCMIPP_P2FCTCR_CPTREQ);
 
@@ -450,7 +469,8 @@ Status Dcmipp::CaptureAbort(PipeID pipe) {
 		while((this->instance->CMSR1 & DCMIPP_CMSR1_P2CPTACT) != 0U) {
 			timeout = timeout - 1;
 			if(timeout == 0) {
-				return Status::Timeout;
+				// Proceed to force-disable PIPEN below
+				break;
 			}
 		}
 
@@ -459,9 +479,6 @@ Status Dcmipp::CaptureAbort(PipeID pipe) {
 
 		// Disable Pipe Processing
 		CLEAR_BIT(this->instance->P2FSCR, DCMIPP_P2FSCR_PIPEN);
-
-		// Disable Interrupts
-		MODIFY_REG(this->instance->CMIER, DCMIPP_CMIER_P2LINEIE | DCMIPP_CMIER_P2FRAMEIE | DCMIPP_CMIER_P2VSYNCIE | DCMIPP_CMIER_P2OVRIE, 0x00);
 	}
 	else {
 		return Status::Error;
@@ -549,7 +566,7 @@ void Dcmipp::InterruptHandler() {
 	if(((cmsr2 & DCMIPP_CMSR2_P0VSYNCF) == DCMIPP_CMSR2_P0VSYNCF) && ((cmier & DCMIPP_CMIER_P0VSYNCIE) == DCMIPP_CMIER_P0VSYNCIE)) {
 		this->stats[0].lastVsyncTimestamp = Time::GetUs();
 		// Reset line timestamp so the first slice duration is measured from VSYNC
-		this->stats[0].lastLineTimestamp = this->stats[1].lastVsyncTimestamp;
+		this->stats[0].lastLineTimestamp = this->stats[0].lastVsyncTimestamp;
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP0VSYNCF);
 	}
@@ -627,6 +644,9 @@ void Dcmipp::InterruptHandler() {
 	// Handle Overrun and Synchronization Errors as needed
 	if(((cmsr2 & DCMIPP_CMSR2_P1OVRF) == DCMIPP_CMSR2_P1OVRF) && ((cmier & DCMIPP_CMIER_P1OVRIE) == DCMIPP_CMIER_P1OVRIE)) {
 		this->stats[1].overrunErrors++;
+		// Disable interupt, prevent interrupt storm
+		CLEAR_BIT(this->instance->CMIER, DCMIPP_CMIER_P1OVRIE);
+
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP1OVRF);
 
@@ -648,7 +668,7 @@ void Dcmipp::InterruptHandler() {
 	if(((cmsr2 & DCMIPP_CMSR2_P2VSYNCF) == DCMIPP_CMSR2_P2VSYNCF) && ((cmier & DCMIPP_CMIER_P2VSYNCIE) == DCMIPP_CMIER_P2VSYNCIE)) {
 		this->stats[2].lastVsyncTimestamp = Time::GetUs();
 		// Reset line timestamp so the first slice duration is measured from VSYNC
-		this->stats[2].lastLineTimestamp = this->stats[1].lastVsyncTimestamp;
+		this->stats[2].lastLineTimestamp = this->stats[2].lastVsyncTimestamp;
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP2VSYNCF);
 	}
@@ -682,7 +702,12 @@ void Dcmipp::InterruptHandler() {
 
 	// IPPLUG AXI transfer Error Interrupt
 	if(((cmsr2 & DCMIPP_CMSR2_ATXERRF) == DCMIPP_CMSR2_ATXERRF) && ((cmier & DCMIPP_CMIER_ATXERRIE) == DCMIPP_CMIER_ATXERRIE)) {
+		// Disable interupt, prevent interrupt storm
+		CLEAR_BIT(this->instance->CMIER, DCMIPP_CMIER_ATXERRIE);
+
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CATXERRF);
+		
+		tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
 	}
 }

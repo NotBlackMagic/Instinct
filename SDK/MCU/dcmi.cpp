@@ -13,6 +13,8 @@ Dcmi::Dcmi(DCMI_TypeDef *instance) {
 }
 
 Status Dcmi::Init(const Config &config) {
+	this->config = config;
+
 	// Enable bus clocks
 	if(this->instance == DCMI) {
 		// LL_APB5_GRP1_EnableClock(LL_APB5_GRP1_PERIPH_DCMIPP);
@@ -64,7 +66,7 @@ Status Dcmi::ConfigureCrop(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
 	// Configure crop window start
 	WRITE_REG(this->instance->CWSTRTR, (static_cast<uint32_t>(y) << DCMI_CWSTRT_VST_Pos) | (static_cast<uint32_t>(x) << DCMI_CWSTRT_HOFFCNT_Pos));
 	// Configure crop window size
-	WRITE_REG(this->instance->CWSIZER, (static_cast<uint32_t>(w - 1) << DCMI_CWSIZE_VLINE_Pos) | (static_cast<uint32_t>(h - 1) << DCMI_CWSIZE_CAPCNT_Pos));
+	WRITE_REG(this->instance->CWSIZER, (static_cast<uint32_t>(h - 1) << DCMI_CWSIZE_VLINE_Pos) | (static_cast<uint32_t>(w - 1) << DCMI_CWSIZE_CAPCNT_Pos));
 
 	return Status::Ok;
 }
@@ -150,21 +152,41 @@ void Dcmi::InterruptHandler() {
 	// Handle Overrun
 	if((misr & DCMI_MIS_OVR_MIS) != 0U) {
 		this->stats.overruns = this->stats.overruns + 1;
+
+		// Stop capture
+		MODIFY_REG(this->instance->CR, DCMI_CR_CAPTURE, 0x00);
+
 		// Clear Interrupt
-		MODIFY_REG(this->instance->ICR, DCMI_ICR_OVR_ISC, DCMI_ICR_OVR_ISC);
+		WRITE_REG(this->instance->ICR, DCMI_ICR_OVR_ISC);
+
+		if(this->config.EventCallback != nullptr) {
+			this->config.EventCallback(this->config.callbackContext, Event::OverrunError);
+		}
 	}
 
 	// Handle Synchronization Error
 	if((misr & DCMI_MIS_ERR_MIS) != 0U) {
 		this->stats.syncErrors = this->stats.syncErrors + 1;
+
+		// Stop capture
+		MODIFY_REG(this->instance->CR, DCMI_CR_CAPTURE, 0x00);
+
 		// Clear Interrupt
-		MODIFY_REG(this->instance->ICR, DCMI_ICR_ERR_ISC, DCMI_ICR_ERR_ISC);
+		WRITE_REG(this->instance->ICR, DCMI_ICR_ERR_ISC);
+
+		if(this->config.EventCallback != nullptr) {
+			this->config.EventCallback(this->config.callbackContext, Event::SyncError);
+		}
 	}
 
 	//Handle Capture Complete
 	if((misr & DCMI_MIS_FRAME_MIS) != 0U) {
 		this->stats.frames = this->stats.frames + 1;
 		//Clear Interrupt
-		MODIFY_REG(this->instance->ICR, DCMI_ICR_FRAME_ISC, DCMI_ICR_FRAME_ISC);
+		WRITE_REG(this->instance->ICR, DCMI_ICR_FRAME_ISC);
+
+		if(this->config.EventCallback != nullptr) {
+			this->config.EventCallback(this->config.callbackContext, Event::FrameComplete);
+		}
 	}
 }

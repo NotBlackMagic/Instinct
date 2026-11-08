@@ -32,7 +32,7 @@ class FDCAN {
 			uint32_t timeouts = 0;
 		};
 
-		/// @brief DCMI events
+		/// @brief FDCAN events.
 		enum class Event : uint8_t {
 			TXComplete = 0,		///< Transmission acknowledged on the bus
 			RXComplete,			///< New frame landed in RX FIFO
