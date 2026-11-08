@@ -56,7 +56,7 @@ Status CameraDCMI::Init(const Config &config) {
 	dmaConfig.incSrc = false;
 	dmaConfig.priority = DMAChannel::Priority::High;
 	dmaConfig.srcBurstLength = 1;	// From DCMI, burst NOT supported
-	dmaConfig.dstBurstLength = 1;	// To AXISRAM, 1x 64-bit (double word) = 8-Bytes AXI bursts
+	dmaConfig.dstBurstLength = 2;	// To AXISRAM, 2x 64-bit (double word) = 16-Bytes AXI bursts
 	dmaConfig.requestLine = LL_HPDMA1_REQUEST_DCMI_PSSI;
 	dmaConfig.EventCallback = CameraDCMI::OnDMAComplete;
 	dmaConfig.callbackContext = this;

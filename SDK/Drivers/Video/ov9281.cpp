@@ -8,7 +8,10 @@
 #include "ov9281.hpp"
 
 constexpr uint32_t xclk = 24000000;
-constexpr uint32_t sysClk = 64000000;	// sys_clk: XCLK (24 MHz) / 1.5 * 40 (VCO = 640 MHz) / 5 / 2 = 64 MHz
+// VCO1 & VCO2 kept at 640 MHz so ADC (320 MHz) and Analog (80 MHz) clocks stay at factory defaults.
+// PLL1 PCLK: 24 MHz / 1.5 * 40 (640 MHz) / 2 (M_DIV=1) / 5 (PRE=2) / 2 (DIV=1) = 32 MHz
+// PLL2 SYS:  24 MHz / 3 * 80 (640 MHz) / 5 (PRE=4) / 4 (DIV=6) = 32 MHz
+constexpr uint32_t sysClk = 32000000;
 
 // Clocks:
 // VCO1: XVCLK * pre_div0(0x030A[0]) * pre_div(0x0300[2:0]) * multiplier(0x0301[1:0] 0x0302[7:0])
@@ -24,20 +27,20 @@ static constexpr OV9281::RegisterValuePair ov9281GlobalInit[] = {
 																		// 0x0300: PLL1 PRE DIV (Default: 0x01) (0: /1, 1: /1.5, 2: /2, 3: /2.5, 4: /3, 5: /4, 6: /6, 8: /8)
 	{static_cast<OV9281::Register>(0x0301),	0x00},	// Bit[1:0]: PLL1 Multiplier [9:8]
 	{static_cast<OV9281::Register>(0x0302),	0x28},	// Bit [7:0]: PLL1 Multiplier [7:0]
-	{static_cast<OV9281::Register>(0x0303),	0x00},	// Bit [3:0] PLL1 M DIV (Default: 0x00) (/(1 + [3:0]))
+	{static_cast<OV9281::Register>(0x0303),	0x01},	// Bit [3:0]: PLL1 M DIV (Default: 0x00) (/(1 + [3:0]))
 																		// 0x0304: PLL1 MIPI DIV (Default: 0x03)
-																		// 0x0305: PLL1 PRE SYS DIV (Default: 0x02)
-																		// 0x0306: PLL1 SYS DIV (Default: 0x01)
+	{static_cast<OV9281::Register>(0x0305),	0x02},	// 0x0305: PLL1 PRE SYS DIV (Default: 0x02)
+	{static_cast<OV9281::Register>(0x0306),	0x01},	// 0x0306: PLL1 SYS DIV (Default: 0x01)
 																		// 0x0307: PLL1 DIV RST SYNC (Default: 0x00)
 																		// 0x0308: PLL1 Bypass (Default: 0x00)
 																		// 0x0309: PLL1 CP (Default: 0x01)
 																		// 0x030A: PLL1 PRE DIV0 (Default: 0x00) (0: /1, 1: /2)
-																		// 0x030B: PLL2 PRE DIV (Default: 0x04)
+																		// 0x030B: PLL2 PRE DIV (Default: 0x04) (0: /1, 1: /1.5, 2: /2, 3: /2.5, 4: /3, 5: /4, 6: /6, 8: /8)
 																		// 0x030C: PLL2 Multiplier[9:8] (Default: 0x00)
 	{static_cast<OV9281::Register>(0x030D),	0x50},	// Bit [7:0]: PLL2 Multiplier [7:0] (Default: 0x50)
-	{static_cast<OV9281::Register>(0x030E),	0x02},	// Bit [2:0]: PLL2 SYS DIV (Default: 0x02)
-
-	{static_cast<OV9281::Register>(0x3001),	0x20},	// Bit [6:5] Drive capability (00: 1x; 01: 2x; 10: 3x; 11: 4x)
+	{static_cast<OV9281::Register>(0x030E),	0x06},	// Bit [2:0]: PLL2 SYS DIV (Default: 0x02) (0: /1, 1: /1.5, 2: /2, 3: /2.5, 4: /3, 5: /3.5, 6: /4, 7: /5)
+	{static_cast<OV9281::Register>(0x030F),	0x04},	// Bit [3:0]: PLL2 SYS PRE DIV (Default: 0x03) (/(1 + [3:0]))
+	{static_cast<OV9281::Register>(0x3001),	0x20},	// Bit [6:5]: Drive capability (00: 1x; 01: 2x; 10: 3x; 11: 4x)
 	{static_cast<OV9281::Register>(0x3004),	0x00},
 	{static_cast<OV9281::Register>(0x3005),	0x00},
 	{OV9281::Register::SC_CTRL_06,			0x04},
@@ -284,8 +287,10 @@ Status OV9281::SetFPS(uint32_t fps) {
 			minVTS = 0x038E;	// 910 lines (800 active + 110 blanking)
 			break;
 		case 400:
-		case 256:
 			minVTS = 0x0208;	// 520 lines (400 active + 120 blanking)
+			break;
+		case 256:
+			minVTS = 0x0140;	// 320 lines (264 active + 56 blanking)
 			break;
 		default:
 			return Status::Error;
@@ -792,7 +797,8 @@ Status OV9281::ApplyResolution(InternalResolution resolution) {
 
 		case InternalResolution::P256:
 			// 256x256 is a 2x horizontal / 2x vertical subsampled mode and windowing
-			status = this->ApplyWindow(0, 0, 1296, 816);
+			// Window vertical analog array to center 528 rows (y = 144, h = 528 -> 264 binned rows)
+			status = this->ApplyWindow(0, 144, 1296, 528);
 			if(status != Status::Ok) {
 				return status;
 			}
@@ -831,19 +837,19 @@ Status OV9281::ApplyResolution(InternalResolution resolution) {
 				return status;
 			}
 
-			// Base VTS = 520 (0x0208)
-			status = this->WriteRegister(Register::VTS_H, 0x02);
+			// Base VTS = 320 (0x0140)
+			status = this->WriteRegister(Register::VTS_H, 0x01);
 			if(status != Status::Ok) {
 				return status;
 			}
-			status = this->WriteRegister(Register::VTS_L, 0x08);
+			status = this->WriteRegister(Register::VTS_L, 0x40);
 			if(status != Status::Ok) {
 				return status;
 			}
 
 			// Crop offsets: Crop center from 648x408 pinned stream to 256x256
 			// X_WIN = (648 - 256) / 2 = 196 (0x00C4)
-			// Y_WIN = (408 - 256) / 2 = 76 (0x004C)
+			// Y_WIN = (264 - 256) / 2 = 4 (0x0004)
 			status = this->WriteRegister(Register::X_WIN_H, 0x00);
 			if(status != Status::Ok) {
 				return status;
@@ -856,7 +862,7 @@ Status OV9281::ApplyResolution(InternalResolution resolution) {
 			if(status != Status::Ok) {
 				return status;
 			}
-			status = this->WriteRegister(Register::Y_WIN_L, 0x4C);
+			status = this->WriteRegister(Register::Y_WIN_L, 0x04);
 			if(status != Status::Ok) {
 				return status;
 			}
