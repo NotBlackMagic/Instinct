@@ -501,6 +501,8 @@ void HardwareInit() {
 	ext1IMUPwEn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::NoPull});
 	ext2IMUPwEn.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::NoPull});
 	extIMUHeater.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::NoPull});
+	ospiRst.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::PullUp});
+	hspiRst.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::PullUp});
 
 	// Inputs
 	userButton.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullUp});
@@ -510,6 +512,7 @@ void HardwareInit() {
 	ext2IMUInt.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
 	camInt0.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
 	camInt1.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullDown});
+	ospiInt.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullUp});
 
 	ledRed.Write(1);
 	ledGreen.Write(1);

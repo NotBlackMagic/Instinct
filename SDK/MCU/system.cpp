@@ -198,7 +198,7 @@ void System::InitClock(void) {
 	nodeFrequencies.ic10 = 100000000;
 	// Set IC11 output to PLL3 / 3 = 2700 MHz / 3 = 900 MHz (Clock to NPU SRAM: AXISRAM3/4/5/6)
 	LL_RCC_IC11_SetSource(LL_RCC_ICCLKSOURCE_PLL3);
-	LL_RCC_IC11_SetDivider(4);
+	LL_RCC_IC11_SetDivider(3);
 	nodeFrequencies.ic11 = 900000000;
 	// Set IC17 output to PLL1 / 4 = 3200 MHz / 10 = 320 MHz (Clock to DCMIPP)
 	LL_RCC_IC17_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
@@ -210,7 +210,7 @@ void System::InitClock(void) {
 	nodeFrequencies.ic18 = 20000000;
 	// Set IC19 output to PLL1 / 32 = 3200 MHz / 32 = 100 MHz (Clock to FDCAN)
 	LL_RCC_IC19_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
-	LL_RCC_IC19_SetDivider(16);
+	LL_RCC_IC19_SetDivider(32);
 	nodeFrequencies.ic19 = 100000000;
 	// Set IC20 output to PLL1 / 16 = 3200 MHz / 16 = 200 MHz (Clock to FDCAN)
 	LL_RCC_IC20_SetSource(LL_RCC_ICCLKSOURCE_PLL1);
@@ -363,12 +363,33 @@ void System::DisableSysTick(void) {
 void System::ConfigureFLEXMEM(ITCMSize itcmSize, DTCMSize dtcmSize) {
 	// Ensure SYSCFG clock is active
 	LL_APB4_GRP2_EnableClock(LL_APB4_GRP2_PERIPH_SYSCFG);
+	LL_MEM_EnableClock(LL_MEM_FLEXRAM);
 
-	// Set ITCM and DTCM sizes. Values above smallest size gets allocated from the AXISRAM1 lower words.
-	MODIFY_REG(SYSCFG->CM55TCMCR, SYSCFG_CM55TCMCR_CFGITCMSZ | SYSCFG_CM55TCMCR_CFGDTCMSZ, (static_cast<uint32_t>(itcmSize) << SYSCFG_CM55TCMCR_CFGITCMSZ_Pos) | (static_cast<uint32_t>(dtcmSize) << SYSCFG_CM55TCMCR_CFGDTCMSZ_Pos));
+	const uint32_t targetMask = SYSCFG_CM55TCMCR_CFGITCMSZ | SYSCFG_CM55TCMCR_CFGDTCMSZ;
+	const uint32_t targetVal  = (static_cast<uint32_t>(itcmSize) << SYSCFG_CM55TCMCR_CFGITCMSZ_Pos) | (static_cast<uint32_t>(dtcmSize) << SYSCFG_CM55TCMCR_CFGDTCMSZ_Pos);
 
-	__DSB();
-	__ISB();
+	// Only write and reboot if the TCM configuration is not already applied
+	if((SYSCFG->CM55TCMCR & targetMask) != targetVal) {
+		// Mask all interrupts
+		__disable_irq();
+
+		if(SCB->CCR & SCB_CCR_DC_Msk) {
+			SCB_CleanInvalidateDCache();
+			SCB_DisableDCache();
+		}
+		if(SCB->CCR & SCB_CCR_IC_Msk) {
+			SCB_DisableICache();
+			SCB_InvalidateICache();
+		}
+
+		MODIFY_REG(SYSCFG->CM55TCMCR, targetMask, targetVal);
+
+		System::Reset();
+	}
+
+	// NRST workaround (ERRATA soltuion for Incorrect NRST behaviour: ES0620 - Rev 5 Chap. 2.2.18)
+	SET_BIT(SYSCFG->CM55RSTCR, SYSCFG_CM55RSTCR_CORE_RESET_TYPE);
+	(void)SYSCFG->CM55RSTCR;
 }
 
 void System::EnableAXISRAM(void) {
@@ -518,7 +539,52 @@ void System::InvalidateCache(void* addr, uint32_t size) {
 }
 
 void System::Reset() {
+	// Prevent ISRs or RTOS context switches mid-shutdown
+	__disable_irq();
 
+	// Ensure SYSCFG and HSI are active (HSI is required by default PERSEL = 0x0)
+	LL_APB4_GRP2_EnableClock(LL_APB4_GRP2_PERIPH_SYSCFG);
+	if(LL_RCC_HSI_IsReady() != 1U) {
+		LL_RCC_HSI_Enable();
+		while(LL_RCC_HSI_IsReady() != 1U) {
+			__NOP();
+		}
+	}
+
+	// Reset some clock soruces to there default values (ERRATA soltuion for Boot ROM execution failure: ES0620 - Rev 5 Chap. 22.2.23)
+	LL_RCC_SetXSPIClockSource(LL_RCC_XSPI1_CLKSOURCE_HCLK);
+	LL_RCC_SetXSPIClockSource(LL_RCC_XSPI2_CLKSOURCE_HCLK);
+
+	LL_RCC_SetUSBClockSource(LL_RCC_OTGPHY1_CLKSOURCE_HSE_DIV_2);
+	LL_RCC_SetUSBClockSource(LL_RCC_OTGPHY1CKREF_CLKSOURCE_OTGPHY1);
+
+	LL_RCC_SetCLKPClockSource(LL_RCC_CLKP_CLKSOURCE_HSI);
+
+	LL_RCC_SetSDMMCClockSource(LL_RCC_SDMMC1_CLKSOURCE_HCLK);
+	LL_RCC_SetSDMMCClockSource(LL_RCC_SDMMC2_CLKSOURCE_HCLK);
+
+	LL_RCC_SetUSARTClockSource(LL_RCC_USART1_CLKSOURCE_PCLK2);
+	LL_RCC_SetUSARTClockSource(LL_RCC_USART2_CLKSOURCE_PCLK1);
+	LL_RCC_SetUARTClockSource(LL_RCC_UART4_CLKSOURCE_PCLK1);
+	LL_RCC_SetUARTClockSource(LL_RCC_UART5_CLKSOURCE_PCLK1);
+
+	// Ensure APB writes finish
+	(void)RCC->CCIPR6;
+	(void)RCC->CCIPR7;
+	(void)RCC->CCIPR8;
+	(void)RCC->CCIPR13;
+	__DSB();
+
+	// Upgrade SYSRESETREQ to a Core Power-On Reset so CM55 latches the TCM sizes
+	SET_BIT(SYSCFG->CM55RSTCR, SYSCFG_CM55RSTCR_CORE_RESET_TYPE);
+	(void)SYSCFG->CM55RSTCR;
+	__DSB();
+	__ISB();
+
+	NVIC_SystemReset();
+	while (1) {
+		__NOP();
+	}
 }
 
 // ============================================================================
@@ -624,6 +690,7 @@ void Time::Init() {
 
 	// This is needed to update the prescaler
 	LL_TIM_GenerateEvent_UPDATE(TIM5);
+	LL_TIM_ClearFlag_UPDATE(TIM5);
 
 	// Reset timer counters
 	timeMills = 0;

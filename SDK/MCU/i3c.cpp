@@ -394,6 +394,7 @@ Status I3C::TransferAsync(uint8_t addr, TargetType type, const uint8_t *txBuf, u
 			LL_I3C_RequestRxFIFOFlush(this->instance);
 
 			tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
+			tx_mutex_put(&this->mutex);
 			return Status::Error;
 		}
 

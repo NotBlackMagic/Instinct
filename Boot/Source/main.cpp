@@ -45,9 +45,11 @@ C:\ST\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe -c port=usb1 -detach
 #define AXI_SRAM_BASE							0x24000000U
 #define AXI_SRAM_SIZE							(512U * 1024U)
 #define PSRAM_BASE								0x34000000U
+#define DTCM_BASE								0x30000000U
+#define DTCM_SIZE								(256U * 1024U)
 
 #define FW_HEADER_OFFSET						0x400
-#define FW_STAGING_RAM_ADDRESS					0x34000000U
+#define FW_STAGING_RAM_ADDRESS					0x34200000U
 
 UART debugUART(UART4);
 extern "C" void UART4_IRQHandler(void) { debugUART.InterruptHandler(); }
@@ -56,6 +58,8 @@ GPIO ledRed(GPIOB, LL_GPIO_PIN_13);
 GPIO ledBlue(GPIOB, LL_GPIO_PIN_2);
 GPIO ledGreen(GPIOQ, LL_GPIO_PIN_1);
 GPIO userButton(GPIOO, LL_GPIO_PIN_5);
+GPIO ospiRst(GPION, LL_GPIO_PIN_12);
+GPIO hspiRst(GPIOO, LL_GPIO_PIN_1);
 
 // Default for Rev. A is: Cypress S80KS2564
 HyperRAM::Config extRAMConfig = {	
@@ -177,7 +181,8 @@ bool ValidateApplication(uint32_t vectorTableAddress, uint32_t executionBase, ui
 	// Validate Stack Pointer lies inside valid internal SRAM or PSRAM
 	bool validAXIRAM = (stackPointer >= AXI_SRAM_BASE && stackPointer <= (AXI_SRAM_BASE + AXI_SRAM_SIZE));
 	bool validPSRAM = (stackPointer >= PSRAM_BASE && stackPointer <= (PSRAM_BASE + extRAMConfig.sizeBytes));
-	if(validAXIRAM == false && validPSRAM == false) {
+	bool validDTCM = (stackPointer >= DTCM_BASE && stackPointer <= (DTCM_BASE + DTCM_SIZE));
+	if(validDTCM == false && validAXIRAM == false && validPSRAM == false) {
 		return false;
 	}
 
@@ -205,26 +210,29 @@ Status JumpToApplication(uint32_t appVector, uint32_t executionBase, uint32_t ex
 	System::DisableSysTick();
 	Time::Disable();
 
-	// If I-Cache is enabled, disable I-Cache
-	if(SCB->CCR & SCB_CCR_IC_Msk) {
+	// Mask interrupts and keep them disabled across jump, the application load and boot
+	__disable_irq();
+
+	// If D-Cache is enabled, disable D-Cache
+	if(SCB->CCR & SCB_CCR_DC_Msk) {
 		SCB_CleanInvalidateDCache();
 		SCB_DisableDCache();
 	}
 
-	// If D-Cache is enabled, disable I-Cache
-	if(SCB->CCR & SCB_CCR_DC_Msk) {
-		SCB_DisableDCache();
+	// If I-Cache is enabled, disable I-Cache
+	if(SCB->CCR & SCB_CCR_IC_Msk) {
+		SCB_DisableICache();
 	}
 	SCB_InvalidateICache();
-
-	// Mask interrupts and keep them disabled across jump, the application load and boot
-	__disable_irq();
 
 	// Clear all pending NVIC interrupts
 	for(uint32_t i = 0; i < 8; i++) {
 		NVIC->ICER[i] = 0xFFFFFFFF;
 		NVIC->ICPR[i] = 0xFFFFFFFF;
 	}
+
+	// Ready to jump, turn Green LED on
+	ledGreen.Write(0);
 
 	// Set vector table offset and barriers
 	SCB->VTOR = (uint32_t)appVector;
@@ -238,12 +246,6 @@ Status JumpToApplication(uint32_t appVector, uint32_t executionBase, uint32_t ex
 	__set_MSP(*(__IO uint32_t *)appVector);
 	__DSB();
 	__ISB();
-
-	// Interrupts must be re-enabled in the firmware/application so no ISRs are called during the boot
-	// __set_PRIMASK(primaskBit);
-
-	// Ready to jump, turn Green LED on
-	ledGreen.Write(0);
 
 	JumpToApp();
 	
@@ -417,14 +419,22 @@ int main(void) {
 	ledBlue.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
 	ledGreen.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::NoPull});
 	userButton.Init({.mode = GPIO::Mode::Input, .type = GPIO::Output::PushPull, .pull = GPIO::Pull::PullUp});
+	ospiRst.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::PullUp});
+	hspiRst.Init({.mode = GPIO::Mode::Output, .type = GPIO::Output::OpenDrain, .pull = GPIO::Pull::PullUp});
 	// BOOT1 original
 	LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_6, LL_GPIO_MODE_INPUT);
 	LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_6, LL_GPIO_PULL_UP);
 
-	// All LEDs off
+	// All LEDs off and keep memories RST HIGH (inactive)
 	ledRed.Write(1);
 	ledBlue.Write(1);
 	ledGreen.Write(1);
+	ospiRst.Write(1);
+	hspiRst.Write(1);
+
+	// Reset XSPI1 & XSPI2 peripherals left active by BootROM before changing clocks or resetting Flash
+	LL_AHB5_GRP1_ForceReset(LL_AHB5_GRP1_PERIPH_XSPI1 | LL_AHB5_GRP1_PERIPH_XSPI2);
+	LL_AHB5_GRP1_ReleaseReset(LL_AHB5_GRP1_PERIPH_XSPI1 | LL_AHB5_GRP1_PERIPH_XSPI2);
 
 	// MCU Configuration
 	NVIC_SetPriorityGrouping(0x03);	// 4 bits for pre-emption priority, 0 bit for subpriority
@@ -447,11 +457,12 @@ int main(void) {
 	Logger::Instance().RegisterConsole(&debugUART);
 
 	LOG_INFO("--------------------------------");
-	LOG_INFO("FSBL Booting...");
+	LOG_INFO("FSBL v0.7.3 Booting...");
 	LOG_INFO("BOOTSR: 0x%08lX", (unsigned long)SYSCFG->BOOTSR);
 	LOG_INFO("BOOT Pins: BOOT0=%d BOOT1=%d", (SYSCFG->BOOTSR & SYSCFG_BOOTSR_BOOT0), (SYSCFG->BOOTSR & SYSCFG_BOOTSR_BOOT1));
 	LOG_INFO("Live Pins: PA6=%d PO5=%d", LL_GPIO_IsInputPinSet(GPIOA, LL_GPIO_PIN_6), userButton.Read());
 	LOG_INFO("Reset Status: 0x%08lX", RCC->HWRSR);
+	LOG_INFO("CM55TCMCR: 0x%08lX, DTGU_CFG: 0x%08lX", (unsigned long)SYSCFG->CM55TCMCR, (unsigned long)(*reinterpret_cast<volatile uint32_t *>(0xE001E104UL)));
 	LOG_INFO("BSEC DBGCR: 0x%08lX", (unsigned long)BSEC->DBGCR);
 	LOG_INFO("BSEC HDPLSR: 0x%08lX", (unsigned long)BSEC->HDPLSR);
 	LOG_INFO("PWR SVMCR3: 0x%08lX", (unsigned long)PWR->SVMCR3);
@@ -476,13 +487,28 @@ int main(void) {
 	System::ReadOTPHardware(124, tmp);
 	LOG_INFO("    OTP124: 0x%08lX", tmp);
 
-	ledBlue.Write(0);
-	Time::Delay(100);
-	ledBlue.Write(1);
-	Time::Delay(100);
-	ledBlue.Write(0);
-	Time::Delay(100);
-	ledBlue.Write(1);
+	// Check for boot recovery mode early, only if NOT configure FlexMEM i.e. for normal boots
+	bool forceRecovery = false;
+	if(userButton.Read() == 0x00) {
+		Time::Delay(20); // 20 ms debounce
+		if(userButton.Read() == 0x00) {
+			forceRecovery = true;
+		}
+	}
+
+	// Hardware-reset HyperBus memories
+	ospiRst.Write(0);
+	hspiRst.Write(0);
+	Time::Delay(2);
+	ospiRst.Write(1);
+	hspiRst.Write(1);
+	Time::Delay(5);
+
+	// Configure FlexMEM BEFORE externalFlash.Init() modifies HyperFlash CFG0
+	if(forceRecovery == false) {
+		debugUART.Flush();
+		System::ConfigureFLEXMEM(System::ITCMSize::Size256KB, System::DTCMSize::Size256KB);
+	}	
 
 	// Initialize HyperBus, HyperFlash, and HyperRAM.
 	BoardXSPI1Init();
@@ -502,20 +528,6 @@ int main(void) {
 		return 0;
 	}
 	LOG_INFO("HyperFlash Init OK: %s.", extFlashConfig.deviceName);
-
-	// Check Recovery Button early, allow user to use ST-LINK to halt the core during this window
-	LOG_INFO("Press [BTN0] to enter recovery mode");
-	bool forceRecovery = false;
-	for(uint32_t i = 0; i < 25; i++) {
-		Logger::Instance().Printf(".");
-		if(userButton.Read() == 0) {
-			forceRecovery = true;
-			break;
-		}
-		ledBlue.Toggle();
-		Time::Delay(200);
-	}
-	Logger::Instance().Printf("\r\n");
 
 	// If user held button, stay in Recovery Mode with SWD open
 	if(forceRecovery == true) {
