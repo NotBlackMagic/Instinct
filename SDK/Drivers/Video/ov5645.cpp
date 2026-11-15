@@ -7,6 +7,8 @@
 
 #include "ov5645.hpp"
 
+constexpr uint32_t xclk = 24000000;
+
 // OV5645 Magic Initialization Blobs
 // From Linux driver: https://github.com/torvalds/linux/blob/master/drivers/media/i2c/ov5645.c
 static constexpr OV5645::RegisterValuePair ov5645GlobalInit[] = {
@@ -573,7 +575,7 @@ static constexpr OV5645::RegisterValuePair ov5645HD[] = {
 };
 
 extern const OV5645::RegisterValuePair ov5645AFSetting[];
-extern const uint16_t ov5645AFSettingSize = 4098;
+extern const uint16_t ov5645AFSettingSize = 4097;
 
 Status OV5645::Init(const Config &config) {
 	this->config = config;
@@ -600,29 +602,6 @@ Status OV5645::Init(const Config &config) {
 	}
 	tx_thread_sleep(300);
 
-	// // Load Magic Auto Focus Firmware Blob
-	// size = ov5645AFSettingSize;
-	// status = this->WriteRegisterArray(ov5645AFSetting, size);
-	// if(status != Status::Ok) {
-	// 	return status;
-	// }
-
-	// int32_t cnt = 40;
-	// uint8_t regVal;
-	// do {
-	// 	status = this->ReadRegister(static_cast<OV5645::Register>(0x3029), regVal);
-	// 	if(status != Status::Ok) {
-	// 		return status; 
-	// 	}
-	// 	tx_thread_sleep(5);
-	// 	cnt = cnt - 1;
-	// } while(regVal != 0x70 && cnt > 0);
-
-	// if(regVal != 0x70) {
-	// 	// Failed to download AF firmware
-	// 	return Status::Error;
-	// }
-
 	// Set resolution
 	status = this->SetResolution(this->config.width, this->config.height);
 	if(status != Status::Ok) {
@@ -645,6 +624,12 @@ Status OV5645::Init(const Config &config) {
 
 	// Set Test Pattern
 	status = this->SetTestPattern(false);
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	// Download AF firmware, verify MCU boot, and enable continuous AF
+	status = this->InitAutoFocus();
 	if(status != Status::Ok) {
 		return status;
 	}
@@ -720,57 +705,80 @@ Status OV5645::SetResolution(uint16_t width, uint16_t height) {
 		return Status::Error;
 	}
 
-	//Clock config for MIPI bitrate:
-	//MIPI_CLK = PLL1 * 1/SDIV0 * 1/MIPI_DIV * 1/2
-	//PLL1 = CLK_PAD * 1/PRE_DIV0 * DIV_CNT7B
-	//PRE_DIV0 -> 0x3037 [0:3]
-	//DIV_CNT7B -> 0x3036 [7:0]
-	//SDIV0 -> 0x3035 [7:4]
-	//MIPI_DIV -> 0x3035 [3:0]
+	// Clock config for System clock:
+
+	// Clock config:
+	// PLL1 = xclk * 1/PRE_DIV0 * DIV_CNT7B
+	// sysClk = PLL1 * 1/8 * 1/SDIV0
+	// MIPI_CLK = PLL1 * 1/SDIV0 * 1/MIPI_DIV * 1/2
+	// PRE_DIV0 -> 0x3037 [3:0] (fixed at 3 in ov5645GlobalInit)
+	// DIV_CNT7B -> 0x3036 [7:0]
+	// SDIV0 -> 0x3035 [7:4]
+	// MIPI_DIV -> 0x3035 [3:0]
+
+	// Clock config for MIPI bitrate:
+	// MIPI_CLK = PLL1 * 1/SDIV0 * 1/MIPI_DIV * 1/2
+	// PLL1 = CLK_PAD * 1/PRE_DIV0 * DIV_CNT7B
+	// PRE_DIV0 -> 0x3037 [0:3]
+	// DIV_CNT7B -> 0x3036 [7:0]
+	// SDIV0 -> 0x3035 [7:4]
+	// MIPI_DIV -> 0x3035 [3:0]
 
 	// Update config to used resolution
 	switch (resolution) {
 		case InternalResolution::QSXGA:
 			this->config.width = 2592;
 			this->config.height = 1944;
-			//PLL1 = 24M * 1/3 * 84 = 672MHz
-			//MIPI_CLK = 672MHz * 1/1 * 1/1 * 1/2 = 336MHz
+			// PLL1 = 24M * 1/3 * 84 = 672MHz
+			// MIPI_CLK = 672MHz * 1/1 * 1/1 * 1/2 = 336MHz
+			// sysClk = 672 MHz / 8 / 1 = 84 MHz
+			this->sysClk = 84000000;
 			this->mipiBitrate = 2 * 336000000;	//DDR for MIPI
 			break;
 		case InternalResolution::QHD:
 			this->config.width = 2560;
 			this->config.height = 1440;
-			//PLL1 = 24M * 1/3 * 84 = 672MHz
-			//MIPI_CLK = 672MHz * 1/1 * 1/1 * 1/2 = 336MHz
+			// PLL1 = 24M * 1/3 * 84 = 672MHz
+			// MIPI_CLK = 672MHz * 1/1 * 1/1 * 1/2 = 336MHz
+			// sysClk = 672 MHz / 8 / 1 = 84 MHz
+			this->sysClk = 84000000;
 			this->mipiBitrate = 2 * 336000000;	//DDR for MIPI
 			break;
 		case InternalResolution::FHD:
 			this->config.width = 1920;
 			// Respect 1088 if requested, otherwise default to 1088 for macroblock alignment
 			this->config.height = (height == 1080) ? 1080 : 1088;
-			//PLL1 = 24M * 1/3 * 84 = 672MHz
-			//MIPI_CLK = 672MHz * 1/1 * 1/1 * 1/2 = 336MHz
+			// PLL1 = 24M * 1/3 * 84 = 672MHz
+			// MIPI_CLK = 672MHz * 1/1 * 1/1 * 1/2 = 336MHz
+			// sysClk = 672 MHz / 8 / 1 = 84 MHz
+			this->sysClk = 84000000;
 			this->mipiBitrate = 2 * 336000000;	//DDR for MIPI
 			break;
 		case InternalResolution::SXGA:
 			this->config.width = 1280;
 			this->config.height = 1024;
-			//PLL1 = 24M * 1/3 * 112 = 896MHz
-			//MIPI_CLK = 896MHz * 1/2 * 1/1 * 1/2 = 224MHz
+			// PLL1 = 24M * 1/3 * 112 = 896MHz
+			// MIPI_CLK = 896MHz * 1/2 * 1/1 * 1/2 = 224MHz
+			// sysClk = 896 MHz / 8 / 2 = 56 MHz
+			this->sysClk = 56000000;
 			this->mipiBitrate = 2 * 224000000;	//DDR for MIPI
 			break;
 		case InternalResolution::HD:
 			this->config.width = 1280;
 			this->config.height = 720;
-			//PLL1 = 24M * 1/3 * 112 = 896MHz
-			//MIPI_CLK = 896MHz * 1/2 * 1/1 * 1/2 = 224MHz
+			// PLL1 = 24M * 1/3 * 112 = 896MHz
+			// MIPI_CLK = 896MHz * 1/2 * 1/1 * 1/2 = 224MHz
+			// sysClk = 672 MHz / 8 / 1 = 84 MHz
+			this->sysClk = 84000000;
 			this->mipiBitrate = 2 * 224000000;	//DDR for MIPI
 			break;
 		case InternalResolution::VGA:
 			this->config.width = 640;
 			this->config.height = 480;
-			//PLL1 = 24M * 1/3 * 112 = 896MHz
-			//MIPI_CLK = 896MHz * 1/2 * 1/1 * 1/2 = 224MHz
+			// PLL1 = 24M * 1/3 * 112 = 896MHz
+			// MIPI_CLK = 896MHz * 1/2 * 1/1 * 1/2 = 224MHz
+			// sysClk = 896 MHz / 8 / 2 = 56 MHz
+			this->sysClk = 56000000;
 			this->mipiBitrate = 2 * 224000000;	//DDR for MIPI
 			break;
 		default:
@@ -781,6 +789,11 @@ Status OV5645::SetResolution(uint16_t width, uint16_t height) {
 	Status status = this->ApplyResolution(resolution);
 	if(status != Status::Ok) {
 		return status;
+	}
+
+	// Update AF
+	if(this->afInitialized) {
+		this->WriteRegister(Register::AF_CMD_PARA4, 0x00); this->SendAFCommand(0x12);
 	}
 
 	return Status::Ok;
@@ -830,6 +843,94 @@ Status OV5645::SetFormat(PixelFormat format) {
 }
 
 Status OV5645::SetFPS(uint32_t fps) {
+	if(fps == 0) {
+		return Status::Error;
+	}
+
+	// FPS = fsys / (HTS * VTS)
+	// VTS = fsys / (HTS * fps)
+
+	// Minimum baseline VTS required per mode
+	uint16_t minVts = 0x0460;
+	switch(this->sensorInfo.height) {
+		case 1088:
+		case 1080:
+		case 720:
+			minVts = 0x0460;	// 1120 lines (Active + blanking floor)
+			break;
+		case 1944:
+		case 1440:
+			minVts = 0x07B0;	// 1968 lines
+			break;
+		case 1024:
+			minVts = 0x0510;	// 1296 lines
+			break;
+		case 480:
+			minVts = 0x03D8;	// 984 lines
+			break;
+		default:
+			return Status::Error;
+	}
+
+	// Read active HTS
+	uint8_t htsHigh = 0;
+	uint8_t htsLow = 0;
+	Status status = this->ReadRegister(static_cast<Register>(0x380C), htsHigh);
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->ReadRegister(static_cast<Register>(0x380D), htsLow);
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	uint32_t hts = (static_cast<uint32_t>(htsHigh) << 8) | htsLow;
+	if(hts == 0) {
+		return Status::Error;
+	}
+
+	// Calculate target VTS = round(sysClk / (HTS * FPS))
+	uint32_t vts = (this->sysClk + ((hts * fps) / 2)) / (hts * fps);
+
+	// Clamp VTS within hardware boundaries
+	if(vts < minVts) {
+		vts = minVts;
+	}
+	if(vts > 0xFFFF) {
+		vts = 0xFFFF;
+	}
+
+	// Write back new VTS
+	status = this->WriteRegister(static_cast<Register>(0x380E), static_cast<uint8_t>(vts >> 8));
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->WriteRegister(static_cast<Register>(0x380F), static_cast<uint8_t>(vts & 0xFF));
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	// Update 60Hz and 50Hz AEC maximum exposure ceilings to track the longer frame time
+	status = this->WriteRegister(static_cast<Register>(0x3A02), static_cast<uint8_t>(vts >> 8));
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->WriteRegister(static_cast<Register>(0x3A03), static_cast<uint8_t>(vts & 0xFF));
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->WriteRegister(static_cast<Register>(0x3A14), static_cast<uint8_t>(vts >> 8));
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->WriteRegister(static_cast<Register>(0x3A15), static_cast<uint8_t>(vts & 0xFF));
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	// Record the actual achieved frame rate
+	this->config.fps = this->sysClk / (hts * vts);
+
 	return Status::Ok;
 }
 
@@ -1001,61 +1102,303 @@ Status OV5645::SetOrientation(bool mirrorH, bool flipV) {
 	return this->ModifyRegister(static_cast<OV5645::Register>(0x3820), 0x06, vertical);
 }
 
+Status OV5645::WriteAFBlobBurst(const RegisterValuePair* blob, uint16_t size) {
+	if(blob == nullptr || size == 0) {
+		return Status::Error;
+	}
+
+	uint16_t idx = 0;
+	while(idx < size) {
+		uint16_t startReg = static_cast<uint16_t>(blob[idx].reg);
+		uint16_t maxPayload = transferSize - 2; // 30 bytes max payload + 2 address bytes = 32 bytes
+		uint16_t count = 1;
+
+		// Group contiguous SRAM writes (0x8000..0x8FFF) into burst transfers
+		while((idx + count) < size && count < maxPayload) {
+			uint16_t nextReg = static_cast<uint16_t>(blob[idx + count].reg);
+			if(nextReg != (startReg + count) || startReg < 0x8000 || startReg >= 0x9000) {
+				break;
+			}
+			count++;
+		}
+
+		if(count == 1) {
+			Status status = this->WriteRegister(blob[idx].reg, blob[idx].value);
+			if(status != Status::Ok) {
+				return status;
+			}
+		}
+		else {
+			const uint8_t maxRetries = 3;
+			Status status = Status::Error;
+			for(uint8_t attempt = 0; attempt < maxRetries; attempt++) {
+				this->buffer[0] = static_cast<uint8_t>(startReg >> 8);
+				this->buffer[1] = static_cast<uint8_t>(startReg & 0xFF);
+				for(uint16_t k = 0; k < count; k++) {
+					this->buffer[2 + k] = blob[idx + k].value;
+				}
+
+				status = this->bus.TransferAsync(this->addr, I3C::TargetType::I2C, this->buffer, count + 2, nullptr, 0);
+				if(status == Status::Ok) {
+					status = this->bus.TransferWait(1000);
+					if(status == Status::Ok) {
+						break;
+					}
+				}
+				tx_thread_sleep(1);
+			}
+			if(status != Status::Ok) {
+				return status;
+			}
+		}
+
+		idx += count;
+	}
+	return Status::Ok;
+}
+
+Status OV5645::InitAutoFocus() {
+	this->afInitialized = false;
+
+	// Ensure sensor is awake (0x3008 = 0x02) and enable 8051 MCU + AFC clocks
+	Status status = this->WriteRegister(Register::SYSTEM_CTRL0, 0x02);
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->WriteRegister(Register::CLOCK_ENABLE00, 0xFF);
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->WriteRegister(Register::CLOCK_ENABLE01, 0xFF);
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	// Download 8051 AF firmware to 0x8000..0x8FF6 and release MCU reset (0x3000 = 0x00)
+	status = this->WriteAFBlobBurst(ov5645AFSetting, ov5645AFSettingSize);
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	// Poll AF_FW_STATUS (0x3029) until MCU finishes startup and reports S_IDLE (0x70)
+	uint8_t fwStatus = 0;
+	for(uint32_t retry = 0; retry < 40; retry++) {
+		tx_thread_sleep(5);
+		status = this->ReadRegister(Register::AF_FW_STATUS, fwStatus);
+		if(status != Status::Ok) {
+			return status;
+		}
+		if(fwStatus == 0x70) {
+			this->afInitialized = true;
+			return Status::Ok;
+		}
+	}
+
+	return Status::Error;
+}
+
+Status OV5645::SendAFCommand(uint8_t cmd, uint32_t timeoutMs) {
+	if(!this->afInitialized) {
+		return Status::Error;
+	}
+
+	// Set CMD_ACK = 0x01, then write command to CMD_MAIN (0x3022)
+	Status status = this->WriteRegister(Register::AF_CMD_ACK, 0x01);
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->WriteRegister(Register::AF_CMD_MAIN, cmd);
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	// Wait for 8051 MCU to clear CMD_MAIN (0x3022 == 0x00) and CMD_ACK (0x3023 == 0x00)
+	uint32_t polls = (timeoutMs / 5) + 1;
+	for(uint32_t i = 0; i < polls; i++) {
+		tx_thread_sleep(5);
+		uint8_t mainVal = 0xFF;
+		uint8_t ackVal = 0xFF;
+		if(this->ReadRegister(Register::AF_CMD_MAIN, mainVal) == Status::Ok &&
+			this->ReadRegister(Register::AF_CMD_ACK, ackVal) == Status::Ok) {
+			// Note: Cmd 0x04 and 0x05 return early in 8051 firmware after clearing 0x3022
+			if(mainVal == 0x00 && (ackVal == 0x00 || cmd == 0x04 || cmd == 0x05 || cmd == 0x06)) {
+				return Status::Ok;
+			}
+		}
+	}
+
+	return Status::Error;
+}
+
 Status OV5645::SetAutoFocus(bool enable) {
 	// Source code: https://coral.googlesource.com/linux-imx/+/refs/heads/master/drivers/media/platform/mxc/capture/ov5645_mipi_v2.c
-	Status status = Status::Ok;
-	if(enable == true) {
-		// Release AF
-		status = this->WriteRegister(static_cast<OV5645::Register>(0x3022), 0x08);
+	if(!this->afInitialized) {
+		Status status = this->InitAutoFocus();
 		if(status != Status::Ok) {
-			return status; 
+			return status;
 		}
-		// Enable continuous AF
-		status = this->WriteRegister(static_cast<OV5645::Register>(0x3022), 0x12);
+	}
+
+	if(enable) {
+		// Release any previous AF lock
+		Status status = this->SendAFCommand(0x08);
 		if(status != Status::Ok) {
-			return status; 
+			return status;
 		}
-		status = this->WriteRegister(static_cast<OV5645::Register>(0x3022), 0x04);
+
+		// Configure default center AF zone for current resolution (0x3028 = 0x00 -> center 80x60)
+		status = this->WriteRegister(Register::AF_CMD_PARA4, 0x00);
 		if(status != Status::Ok) {
-			return status; 
+			return status;
 		}
+		status = this->SendAFCommand(0x12);
+		if(status != Status::Ok) {
+			return status;
+		}
+
+		// Set CMD_PARA0 (0x3024) = 0x01 so Command 0x04 triggers an initial sweep + continuous AF
+		status = this->WriteRegister(Register::AF_CMD_PARA0, 0x01);
+		if(status != Status::Ok) {
+			return status;
+		}
+		return this->SendAFCommand(0x04);
 	}
 	else {
-		// Release AF
-		status = this->WriteRegister(static_cast<OV5645::Register>(0x3022), 0x08);
-		if(status != Status::Ok) {
-			return status; 
-		}
-		// Lock AF
-		status = this->WriteRegister(static_cast<OV5645::Register>(0x3022), 0x12);
-		if(status != Status::Ok) {
-			return status; 
-		}
-		status = this->WriteRegister(static_cast<OV5645::Register>(0x3022), 0x03);
-		if(status != Status::Ok) {
-			return status; 
-		}
-		
-		//At full 5M resolution it typically takes 1600ms for AF to stabilize. Setting the retry count to 20 gives us enough margin to always succeed
-		int32_t cnt = 40;
-		uint8_t regVal;
-		do {
-			status = this->ReadRegister(static_cast<OV5645::Register>(0x3029), regVal);
-			if(status != Status::Ok) {
-				return status; 
-			}
+		// Command 0x06 pauses/locks Continuous AF at current lens position
+		// (Use 0x08 if you prefer to park the lens back at infinity)
+		return this->SendAFCommand(0x06);
+	}
+}
 
-			tx_thread_sleep(50);
-			cnt = cnt - 1;
-			// If the status reg 0x3029 reads 0x10 we have stabilized
-		} while(regVal != 0x10 && cnt > 0);
+Status OV5645::TriggerSingleAutoFocus(bool waitForLock) {
+	if(!this->afInitialized) {
+		return Status::Error;
+	}
 
-		if(regVal != 0x10) {
-			// Failed to enable AF
-			return Status::Error;
+	// Release previous state, then trigger Single AF (0x03)
+	Status status = this->SendAFCommand(0x08);
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->SendAFCommand(0x03);
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	if(!waitForLock) {
+		return Status::Ok;
+	}
+
+	// Note: Camera MUST be streaming frames (Start() called) for AF contrast loop to converge
+	uint8_t fwStatus = 0;
+	for(uint32_t retry = 0; retry < 40; retry++) {
+		tx_thread_sleep(50);
+		status = this->ReadRegister(Register::AF_FW_STATUS, fwStatus);
+		if(status != Status::Ok) {
+			return status;
+		}
+		if(fwStatus == 0x10) {
+			return Status::Ok; // S_FOCUSED: Lens locked at peak sharpness
 		}
 	}
-	return status;
+
+	return Status::Error;
+}
+
+Status OV5645::SetManualFocus(uint8_t position) {
+	if(!this->afInitialized) {
+		return Status::Error;
+	}
+
+	// Pause Continuous AF
+	Status status = this->SendAFCommand(0x06);
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	// Command 0x1A maps CMD_PARA4 (0x3028: 0..255) linearly across the calibrated
+	// VCM DAC limits (0x007A..0x0265) and writes internal VCM registers 0x3602/0x3603
+	status = this->WriteRegister(Register::AF_CMD_PARA3, 0x00);		// Fine offset = 0
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->WriteRegister(Register::AF_CMD_PARA4, position);	// 0 = Infinity, 255 = Macro
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	return this->SendAFCommand(0x1A);
+}
+
+Status OV5645::GetFocusPosition(uint8_t &position) {
+	if(!this->afInitialized) {
+		return Status::Error;
+	}
+
+	// Command 0x1B copies internal focus step (0x4B) to AF_CMD_PARA4 (0x3028)
+	Status status = this->SendAFCommand(0x1B);
+	if(status != Status::Ok) {
+		return status;
+	}
+	return this->ReadRegister(Register::AF_CMD_PARA4, position);
+}
+
+Status OV5645::SetFocusRectangle(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
+	if(!this->afInitialized || this->config.width == 0 || this->config.height == 0) {
+		return Status::Error;
+	}
+
+	// Calculate center of the requested rectangle in pixels
+	uint16_t centerX = x + (width / 2);
+	uint16_t centerY = y + (height / 2);
+	if(centerX >= this->config.width) {
+		centerX = this->config.width - 1;
+	}
+	if(centerY >= this->config.height) {
+		centerY = this->config.height - 1;
+	}
+
+	// The 8051 AF firmware (at 0x8bcc) uses an 80x60 virtual viewfinder grid when
+	// AF_CMD_PARA4 (0x3028) == 0x01, or an 80x45 (16:9) grid when 0x3028 == 0x02.
+	// Note: 0x3028 MUST be >= 1 for custom (X, Y); 0x3028 == 0 resets to center (40, 30).
+	uint8_t gridX = static_cast<uint8_t>((static_cast<uint32_t>(centerX) * 80) / this->config.width);
+	uint8_t gridY = static_cast<uint8_t>((static_cast<uint32_t>(centerY) * 60) / this->config.height);
+
+	Status status = this->WriteRegister(Register::AF_CMD_PARA0, gridX);
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->WriteRegister(Register::AF_CMD_PARA1, gridY);
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->WriteRegister(Register::AF_CMD_PARA4, 0x01); // 0x01 = Custom (X,Y) in 80x60 space
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	// Command 0x81 (or 0x12) runs 0x0bcc -> 0x0738 to program ISP AF window registers 0x6001..0x6038
+	status = this->SendAFCommand(0x81);
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	// Optional: If custom width/height is specified, override the main ISP AF window (scaled 1..255)
+	if(width > 0 && height > 0) {
+		uint8_t winX = static_cast<uint8_t>((static_cast<uint32_t>(x) * 255) / this->config.width);
+		uint8_t winY = static_cast<uint8_t>((static_cast<uint32_t>(y) * 255) / this->config.height);
+		uint8_t winW = static_cast<uint8_t>((static_cast<uint32_t>(width) * 255) / this->config.width);
+		uint8_t winH = static_cast<uint8_t>((static_cast<uint32_t>(height) * 255) / this->config.height);
+		if(winW == 0) winW = 1;
+		if(winH == 0) winH = 1;
+
+		this->WriteRegister(Register::ISP_AF_WIN_X, winX);
+		this->WriteRegister(Register::ISP_AF_WIN_Y, winY);
+		this->WriteRegister(Register::ISP_AF_WIN_W, winW);
+		this->WriteRegister(Register::ISP_AF_WIN_H, winH);
+	}
+
+	return Status::Ok;
 }
 
 Status OV5645::SetTestPattern(bool enable) {
