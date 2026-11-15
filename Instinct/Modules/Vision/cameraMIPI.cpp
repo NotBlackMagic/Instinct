@@ -247,6 +247,9 @@ Status CameraMIPI::CaptureAsync(VisionFrame& buffer, Dcmipp::LineCount lineMult,
 	// Enable hardware line wrapping
 	this->dcmiPPInterface.EnableLineWrapping(Dcmipp::PipeID::Main, wrapAddress, lineMult);
 
+	// Handle cache coherency
+	System::CleanCache((uint32_t*)buffer.startAddress, buffer.payloadSize);
+
 	// Configure DCMIPP Memory Destination
 	Dcmipp::MemoryDestination dest;
 	dest.primaryAddress = (uint32_t)buffer.startAddress;

@@ -10,6 +10,8 @@
 TX_THREAD MavlinkThread::threadPtr;
 __attribute__((aligned(32))) uint8_t MavlinkThread::threadStack[MavlinkThread::threadStackSize];
 
+UART* MavlinkThread::linkPort = nullptr;
+
 // Subscribers
 Subscriber<StateMsg> MavlinkThread::subState;
 Subscriber<IMUMsg> MavlinkThread::subVirtualIMU;
@@ -28,7 +30,9 @@ Topic<FlowMsg>* MavlinkThread::topicFlow = nullptr;
 
 MavlinkThread::StreamConfig MavlinkThread::streams[static_cast<uint8_t>(MavlinkThread::Stream::Count)];
 
-void MavlinkThread::Init() {
+void MavlinkThread::Init(UART* uart) {
+	linkPort = uart;
+	
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Mavlink"),
 										MavlinkThread::Run, 0,
 										threadStack, sizeof(threadStack),
@@ -87,20 +91,25 @@ void MavlinkThread::Run(ULONG input) {
 	FlowMsg flowMsg;
 
 	while(1) {
+		if(linkPort == nullptr) {
+			tx_thread_sleep(10);
+			continue;
+		}
+
 		uint64_t now = Time::GetUs();
 
 		// Message scheduler, loop through all configured streams and see which must be sent now
 		for(uint8_t i = 0; i < static_cast<uint8_t>(Stream::Count); i++) {
-			if(streams[i].intervalUs > 0 && (now - streams[i].lastSentUs) >= streams[i].intervalUs) {
-				streams[i].lastSentUs = now;
+			if(streams[i].interval > 0 && (now - streams[i].timestamp) >= streams[i].interval) {
+				streams[i].timestamp = now;
 
 				switch(static_cast<Stream>(i)) {
 					case Stream::Heartbeat:
-						SendHeartbeat(gps1);
+						SendHeartbeat(*linkPort);
 						break;
 					case Stream::Attitude:
 						if(topicState->Peek(stateMsg)) {
-							SendAttitude(gps1, stateMsg);
+							SendAttitude(*linkPort, stateMsg);
 						}
 						break;
 					case Stream::HighresIMU:
@@ -111,12 +120,12 @@ void MavlinkThread::Run(ULONG input) {
 							if(topicVirtualBaro != nullptr) {
 								topicVirtualBaro->Peek(baroMsg);
 							}
-							SendHighresIMU(gps1, imuMsg, magMsg, baroMsg);
+							SendHighresIMU(*linkPort, imuMsg, magMsg, baroMsg);
 						}
 						break;
 					case Stream::DistanceSensor:
 						if(topicRange != nullptr && topicRange->Peek(rangeMsg)) {
-							SendDistanceSensor(gps1, rangeMsg);
+							SendDistanceSensor(*linkPort, rangeMsg);
 						}
 						break;
 					case Stream::OpticalFlow:
@@ -125,7 +134,7 @@ void MavlinkThread::Run(ULONG input) {
 							if(topicRange != nullptr && topicRange->Peek(rangeMsg)) {
 								groundDistance = rangeMsg.distance;
 							}
-							SendOpticalFlow(gps1, flowMsg, groundDistance);
+							SendOpticalFlow(*linkPort, flowMsg, groundDistance);
 						}
 						break;
 					default:
@@ -135,13 +144,13 @@ void MavlinkThread::Run(ULONG input) {
 		}
 
 		// Handle inbound MAVLink parameter requests from QGC (Mavlink RX parsing)
-		uint32_t bytesAvailable = gps1.Available();
+		uint32_t bytesAvailable = linkPort->Available();
 		if(bytesAvailable > 0) {
 			uint8_t rxBuffer[128];
 			uint32_t bytesToRead = (bytesAvailable > sizeof(rxBuffer)) ? sizeof(rxBuffer) : bytesAvailable;
 			
 			// Get/read bytes from the UART buffer
-			uint32_t bytesRead = gps1.Receive(rxBuffer, bytesToRead);
+			uint32_t bytesRead = linkPort->Receive(rxBuffer, bytesToRead);
 
 			// Feed received buffer byte-by-byte into the official MAVLink parser
 			mavlink_message_t rxMsg;
@@ -177,13 +186,13 @@ void MavlinkThread::Run(ULONG input) {
 void MavlinkThread::SetRate(Stream stream, float rateHz) {
 	uint8_t idx = static_cast<uint8_t>(stream);
 	if(rateHz > 0.0f) {
-		streams[idx].intervalUs = static_cast<uint32_t>(1000000.0f / rateHz);
+		streams[idx].interval = static_cast<uint32_t>(1000000.0f / rateHz);
 	}
 	else {
 		// Disable the stream
-		streams[idx].intervalUs = 0;
+		streams[idx].interval = 0;
 	}
-	streams[idx].lastSentUs = 0;
+	streams[idx].timestamp = 0;
 }
 
 void MavlinkThread::SendHeartbeat(UART& uart) {

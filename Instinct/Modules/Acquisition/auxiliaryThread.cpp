@@ -66,6 +66,8 @@ void AuxiliaryThread::Run(ULONG input) {
 			.enableLPF = true
 		};
 		if(onboardMag.Init(config) == Status::Ok) {
+			// Configure static compensations and corrections, to correct for hard and soft iron
+			onboardMag.SetOffsets(0.0f, 0.0f, 0.0f);
 			LOG_INFO("Int Mag (LIS2MDL) Init OK");
 		}
 		else {
@@ -103,6 +105,8 @@ void AuxiliaryThread::Run(ULONG input) {
 			.avg = BMM350::Averaging::Avg8
 		};
 		if(extMag.Init(config) == Status::Ok) {
+			// Configure static compensations and corrections, to correct for hard and soft iron
+			extMag.SetOffsets(0.0f, 0.0f, 0.0f);
 			LOG_INFO("Ext Mag (BMM350) Init OK");
 		}
 		else {

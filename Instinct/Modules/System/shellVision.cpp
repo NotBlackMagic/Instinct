@@ -35,36 +35,27 @@ static bool CommandVision(const char* args) {
 	}
 
 	if(strcmp(action, "stats") == 0) {
-		VisionThread::Statistics stats;
-		VisionThread::GetStatistics(stats);
+		VisionThread::Statistics stats = VisionThread::GetStatistics();
 
 		Logger::Instance().Write("\r\n--- VISION PIPELINE STATS ---\r\n");
 		Logger::Instance().Printf("  FPS:         %.1f\r\n", stats.fps);
 		Logger::Instance().Printf("  Frames:      %lu (UVC Drop: %lu, Restarts: %lu)\r\n", stats.totalFrames, stats.uvcDroppedCount, stats.pipelineRestarts);
-		Logger::Instance().Printf("  Bitrate:     %lu kbps (%lu B/frame)\r\n",  (uint32_t)(stats.lastFrameBytes * 8 * stats.fps / 1000.0f), stats.lastFrameBytes);
-		Logger::Instance().Printf("  Compression: %.1fx (Avg: %.1fx)\r\n", stats.compressionRatio, stats.avgCompressionRatio);
+		Logger::Instance().Printf("  Bitrate:     %lu kbps (%lu B/frame)\r\n", stats.bitrateBps / 1000, stats.lastFrameBytes);
+		Logger::Instance().Printf("  Compression: %.1fx\r\n", stats.compressionRatio);
 
 		Logger::Instance().Write("[LATENCY (us)]\r\n");
-		Logger::Instance().Printf("  Capture:     %6lu / Avg %6lu\r\n", stats.lastCapTimeUs, stats.avgCapTimeUs);
-		Logger::Instance().Printf("  Encode:      %6lu / Avg %6lu\r\n", stats.lastEncTimeUs, stats.avgEncTimeUs);
-		Logger::Instance().Printf("  I/O:         %6lu / Avg %6lu\r\n", stats.lastIOTimeUs, stats.avgIOTimeUs);
 #if USE_LINE_MODE
-		Logger::Instance().Printf("  Slice Cap:   %6lu / Avg %6lu\r\n", stats.lastSliceCapUs, stats.avgSliceCapUs);
-		Logger::Instance().Printf("  Slice Enc:   %6lu / Avg %6lu\r\n", stats.lastSliceEncUs, stats.avgSliceEncUs);
+		Logger::Instance().Printf("  Slice:       Cap %lu | Enc %lu (Max %lu)\r\n", stats.sliceCap, stats.sliceEnc, stats.maxSliceEnc);
+#else
+		Logger::Instance().Printf("  Capture:     %lu\r\n", stats.capTime);
 #endif
-
-#if USE_LINE_MODE
-		Logger::Instance().Write("---------------------------------------------------------------------------\r\n");
-		Logger::Instance().Write(" SLICE STREAMING (64 lines)\r\n");
-		Logger::Instance().Printf(" Slice Capture:          %8lu       %8lu\r\n", stats.lastSliceCapUs, stats.avgSliceCapUs);
-		Logger::Instance().Printf(" Slice Encode:           %8lu       %8lu\r\n", stats.lastSliceEncUs, stats.avgSliceEncUs);
-#endif
+		Logger::Instance().Printf("  Encode:      %lu (Max %lu)\r\n", stats.encTime, stats.maxEncTime);
+		Logger::Instance().Printf("  I/O:         %lu\r\n", stats.ioTime);
 
 		Logger::Instance().Write("[HARDWARE ERRORS]\r\n");
 		Logger::Instance().Printf("  CSI:         CRC: %lu, ECC: %lu, Sync: %lu\r\n", stats.csi.crcErrors, stats.csi.eccErrors, stats.csi.syncErrors);
 		Logger::Instance().Printf("  DCMIPP:      Overrun: %lu, Line: %lu\r\n", stats.dcmipp.overrunErrors, stats.dcmipp.lineEvents);
 		Logger::Instance().Printf("  VENC:        Errors: %lu, Encoded: %lu\r\n", stats.venc.hwErrors, stats.venc.encodedFrames);
-
 		Logger::Instance().Write("-----------------------------\r\n");
 		return true;
 	}

@@ -10,7 +10,6 @@
 TX_THREAD VisionThread::threadPtr;
 __attribute__((aligned(32))) uint8_t VisionThread::threadStack[VisionThread::threadStackSize];
 
-TX_MUTEX VisionThread::mutex;
 VisionThread::Statistics VisionThread::stats = {};
 uint32_t VisionThread::pipelineRestartCounter = 0;
 
@@ -80,21 +79,6 @@ void VisionThread::OnUVCStreamState(USBClassUVC::StreamEvent event) {
 	}
 }
 
-void VisionThread::GetStatistics(Statistics& out) {
-	if(tx_mutex_get(&mutex, TX_WAIT_FOREVER) == TX_SUCCESS) {
-		out = stats;
-		tx_mutex_put(&mutex);
-	}
-}
-
-void VisionThread::ResetStatistics() {
-	if(tx_mutex_get(&mutex, TX_WAIT_FOREVER) == TX_SUCCESS) {
-		stats = {};
-		pipelineRestartCounter = 0;
-		tx_mutex_put(&mutex);
-	}
-}
-
 void VisionThread::SetCapture(bool enable) {
 	captureEnabled = enable;
 }
@@ -112,12 +96,7 @@ bool VisionThread::IsRecording() {
 }
 
 void VisionThread::Init() {
-	uint32_t status = tx_mutex_create(&mutex, const_cast<char*>("VisionMutex"), TX_INHERIT);
-	if(status != TX_SUCCESS) {
-		LOG_ERR("ThreadX Vision Thread Mutex Create Failed.");
-	}
-
-	status = tx_thread_create(&threadPtr,	const_cast<char*>("Vision"),
+	uint32_t status = tx_thread_create(&threadPtr,	const_cast<char*>("Vision"),
 													VisionThread::Run, 0,
 													threadStack, sizeof(threadStack),
 													10, 10,
@@ -136,7 +115,7 @@ void VisionThread::Run(ULONG input) {
 	// General camera configurations
 	uint32_t camWidth = 1920;
 	uint32_t camHeight = 1088;
-	uint8_t camFPS = 30;
+	uint8_t camFPS = 10;
 	PixelFormat camFormat = PixelFormat::YUV422_YUYV;
 
 	// Line mode parameters
@@ -185,8 +164,8 @@ void VisionThread::Run(ULONG input) {
 	vencConfig.enableStreamingMode = true;
 	vencConfig.lineWrap = static_cast<Venc::LineCount>(lineWrap);
 	vencConfig.lineTrigger = static_cast<Venc::LineCount>(lineTrigger);
-	// 64 lines = 4 MB rows per slice
-	vencConfig.codingControl.sliceSize = 4;
+	// 64 lines = 4 MB rows per slice. Or 0 = encode whole frame as one slice
+	vencConfig.codingControl.sliceSize = 0;
 #else
 	vencConfig.enableStreamingMode = false;
 	vencConfig.codingControl.sliceSize = 0;	// 0 = encode whole frame as one slice
@@ -198,6 +177,7 @@ void VisionThread::Run(ULONG input) {
 	vencConfig.imageParams.inputFormat = Venc::InputFormat::YUV422InterleavedYUYV;
 	// For JPEG Encoding mode
 	vencConfig.jpegQuality = 8;
+
 	// H.264 Rate Control (Targeting 2 Mbps)
 	vencConfig.rateControl.enablePictureRc = true;
 	vencConfig.rateControl.bitPerSecond = 2000000; 
@@ -205,10 +185,12 @@ void VisionThread::Run(ULONG input) {
 	vencConfig.rateControl.qpMin = 10;
 	vencConfig.rateControl.qpMax = 51;
 	vencConfig.rateControl.qpHdr = 26;
+
 	// H.264 Coding Control
 	vencConfig.codingControl.profile = Venc::H264Profile::High;
 	vencConfig.codingControl.insertIdrHeader = true;
 	vencConfig.codingControl.disableDeblockingFilter = false;
+
 	// Ideal pool size can be found: VC8000NanoE Video Encoder Software Integration Guide, Section H264 4.3.1-4.3.4
 	vencConfig.poolSize = 8 * 1024 * 1024;
 	vencConfig.poolAddress = externalPSRAM.Allocate(vencConfig.poolSize, 32);
@@ -284,17 +266,18 @@ void VisionThread::Run(ULONG input) {
 	}
 
 	uint32_t epochFrameCount = 0;
-	uint32_t epochUVCDroppedCount = 0;
 	uint32_t startupBurstCounter = 3;
 	uint64_t epochStartMs = Time::GetMs();
 	uint64_t timestamp = Time::GetUs();
 
-	uint32_t timeCap = 0, timeConvMCU = 0, timeEnc = 0, timeIO = 0;
-	uint64_t timeCapSum = 0, timeConvMCUSum = 0, timeEncSum = 0, timeIOSum = 0;
+	uint32_t timeCap = 0;
+	uint32_t timeConvMCU = 0;
+	uint32_t timeEnc = 0;
+	uint32_t timeIO = 0;
 
 #if USE_LINE_MODE
-	uint32_t timeSliceCap = 0, timeSliceEnc = 0;
-	uint64_t timeSliceCapSum = 0, timeSliceEncSum = 0;
+	uint32_t timeSliceCap = 0;
+	uint32_t timeSliceEnc = 0;
 #endif
 
 	uint8_t rawBufIx = 0;	// The active index for MCU to read from
@@ -304,8 +287,6 @@ void VisionThread::Run(ULONG input) {
 	uint32_t encRawBytes = 0;
 	uint32_t encOutBytes = 0;
 	uint64_t epochEncBytesSum = 0;
-	float compressionRatio = 0.0f;
-	float compressionRatioSum = 0.0f;
 
 	uint32_t recordedFrames = 0;
 	uint32_t recordedSize = 0;
@@ -425,8 +406,8 @@ void VisionThread::Run(ULONG input) {
 			if(hwCapturing == true) {
 				// Measure IO/Idle Overhead
 				uint64_t waitStartUs = Time::GetUs();
-				timeIO = waitStartUs - timestamp;
-				timeIOSum = timeIOSum + timeIO;
+				timeIO = static_cast<uint32_t>(waitStartUs - timestamp);
+				stats.ioTime = timeIO;
 				
 				// status = cameraHD.CaptureAsync(rawFrameBuffer);
 				status = Status::Ok;
@@ -446,7 +427,7 @@ void VisionThread::Run(ULONG input) {
 
 						uint64_t waitEndUs = Time::GetUs();
 						timeCap = static_cast<uint32_t>(waitEndUs - waitStartUs);
-						timeCapSum += timeCap;
+						stats.capTime = timeCap;
 #endif
 
 						currentRaw.timestampUs = Time::GetUs();
@@ -458,7 +439,6 @@ void VisionThread::Run(ULONG input) {
 						// status = ImageProcessor::ConvertToMCU(rawFrameBuffer, processedFrameBuffer);
 						// status = ImageProcessor::ConvertFormat(rawFrameBuffer, processedFrameBuffer);
 						timeConvMCU = 0;	//Time::GetUs() - timestamp;
-						timeConvMCUSum = timeConvMCUSum + timeConvMCU;
 						// timestamp = Time::GetUs();
 
 						// Compress Raw Frame to JPEG
@@ -478,33 +458,41 @@ void VisionThread::Run(ULONG input) {
 							uint64_t vencDone = vencEncoder.GetStatistics().lastFrameEndTimestamp;
 							
 							timeSliceEnc = static_cast<uint32_t>(vencDone - dcmippDone);
-							timeSliceEncSum += timeSliceEnc;
+							stats.sliceEnc = timeSliceEnc;
+							if(timeSliceEnc > stats.maxSliceEnc) {
+								stats.maxSliceEnc = timeSliceEnc;
+							}
 
 							// Total HW frame time (from VSYNC to VENC done)
 							timeEnc = static_cast<uint32_t>(vencDone - dcmippStart);
-							timeEncSum += timeEnc;
+							stats.encTime = timeEnc;
+							if(timeEnc > stats.maxEncTime) {
+								stats.maxEncTime = timeEnc;
+							}
 
 							// Estimated OS Cap time per slice
 							timeSliceCap = static_cast<uint32_t>(static_cast<float>(timeCap) / numSlices);
-							timeSliceCapSum += timeSliceCap;
 
 							// Fetch byte counts
 							encOutBytes = vencEncoder.GetStatistics().lastFrameBytes;					
 #else
 							// VENC encode time for the full frame
 							timeEnc = static_cast<uint32_t>(encEndUs - encStartUs);
-							timeEncSum = timeEncSum + timeEnc;
+							stats.encTime = timeEnc;
+							if(timeEnc > stats.maxEncTime) {
+								stats.maxEncTime = timeEnc;
+							}
 
 							// Fetch byte counts
 							encOutBytes = vencEncoder.GetStatistics().lastFrameBytes;
 #endif
 							timestamp = Time::GetUs();
 
-							// Compute compression ratio
+							// Update payload and compression ratio
+							stats.lastFrameBytes = encOutBytes;
 							encRawBytes = (currentRaw.format == PixelFormat::YUV420_NV12) ? ((currentRaw.width * currentRaw.height * 3) / 2) : (currentRaw.width * currentRaw.height * 2);
 							if(encOutBytes > 0) {
-								compressionRatio = static_cast<float>(encRawBytes) / static_cast<float>(encOutBytes);
-								compressionRatioSum += compressionRatio;
+								stats.compressionRatio = static_cast<float>(encRawBytes) / static_cast<float>(encOutBytes);
 								epochEncBytesSum += encOutBytes;
 							}
 
@@ -521,7 +509,7 @@ void VisionThread::Run(ULONG input) {
 									// jpegBufIx = 1 - jpegBufIx;	// Ping-pong buffer indexing
 								}
 								else {
-									epochUVCDroppedCount = epochUVCDroppedCount + 1;
+									stats.uvcDroppedCount = stats.uvcDroppedCount + 1;
 									// LOG_WARN("UVC Frame Drop.");
 								}
 
@@ -594,8 +582,8 @@ void VisionThread::Run(ULONG input) {
 								if(isRecording == true) {
 									Status res = ImageWriter::AppendStream(videoFile, currentJpeg);
 									if(res == Status::Ok) {
-										recordedFrames++;
-										recordedSize += currentJpeg.payloadSize;
+										recordedFrames = recordedFrames + 1;
+										recordedSize = recordedSize + currentJpeg.payloadSize;
 									}
 									else {
 										ImageWriter::CloseStream(videoFile, *StorageThread::GetMedia());
@@ -633,6 +621,7 @@ void VisionThread::Run(ULONG input) {
 									// }
 								}
 
+								stats.totalFrames = stats.totalFrames + 1;
 								epochFrameCount = epochFrameCount + 1;
 
 								// Periodic Snapshot Publication (Every 1000ms)
@@ -642,76 +631,50 @@ void VisionThread::Run(ULONG input) {
 									// Performance values for VGA 640x480 on "Legacy" JPEG Encoder:
 									// From AN4996 (STM32H7+SDRAM@100M): To MCU 58 ms, Enc 4 ms, TOTAL 62 ms
 
-									// SD-CAM & HyperRAM@100M & Code in SRAM:			Cap 32228 us, To MCU  86573 us, Enc 6525 us
+									// SD-CAM & HyperRAM@100M & Code in SRAM:			Cap 32228 us, To MCU 86573 us, Enc 6525 us
 
 									// HD-CAM & HyperRAM@50M & Code in SRAM:			Cap 61834 us, To MCU 166303 us, Enc 9266 us
-									// HD-CAM & HyperRAM@100M & Code in SRAM:			Cap 40924 us, To MCU  85077 us, Enc 7130 us
-									// HD-CAM & HyperRAM@200M & Code in SRAM:			Cap 44978 us, To MCU  48642 us, Enc 6347 us
+									// HD-CAM & HyperRAM@100M & Code in SRAM:			Cap 40924 us, To MCU 85077 us, Enc 7130 us
+									// HD-CAM & HyperRAM@200M & Code in SRAM:			Cap 44978 us, To MCU 48642 us, Enc 6347 us
 
 									// HD-CAM & HyperRAM@50M & Code in HyperFlash/XIP:	Cap 61809 us, To MCU 159115 us, Enc 9392 us
-									// HD-CAM & HyperRAM@200M & Code in HyperFlash/XIP:	Cap 44390 us, To MCU  49146 us, Enc 6441 us
+									// HD-CAM & HyperRAM@200M & Code in HyperFlash/XIP:	Cap 44390 us, To MCU 49146 us, Enc 6441 us
 
 									// Performance values for VGA 640x480 on VENC JPEG Encoder (all with HyperRAM@200M):
-									// HD-CAM & All Buf in HyperRAM & Code in SRAM:										Cap 46174 us, To YUYV  15704 us, Enc 4743 us
-									// HD-CAM & Venc Pool in SRAM, rest in HyperRAM & Code in SRAM:						Cap 46298 us, To YUYV  15700 us, Enc 4649 us
-									// HD-CAM & Venc Pool, Proc. Buffer in SRAM, rest in HyperRAM & Code in SRAM:		Cap 43988 us, To YUYV  18947 us, Enc 3711 us
-									// HD-CAM & Venc Pool, Proc., Out Buffer in SRAM, rest in HyperRAM & Code in SRAM:	Cap 43979 us, To YUYV  18889 us, Enc 3684 us
+									// HD-CAM & All Buf in HyperRAM & Code in SRAM:										Cap 46174 us, To YUYV 15704 us, Enc 4743 us
+									// HD-CAM & Venc Pool in SRAM, rest in HyperRAM & Code in SRAM:						Cap 46298 us, To YUYV 15700 us, Enc 4649 us
+									// HD-CAM & Venc Pool, Proc. Buffer in SRAM, rest in HyperRAM & Code in SRAM:		Cap 43988 us, To YUYV 18947 us, Enc 3711 us
+									// HD-CAM & Venc Pool, Proc., Out Buffer in SRAM, rest in HyperRAM & Code in SRAM:	Cap 43979 us, To YUYV 18889 us, Enc 3684 us
 
 									// Note: Removing all Clean/Invalidate cache from VENCEncoder and VENC reduces Encoding by ~1000us
 									// Alternative (better), optimized cache clean/invalidates calls to minimum reduced about 500us. Using full cache clean on large buffers (like the video buffer) reduced it a further 400us:
 									// Performance values for VGA 640x480 on VENC JPEG Encoder (all with HyperRAM@200M) after cache handling optimization:
-									// HD-CAM & All Buf in HyperRAM & Code in SRAM:										Cap 47166 us, To YUYV  15704 us, Enc 3763 us
-									// HD-CAM & Venc Pool in SRAM, rest in HyperRAM & Code in SRAM:						Cap 47329 us, To YUYV  15705 us, Enc 3602 us
-									// HD-CAM & Venc Pool, Proc. Buffer in SRAM, rest in HyperRAM & Code in SRAM:		Cap 45085 us, To YUYV  18887 us, Enc 2661 us
+									// HD-CAM & All Buf in HyperRAM & Code in SRAM:										Cap 47166 us, To YUYV 15704 us, Enc 3763 us
+									// HD-CAM & Venc Pool in SRAM, rest in HyperRAM & Code in SRAM:						Cap 47329 us, To YUYV 15705 us, Enc 3602 us
+									// HD-CAM & Venc Pool, Proc. Buffer in SRAM, rest in HyperRAM & Code in SRAM:		Cap 45085 us, To YUYV 18887 us, Enc 2661 us
 
-									if(tx_mutex_get(&mutex, 5) == TX_SUCCESS) {
-										stats.fps = (epochFrameCount * 1000.0f) / static_cast<float>(elapsedMs);
-										stats.totalFrames += epochFrameCount;
-										stats.uvcDroppedCount += epochUVCDroppedCount;
-										stats.pipelineRestarts = pipelineRestartCounter;
+									// Newest performance analysis for 1920x1080 H264. Code in HyperFlash/XIP. Full frame mode:
+									// HD-CAM & All Buf in HyperRAM:			Cap 60985 us, Full Enc 39028 (Max: 39969) us
+									// Out Buf in SRAM, rest in HyperRAM:		Cap 61032 us, Full Enc 38878 (Max: 39532) us
+									// Same but for JPEG:
+									// HD-CAM & All Buf in HyperRAM:			Cap 77097 us, Full Enc 23266 (Max: 24000) us
+									// Out Buf in SRAM, rest in HyperRAM:		Cap 77003 us, Full Enc 23510 (Max: 23731) us
 
-										// Latencies
-										stats.lastCapTimeUs = timeCap;
-										stats.avgCapTimeUs = (epochFrameCount > 0) ? static_cast<uint32_t>(timeCapSum / epochFrameCount) : 0;
-										stats.lastEncTimeUs = timeEnc;
-										stats.avgEncTimeUs = (epochFrameCount > 0) ? static_cast<uint32_t>(timeEncSum / epochFrameCount) : 0;
-										stats.lastIOTimeUs = timeIO;
-										stats.avgIOTimeUs = (epochFrameCount > 0) ? static_cast<uint32_t>(timeIOSum / epochFrameCount) : 0;
+									// Newest performance analysis for 1280x720. Code in HyperFlash/XIP. Full frame mode:
+									// HD-CAM & All Buf in HyperRAM:			Cap 82342 us, Full Enc 17688 (Max: 18396) us
 
-#if USE_LINE_MODE
-										stats.lastSliceCapUs = timeSliceCap;
-										stats.avgSliceCapUs = (epochFrameCount > 0) ? static_cast<uint32_t>(timeSliceCapSum / epochFrameCount) : 0;
-										stats.lastSliceEncUs = timeSliceEnc;
-										stats.avgSliceEncUs = (epochFrameCount > 0) ? static_cast<uint32_t>(timeSliceEncSum / epochFrameCount) : 0;
-#endif
+									stats.fps = (epochFrameCount * 1000.0f) / static_cast<float>(elapsedMs);
+									stats.bitrateBps = static_cast<uint32_t>((epochEncBytesSum * 8000ULL) / elapsedMs);
+									stats.pipelineRestarts = pipelineRestartCounter;
 
-										// Throughput & Compression
-										stats.lastFrameBytes = encOutBytes;
-										stats.bitrateBPS = static_cast<uint32_t>((epochEncBytesSum * 8000ULL) / elapsedMs);
-										stats.compressionRatio = compressionRatio;
-										stats.avgCompressionRatio = (epochFrameCount > 0) ? (compressionRatioSum / static_cast<float>(epochFrameCount)) : 0.0f;
+									// Hardware driver statistics snapshot
+									stats.csi = cameraHD.GetCSIStatistics();
+									stats.dcmipp = cameraHD.GetPipeStatistics(Dcmipp::PipeID::Main);
+									stats.venc = vencEncoder.GetStatistics();
 
-										// Hardware driver structures
-										stats.csi = cameraHD.GetCSIStatistics();
-										stats.dcmipp = cameraHD.GetPipeStatistics(Dcmipp::PipeID::Main);
-										stats.venc = vencEncoder.GetStatistics();
-
-										tx_mutex_put(&mutex);
-									}
-
-									// Reset accumulators
+									// Reset epoch window
 									epochFrameCount = 0;
-									epochUVCDroppedCount = 0;
 									epochEncBytesSum = 0;
-									timeCapSum = 0;
-									timeConvMCUSum = 0;
-									timeEncSum = 0;
-									timeIOSum = 0;
-									compressionRatioSum = 0.0f;
-#if USE_LINE_MODE
-									timeSliceCapSum = 0;
-									timeSliceEncSum = 0;
-#endif
 									epochStartMs = currentMs;
 								}
 							}
@@ -723,6 +686,7 @@ void VisionThread::Run(ULONG input) {
 					else {
 						// Pipeline error handling
 						pipelineRestartCounter = pipelineRestartCounter + 1;
+						stats.pipelineRestarts = pipelineRestartCounter;
 						LOG_WARN("HD-CAM Frame Drop / Error. Restarting Pipeline...");
 
 #if USE_LINE_MODE

@@ -508,7 +508,7 @@ int main(void) {
 	if(forceRecovery == false) {
 		debugUART.Flush();
 		System::ConfigureFLEXMEM(System::ITCMSize::Size256KB, System::DTCMSize::Size256KB);
-	}	
+	}
 
 	// Initialize HyperBus, HyperFlash, and HyperRAM.
 	BoardXSPI1Init();

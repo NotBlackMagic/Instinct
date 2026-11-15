@@ -44,6 +44,10 @@ defined in linker script */
 .word _ebss
 
 /* Added for TCM */
+.word _sITCM
+.word _eITCM
+.word _sDTCM
+.word _eDTCM
 .word _siitcm
 .word _sitcm
 .word _eitcm
@@ -66,12 +70,33 @@ defined in linker script */
   .weak Reset_Handler
   .type Reset_Handler, %function
 Reset_Handler:
+  /* Set MSP and MSPLIM in DTCM */
   ldr   r0, =_sstack
   msr   MSPLIM, r0
   ldr   r0, =_estack
   mov   sp, r0          /* set stack pointer */
 
-/* Fill the MSP stack with watermark pattern (0xEFEEFEEF) */
+  /* Clear 256 KB D-TCM See: https://community.st.com/stm32-mcus-products-25/stm32n6-hard-fault-when-accessing-tcm-144886 */
+  ldr r0, =0x30000000
+  ldr r1, =0x30040000
+  movs r2, #0
+clear_dtcm:
+  str r2, [r0], #4
+  cmp r0, r1
+  bcc clear_dtcm
+
+  /* Clear 256 KB I-TCM */
+  ldr r0, =0x10000000
+  ldr r1, =0x10040000
+  movs r2, #0
+  movs r3, #0
+clear_itcm:
+  strd r2, r3, [r0], #8
+  cmp r0, r1
+  bcc clear_itcm
+
+
+  /* Fill the MSP stack with watermark pattern (0xEFEEFEEF) */
   ldr   r0, =_sstack
   ldr   r1, =_estack
   ldr   r2, =0xEFEEFEEF
@@ -85,10 +110,10 @@ LoopFillStack:
   cmp   r0, r1
   bcc   FillStack
 
-/* Call the clock system initialization function.*/
+  /* Call the clock system initialization function.*/
   bl  SystemInit
 
-/* Copy the data segment initializers from flash to SRAM */
+  /* Copy the data segment initializers from flash to SRAM */
   ldr r0, =_sdata
   ldr r1, =_edata
   ldr r2, =_sidata
@@ -105,7 +130,7 @@ LoopCopyDataInit:
   cmp r4, r1
   bcc CopyDataInit
 
-/* Zero fill the bss segment. */
+  /* Zero fill the bss segment. */
   ldr r2, =_sbss
   ldr r4, =_ebss
   movs r3, #0
@@ -119,7 +144,7 @@ LoopFillZerobss:
   cmp r2, r4
   bcc FillZerobss
 
-/* Copy the ITCM code segment from ROM */
+  /* Copy the ITCM code segment from ROM */
   ldr r0, =_sitcm
   ldr r1, =_eitcm
   ldr r2, =_siitcm
@@ -140,7 +165,7 @@ LoopCopyITCMInit:
   dsb   sy
   isb
 
-/* Copy the DTCM data segment from ROM to DTCM */
+  /* Copy the DTCM data segment from ROM to DTCM */
   ldr r0, =_sdtcm_data
   ldr r1, =_edtcm_data
   ldr r2, =_sidtcm_data
@@ -157,7 +182,7 @@ LoopCopyDTCMInit:
   cmp r4, r1
   bcc CopyDTCMInit
 
-/* Zero fill the DTCM bss segment */
+  /* Zero fill the DTCM bss segment */
   ldr r2, =_sdtcm_bss
   ldr r4, =_edtcm_bss
   movs r3, #0
@@ -171,9 +196,9 @@ LoopFillZeroDTCMbss:
   cmp r2, r4
   bcc FillZeroDTCMbss
 
-/* Call static constructors */
+ /* Call static constructors */
   bl __libc_init_array
-/* Call the application's entry point.*/
+ /* Call the application's entry point.*/
   bl main
 
 LoopForever:

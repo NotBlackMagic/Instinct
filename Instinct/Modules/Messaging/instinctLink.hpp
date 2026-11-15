@@ -16,11 +16,32 @@
 #include "logger.hpp"
 #include "paramService.hpp"
 #include "system.hpp"
-#include "tx_api.h"
 #include "uart.hpp"
+
+#include "tx_api.h"
 
 class InstinctLink {
 	public:
+		/// @brief Overall link packet and throughput statistics.
+		struct Statistics {
+			uint32_t txPackets = 0;
+			uint32_t rxPackets = 0;
+			uint32_t txDrops = 0;
+			uint32_t crcErrors = 0;
+			float txByteRate = 0.0f;
+			float rxByteRate = 0.0f;
+		};
+
+		/// @brief Per-stream rate and throughput statistics.
+		struct StreamStatistics {
+			uint8_t topicID = 0;
+			uint8_t instance = 0;
+			uint32_t txPackets = 0;
+			float targetRate = 0.0f;
+			float actualRate = 0.0f;
+			float byteRate = 0.0f;
+		};
+
 		enum class CommandID : uint16_t {
 			StreamConfig = 0xFF00,		// Configure topic stream rate
 			ParamRequestList = 0xFF01,	// Request full parameter table dump
@@ -70,7 +91,11 @@ class InstinctLink {
 			uint32_t interval;
 			uint64_t timestamp;
 			uint32_t version;
+			uint32_t averagePeriod;
+			uint32_t txPackets;
 		};
+
+		static constexpr uint8_t maxStreams = 16;
 
 		/// @brief Initializes the InstinctLink thread and binds to the target UART.
 		static void Init(UART* uart);
@@ -78,17 +103,29 @@ class InstinctLink {
 		/// @brief Configures a topic stream rate (can be called from firmware or via PC command).
 		static bool ConfigureStream(uint8_t topicId, uint8_t instance, float rateHz);
 
+		/// @brief Returns global link performance statistics.
+		static Statistics GetStatistics() { return stats; }
+
+		/// @brief Retrieves performance statistics for a specific stream slot (0 .. maxStreams - 1).
+		static bool GetStreamStatistics(uint8_t slotIndex, StreamStatistics& outStats);
+
+		/// @brief Resets all link and stream statistics counters.
+		static void ResetStatistics();
+
 	private:
 		static constexpr uint32_t threadStackSize = 4096;
 		static TX_THREAD threadPtr;
 		__attribute__((aligned(32))) static uint8_t threadStack[threadStackSize];
 
 		static constexpr uint16_t syncWord = 0x55AA;
-		static constexpr uint8_t maxStreams = 16;
 		static constexpr uint8_t maxPayloadSize = 255;
 
 		static UART* linkPort;
 		static StreamSlot streams[maxStreams];
+		static Statistics stats;
+		static uint32_t txBytesAccum;
+		static uint32_t rxBytesAccum;
+		static uint64_t statsTimestamp;
 
 		// Parameter update subscriber for instant ACK forwarding
 		static Subscriber<ParamUpdateMsg> subParamUpdate;

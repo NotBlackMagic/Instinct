@@ -33,32 +33,29 @@ class VisionThread {
 	public:
 		/// @brief Aggregated performance and hardware statistics for the vision pipeline
 		struct Statistics {
-			// Rate & Counters
+			// Rates and Throughput
 			float fps = 0.0f;
+			uint32_t bitrateBps = 0;
+			float compressionRatio = 0.0f;	///< Raw size / Compressed size
+			uint32_t lastFrameBytes = 0;
+
+			// Counters & Drops
 			uint32_t totalFrames = 0;
 			uint32_t uvcDroppedCount = 0;
 			uint32_t pipelineRestarts = 0;
 
-			// Frame Latencies (microseconds)
-			uint32_t lastCapTimeUs = 0;
-			uint32_t avgCapTimeUs = 0;
-			uint32_t lastEncTimeUs = 0;
-			uint32_t avgEncTimeUs = 0;
-			uint32_t lastIOTimeUs = 0;
-			uint32_t avgIOTimeUs = 0;
+			// Frame Latencies
+			uint32_t capTime = 0;		///< Last frame capture wait time
+			uint32_t encTime = 0;		///< Last encode duration
+			uint32_t maxEncTime = 0;	///< Peak encode time (VENC stall detector)
+			uint32_t ioTime = 0;		///< Last SD / storage write time
 
 #if USE_LINE_MODE
-			uint32_t lastSliceCapUs = 0;
-			uint32_t avgSliceCapUs = 0;
-			uint32_t lastSliceEncUs = 0;
-			uint32_t avgSliceEncUs = 0;
+			// Line Mode Slice Metrics
+			uint32_t sliceCap = 0;		///< Last slice capture duration
+			uint32_t sliceEnc = 0;		///< Last slice encode tail duration
+			uint32_t maxSliceEnc = 0;	///< Peak slice encode tail
 #endif
-
-			// Encoding Throughput
-			uint32_t lastFrameBytes = 0;
-			uint32_t bitrateBPS = 0;
-			float compressionRatio = 0.0f;
-			float avgCompressionRatio = 0.0f;
 
 			// Ingress & Encoder Driver Stats
 			Csi::Statistics csi;
@@ -74,9 +71,14 @@ class VisionThread {
 		static void SetRecording(bool enable);
 		static bool IsRecording();
 
-		// Thread-safe telemetry snapshot accessors
-		static void GetStatistics(Statistics& out);
-		static void ResetStatistics();
+		/// @brief Returns Vision performance statistics.
+		static Statistics GetStatistics() { return stats; }
+
+		/// @brief Resets Vision statistics counters.
+		static void ResetStatistics() {
+			stats = {};
+			pipelineRestartCounter = 0;
+		}
 
 		// Array of all supported controls
 		static USBClassUVC::UVCControlState puControlRegistry[];
@@ -90,7 +92,6 @@ class VisionThread {
 		__attribute__((aligned(32))) static uint8_t threadStack[threadStackSize];
 
 		// Telemetry synchronization
-		static TX_MUTEX mutex;
 		static Statistics stats;
 		static uint32_t pipelineRestartCounter;
 

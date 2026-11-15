@@ -100,8 +100,29 @@ void ZenohThread(ULONG thread_input) {
 	}
 }
 
+// Copy ROM vector table to the base of ITCM (0x10000000) and switch VTOR
+extern "C" const uint32_t g_pfnVectors[]; // Symbol from startup_stm32n657xx.s
+extern "C" uint32_t _sisr_vector;
+extern "C" uint32_t _eisr_vector;
+
+__attribute__((section(".itcm_vector"), aligned(1024))) uint32_t itcmVectorTable[256];
+
+void RelocateVectorTableToITCM(void) {
+	const uint32_t vectorSize = reinterpret_cast<uint32_t>(&_eisr_vector) - reinterpret_cast<uint32_t>(&_sisr_vector);
+	__builtin_memcpy(itcmVectorTable, g_pfnVectors, vectorSize);
+	__DSB();
+	SCB->VTOR = reinterpret_cast<uint32_t>(itcmVectorTable);
+	__DSB();
+	__ISB();
+}
+
 void tx_application_define(void *first_unused_memory) {
 	(void)first_unused_memory;
+
+	// _tx_initialize_low_level.S just ran with CPSID i and set SCB->VTOR back to g_pfnVectors (ROM).
+	// Restore SCB->VTOR to ITCM and configure SysTick before _tx_thread_schedule enables IRQs.
+	// RelocateVectorTableToITCM();
+	// System::InitSysTick();
 	
 	Logger::Instance().Init();
 	Logger::Instance().RegisterConsole(&debugUART);
@@ -132,7 +153,7 @@ void tx_application_define(void *first_unused_memory) {
 			.width = 1920,
 			.height = 1080,
 			.frameInterval = 333333, 			// 30 FPS in 100ns units
-			.format = PixelFormat::Unknown,	// PixelFormat::Unknown
+			.format = PixelFormat::Unknown,		// PixelFormat::Unknown
 			.codec = VisionCodec::H264			// VisionCodec::H264
 		}
 	};
@@ -197,7 +218,7 @@ void tx_application_define(void *first_unused_memory) {
 	ControllerThread::Init();
 	CommanderThread::Init();
 	// ActuatorThread::Init();
-	// InstinctLink::Init(&telem2);
+	InstinctLink::Init(&telem2);
 
 	// Configure blackbox (data logging to SD card) logging profile
 	// BlackboxConfig::ApplyTuningProfile();
@@ -216,6 +237,9 @@ void tx_application_define(void *first_unused_memory) {
 int main(void) {
 	// Enable debugger in flash run mode
 	System::EnableDebug();
+
+	// Copy vector table from ROM to ITCM before enabling interrupts
+	// RelocateVectorTableToITCM();
 
 	// Interrupts must be re-enabled in the firmware/application so no ISRs are called during the boot
 	__enable_irq();

@@ -78,7 +78,7 @@ Status InEKF::InitializeBaroReference(float baroInit) {
 	return Status::Ok;
 }
 
-Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timestamp) {
+__attribute__((section(".itcm_text"))) Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timestamp) {
 	if(isInitialized == false) {
 		InitializeState(timestamp);
 		return Status::Ok;
@@ -124,7 +124,7 @@ Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timest
 	Matrix3f::Multiply3x3(oldR, expR, R);
 
 	float dtSqHalf = 0.5f * dt * dt;
-	aGlobal.data[2] += this->gVal; // Add gravity along +Z (NED Down)
+	aGlobal.data[2] = aGlobal.data[2] + this->gVal; // Add gravity along +Z (NED Down)
 	for(int i = 0; i < 3; i++) {
 		v.data[i] = oldV.data[i] + (aGlobal.data[i] * dt);
 		p.data[i] = oldP.data[i] + (oldV.data[i] * dt) + (aGlobal.data[i] * dtSqHalf);
@@ -190,17 +190,17 @@ Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timest
 			const float* y0 = Y[r][0].data;
 			float* pr1 = P[r][1].data;
 
-			pr1[0] += (ayDt * y0[2] - azDt * y0[1]);
-			pr1[1] += (azDt * y0[0] - axDt * y0[2]);
-			pr1[2] += (axDt * y0[1] - ayDt * y0[0]);
+			pr1[0] = pr1[0] + (ayDt * y0[2] - azDt * y0[1]);
+			pr1[1] = pr1[1] + (azDt * y0[0] - axDt * y0[2]);
+			pr1[2] = pr1[2] + (axDt * y0[1] - ayDt * y0[0]);
 
-			pr1[3] += (ayDt * y0[5] - azDt * y0[4]);
-			pr1[4] += (azDt * y0[3] - axDt * y0[5]);
-			pr1[5] += (axDt * y0[4] - ayDt * y0[3]);
+			pr1[3] = pr1[3] + (ayDt * y0[5] - azDt * y0[4]);
+			pr1[4] = pr1[4] + (azDt * y0[3] - axDt * y0[5]);
+			pr1[5] = pr1[5] + (axDt * y0[4] - ayDt * y0[3]);
 
-			pr1[6] += (ayDt * y0[8] - azDt * y0[7]);
-			pr1[7] += (azDt * y0[6] - axDt * y0[8]);
-			pr1[8] += (axDt * y0[7] - ayDt * y0[6]);
+			pr1[6] = pr1[6] + (ayDt * y0[8] - azDt * y0[7]);
+			pr1[7] = pr1[7] + (azDt * y0[6] - axDt * y0[8]);
+			pr1[8] = pr1[8] + (axDt * y0[7] - ayDt * y0[6]);
 
 			Matrix3f::MultiplyAccumulateTransposedB3x3(Y[r][4], negR_dt, P[r][1]);
 		}
@@ -250,16 +250,16 @@ Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timest
 
 				// Scale row 'a' across all 5 column blocks
 				for(int c = 0; c < 5; c++) {
-					P[b][c].data[a * 3 + 0] *= scale;
-					P[b][c].data[a * 3 + 1] *= scale;
-					P[b][c].data[a * 3 + 2] *= scale;
+					P[b][c].data[a * 3 + 0] = P[b][c].data[a * 3 + 0] * scale;
+					P[b][c].data[a * 3 + 1] = P[b][c].data[a * 3 + 1] * scale;
+					P[b][c].data[a * 3 + 2] = P[b][c].data[a * 3 + 2] * scale;
 				}
 
 				// Scale col 'a' across all 5 row blocks
 				for(int r = 0; r < 5; r++) {
-					P[r][b].data[0 * 3 + a] *= scale;
-					P[r][b].data[1 * 3 + a] *= scale;
-					P[r][b].data[2 * 3 + a] *= scale;
+					P[r][b].data[0 * 3 + a] = P[r][b].data[0 * 3 + a] * scale;
+					P[r][b].data[1 * 3 + a] = P[r][b].data[1 * 3 + a] * scale;
+					P[r][b].data[2 * 3 + a] = P[r][b].data[2 * 3 + a] * scale;
 				}
 
 				// Explicitly pin the diagonal to avoid float rounding drift
@@ -297,7 +297,7 @@ Status InEKF::Predict(const float accel[3], const float gyro[3], uint64_t timest
 	return Status::Ok;
 }
 
-Status InEKF::UpdateGravity(const float accel[3]) {
+__attribute__((section(".itcm_text"))) Status InEKF::UpdateGravity(const float accel[3]) {
 	if(isInitialized == false) {
 		return Status::Ok;
 	}
@@ -315,9 +315,9 @@ Status InEKF::UpdateGravity(const float accel[3]) {
 	float normU;
 	arm_sqrt_f32(normSq, &normU);
 	float scaleG = gVal / normU;
-	u0 *= scaleG;
-	u1 *= scaleG;
-	u2 *= scaleG;
+	u0 = u0 * scaleG;
+	u1 = u1 * scaleG;
+	u2 = u2 * scaleG;
 
 	// Expected specific force in body frame: R^T * [0, 0, -g]^T + accelBias
 	// Since [0, 0, -g] only has Z, R^T * [0, 0, -g] is simply -g * Row 2 of R!
@@ -404,7 +404,7 @@ Status InEKF::UpdateGravity(const float accel[3]) {
 	return Status::Ok;
 }
 
-Status InEKF::UpdateMag(const float mag[3]) {
+__attribute__((section(".itcm_text"))) Status InEKF::UpdateMag(const float mag[3]) {
 	if(isInitialized == false) {
 		return Status::Ok;
 	}
@@ -439,9 +439,9 @@ Status InEKF::UpdateMag(const float mag[3]) {
 	// Compute S = (H * P) * H^T + R_Noise
 	Matrix3f S(InitType::Uninitialized);
 	Matrix3f::MultiplyTransposedB3x3(HP[0], hMagAtt, S);
-	S.data[0] += this->config.magMeasVar;
-	S.data[4] += this->config.magMeasVar;
-	S.data[8] += this->config.magMeasVar;
+	S.data[0] = S.data[0] + this->config.magMeasVar;
+	S.data[4] = S.data[4] + this->config.magMeasVar;
+	S.data[8] = S.data[8] + this->config.magMeasVar;
 
 	Matrix3f sInv = S.Inverse3x3();
 
@@ -490,7 +490,7 @@ Status InEKF::UpdateMag(const float mag[3]) {
 	return Status::Ok;
 }
 
-Status InEKF::UpdateVerticalPosition(float range, float rNoise) {
+__attribute__((section(".itcm_text"))) Status InEKF::UpdateVerticalPosition(float range, float rNoise) {
 	// In the NED frame standard, Down is positive, meaning Altitude points along the negative axis
 	float z = range - p.data[2];	// Innovation error calculation
 	
@@ -519,20 +519,20 @@ Status InEKF::UpdateVerticalPosition(float range, float rNoise) {
 	float kVz = hpRow[5] * invS;
 	float kPz = hpRow[8] * invS;
 
-	v.data[2] += hpRow[5] * scaledZ;
-	p.data[2] += hpRow[8] * scaledZ;
+	v.data[2] = v.data[2] + (hpRow[5] * scaledZ);
+	p.data[2] = p.data[2] + (hpRow[8] * scaledZ);
 
 	// Update Row 5 (r = 1, row 2) and Row 8 (r = 2, row 2) of P
 	for(int c = 0; c < 5; c++) {
 		float* p1c = P[1][c].data;
 		float* p2c = P[2][c].data;
-		p1c[6] -= kVz * hpRow[c * 3 + 0];
-		p1c[7] -= kVz * hpRow[c * 3 + 1];
-		p1c[8] -= kVz * hpRow[c * 3 + 2];
+		p1c[6] = p1c[6] - (kVz * hpRow[c * 3 + 0]);
+		p1c[7] = p1c[7] - (kVz * hpRow[c * 3 + 1]);
+		p1c[8] = p1c[8] - (kVz * hpRow[c * 3 + 2]);
 
-		p2c[6] -= kPz * hpRow[c * 3 + 0];
-		p2c[7] -= kPz * hpRow[c * 3 + 1];
-		p2c[8] -= kPz * hpRow[c * 3 + 2];
+		p2c[6] = p1c[6] - (kPz * hpRow[c * 3 + 0]);
+		p2c[7] = p1c[7] - (kPz * hpRow[c * 3 + 1]);
+		p2c[8] = p1c[8] - (kPz * hpRow[c * 3 + 2]);
 	}
 
 	// Keep upper-triangle blocks P[0][1], P[0][2], P[1][2] consistent before MirrorCovarianceLower
@@ -546,7 +546,7 @@ Status InEKF::UpdateVerticalPosition(float range, float rNoise) {
 	return Status::Ok;
 }
 
-Status InEKF::UpdateBaro(float pressure) {
+__attribute__((section(".itcm_text"))) Status InEKF::UpdateBaro(float pressure) {
 	if(isInitialized == false) {
 		return Status::Ok;
 	}
@@ -555,7 +555,7 @@ Status InEKF::UpdateBaro(float pressure) {
 	return UpdateVerticalPosition(-measuredAltitude, this->config.baroMeasVar);
 }
 
-Status InEKF::UpdateRange(float range) {
+__attribute__((section(".itcm_text"))) Status InEKF::UpdateRange(float range) {
 	if(isInitialized == false) {
 		return Status::Ok;
 	}
@@ -570,7 +570,7 @@ Status InEKF::UpdateRange(float range) {
 	return UpdateVerticalPosition(rangeTmp, rNoise);
 }
 
-Status InEKF::UpdateOpticalFlow(const float flowRate[2], const float gyro[3], float range, float quality) {
+__attribute__((section(".itcm_text"))) Status InEKF::UpdateOpticalFlow(const float flowRate[2], const float gyro[3], float range, float quality) {
 	if(isInitialized == false || quality <= 0.05f) {
 		return Status::Ok;
 	}
@@ -679,9 +679,9 @@ Status InEKF::UpdateOpticalFlow(const float flowRate[2], const float gyro[3], fl
 				int rowIdx = r * 3 + i;
 				float k0r = k0[rowIdx];
 				float k1r = k1[rowIdx];
-				pBlk[i * 3 + 0] -= (k0r * hp0[c * 3 + 0] + k1r * hp1[c * 3 + 0]);
-				pBlk[i * 3 + 1] -= (k0r * hp0[c * 3 + 1] + k1r * hp1[c * 3 + 1]);
-				pBlk[i * 3 + 2] -= (k0r * hp0[c * 3 + 2] + k1r * hp1[c * 3 + 2]);
+				pBlk[i * 3 + 0] = pBlk[i * 3 + 0] - (k0r * hp0[c * 3 + 0] + k1r * hp1[c * 3 + 0]);
+				pBlk[i * 3 + 1] = pBlk[i * 3 + 1] - (k0r * hp0[c * 3 + 1] + k1r * hp1[c * 3 + 1]);
+				pBlk[i * 3 + 2] = pBlk[i * 3 + 2] - (k0r * hp0[c * 3 + 2] + k1r * hp1[c * 3 + 2]);
 			}
 		}
 	}
@@ -692,7 +692,7 @@ Status InEKF::UpdateOpticalFlow(const float flowRate[2], const float gyro[3], fl
 	return Status::Ok;
 }
 
-Status InEKF::UpdateGPSPosition(const float position[3]) {
+__attribute__((section(".itcm_text"))) Status InEKF::UpdateGPSPosition(const float position[3]) {
 	if(isInitialized == false) {
 		return Status::Ok;
 	}
@@ -706,9 +706,9 @@ Status InEKF::UpdateGPSPosition(const float position[3]) {
 	// Right-Invariant Jacobian Block 0: hPosAtt = -Skew(p)
 	// H = [ 0 | 0 | I_3 | 0 | 0 ] -> HP[c] = P[2][c], S = P[2][2] + R_Noise
 	Matrix3f S = P[2][2];
-	S.data[0] += config.gpsHorizPosVar;
-	S.data[4] += config.gpsHorizPosVar;
-	S.data[8] += config.gpsVertPosVar;
+	S.data[0] = S.data[0] + config.gpsHorizPosVar;
+	S.data[4] = S.data[4] + config.gpsHorizPosVar;
+	S.data[8] = S.data[8] + config.gpsVertPosVar;
 
 	Matrix3f sInv = S.Inverse3x3();
 
@@ -753,7 +753,7 @@ Status InEKF::UpdateGPSPosition(const float position[3]) {
 	return Status::Ok;
 }
 
-Status InEKF::UpdateGPSVelocity(const float velocity[3]) {
+__attribute__((section(".itcm_text"))) Status InEKF::UpdateGPSVelocity(const float velocity[3]) {
 	if(isInitialized == false) {
 		return Status::Ok;
 	}
@@ -765,9 +765,9 @@ Status InEKF::UpdateGPSVelocity(const float velocity[3]) {
 	z.data[2] = velocity[2] - v.data[2];
 
 	Matrix3f S = P[1][1];
-	S.data[0] += config.gpsVelVar;
-	S.data[4] += config.gpsVelVar;
-	S.data[8] += config.gpsVelVar;
+	S.data[0] = S.data[0] + config.gpsVelVar;
+	S.data[4] = S.data[4] + config.gpsVelVar;
+	S.data[8] = S.data[8] + config.gpsVelVar;
 
 	Matrix3f sInv = S.Inverse3x3();
 
@@ -809,7 +809,7 @@ Status InEKF::UpdateGPSVelocity(const float velocity[3]) {
 	return Status::Ok;
 }
 
-Quaternion InEKF::GetQuaternion() const {
+__attribute__((section(".itcm_text"))) Quaternion InEKF::GetQuaternion() const {
 	Quaternion q;
 	float trace = R.data[0] + R.data[4] + R.data[8];
 	if(trace > 0.0f) {
@@ -854,24 +854,28 @@ Quaternion InEKF::GetQuaternion() const {
 	return q;
 }
 
-void InEKF::NormalizeRotation() {
+__attribute__((section(".itcm_text"))) void InEKF::NormalizeRotation() {
 	float x0 = R.data[0], x1 = R.data[3], x2 = R.data[6];
 	float y0 = R.data[1], y1 = R.data[4], y2 = R.data[7];
 
 	float xMag;
 	arm_sqrt_f32(x0 * x0 + x1 * x1 + x2 * x2, &xMag);
 	float invX = 1.0f / xMag;
-	x0 *= invX; x1 *= invX; x2 *= invX;
+	x0 = x0 * invX;
+	x1 = x1 * invX;
+	x2 = x2 * invX;
 
 	float dotXY = x0 * y0 + x1 * y1 + x2 * y2;
-	y0 -= dotXY * x0;
-	y1 -= dotXY * x1;
-	y2 -= dotXY * x2;
+	y0 = y0 - (dotXY * x0);
+	y1 = y1 - (dotXY * x1);
+	y2 = y2 - (dotXY * x2);
 
 	float yMag;
 	arm_sqrt_f32(y0 * y0 + y1 * y1 + y2 * y2, &yMag);
 	float invY = 1.0f / yMag;
-	y0 *= invY; y1 *= invY; y2 *= invY;
+	y0 = y0 * invY;
+	y1 = y1 * invY;
+	y2 = y2 * invY;
 
 	// Z = X cross Y
 	float z0 = x1 * y2 - x2 * y1;
@@ -883,7 +887,7 @@ void InEKF::NormalizeRotation() {
 	R.data[6] = x2; R.data[7] = y2; R.data[8] = z2;
 }
 
-void InEKF::ApplyErrorState(const float delta[15]) {
+__attribute__((section(".itcm_text"))) void InEKF::ApplyErrorState(const float delta[15]) {
 	Vector3fMat w(InitType::Uninitialized);
 	w.data[0] = delta[0];
 	w.data[1] = delta[1];
@@ -897,14 +901,14 @@ void InEKF::ApplyErrorState(const float delta[15]) {
 
 	// Decoupled Euclidean retraction on R^3 (never rotates v or p around world origin!)
 	for(int i = 0; i < 3; i++) {
-		v.data[i] += delta[i + 3];
-		p.data[i] += delta[i + 6];
-		gyroBias.data[i] += delta[i + 9];
-		accelBias.data[i] += delta[i + 12];
+		v.data[i] = v.data[i] + delta[i + 3];
+		p.data[i] = p.data[i] + delta[i + 6];
+		gyroBias.data[i] = gyroBias.data[i] + delta[i + 9];
+		accelBias.data[i] = accelBias.data[i] + delta[i + 12];
 	}
 }
 
-void InEKF::MirrorCovarianceLower() {
+__attribute__((section(".itcm_text"))) void InEKF::MirrorCovarianceLower() {
 	// UPDATE: Symmetrize the 5 diagonal 3x3 blocks (safety to ALWAYS make sure the covariance matrix is symmetric!)
 	for(int b = 0; b < 5; b++) {
 		float* d = P[b][b].data;

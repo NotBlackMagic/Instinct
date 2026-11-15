@@ -51,7 +51,7 @@ void OpticalFlow::Reset() {
 	this->output = {};
 }
 
-Status OpticalFlow::Process(const VisionFrame& frame, const float gyro[3]) {
+__attribute__((section(".itcm_text"))) Status OpticalFlow::Process(const VisionFrame& frame, const float gyro[3]) {
 	if(this->isInitialized == false || frame.startAddress == nullptr || frame.width != rawWidth || frame.height != rawHeight || frame.format != PixelFormat::Grayscale) {
 		return Status::Error;
 	}
@@ -141,13 +141,13 @@ Status OpticalFlow::Process(const VisionFrame& frame, const float gyro[3]) {
 	return Status::Ok;
 }
 
-void OpticalFlow::BuildPyramid(const uint8_t* src, Pyramid& dst) {
+__attribute__((section(".itcm_text"))) void OpticalFlow::BuildPyramid(const uint8_t* src, Pyramid& dst) {
 	Bin2x2(src, dst.l0, rawWidth, rawHeight);			// 256x256 -> 128x128
 	Bin2x2(dst.l0, dst.l1, l0Width, l0Height);	// 128x128 -> 64x64
 	Bin2x2(dst.l1, dst.l2, l1Width, l1Height);	// 64x64 -> 32x32
 }
 
-void OpticalFlow::Bin2x2(const uint8_t* src, uint8_t* dst, uint16_t srcW, uint16_t srcH) {
+__attribute__((section(".itcm_text"))) void OpticalFlow::Bin2x2(const uint8_t* src, uint8_t* dst, uint16_t srcW, uint16_t srcH) {
 	uint16_t dstW = srcW >> 1U;
 	uint16_t dstH = srcH >> 1U;
 
@@ -170,7 +170,7 @@ void OpticalFlow::Bin2x2(const uint8_t* src, uint8_t* dst, uint16_t srcW, uint16
 	}
 }
 
-bool OpticalFlow::TrackPatch(const uint8_t* prev, const uint8_t* curr, uint16_t stride, float cx, float cy, float& u, float& v) const {
+__attribute__((section(".itcm_text"))) bool OpticalFlow::TrackPatch(const uint8_t* prev, const uint8_t* curr, uint16_t stride, float cx, float cy, float& u, float& v) const {
 	constexpr int32_t halfPatch = patchSize >> 1; // 4
 	int32_t tlX = (int32_t)cx - halfPatch;
 	int32_t tlY = (int32_t)cy - halfPatch;
@@ -189,20 +189,19 @@ bool OpticalFlow::TrackPatch(const uint8_t* prev, const uint8_t* curr, uint16_t 
 	int32_t sumGxy = 0;
 	int32_t sumGyy = 0;
 
-	for(int32_t py = 0; py < patchSize; py++) {
-		const uint8_t* pRow = prev + (tlY + py) * stride + tlX;
-		const uint8_t* pRowUp = pRow - stride;
-		const uint8_t* pRowDown = pRow + stride;
+	// Preload top border row (tlY - 1) and first patch row (tlY) to slide vertically across iterations
+	const uint8_t* pRow = prev + tlY * stride + tlX;
+	int16x8_t rUp = vreinterpretq_s16_u16(vldrbq_u16(pRow - stride));
+	int16x8_t rCenter = vreinterpretq_s16_u16(vldrbq_u16(pRow));
 
-		// Using MVE
+	for(int32_t py = 0; py < patchSize; py++) {
+		const uint8_t* pRowNext = pRow + stride;
 		int32_t rowOffset = py * patchSize;
 
-		// Load 8 uint8_t pixels and widen directly to 8x int16_t lanes
-		int16x8_t rCenter = vreinterpretq_s16_u16(vldrbq_u16(pRow));
+		// Only 3 vector loads per row (rUp and rCenter are reused from previous row)
 		int16x8_t rLeft = vreinterpretq_s16_u16(vldrbq_u16(pRow - 1));
 		int16x8_t rRight = vreinterpretq_s16_u16(vldrbq_u16(pRow + 1));
-		int16x8_t rUp = vreinterpretq_s16_u16(vldrbq_u16(pRowUp));
-		int16x8_t rDown = vreinterpretq_s16_u16(vldrbq_u16(pRowDown));
+		int16x8_t rDown = vreinterpretq_s16_u16(vldrbq_u16(pRowNext));
 
 		// Pre-shift template to Q6 (<< 6) once outside the Gauss-Newton loop
 		vst1q_s16(patchT + rowOffset, vshlq_n_s16(rCenter, 6));
@@ -218,6 +217,11 @@ bool OpticalFlow::TrackPatch(const uint8_t* prev, const uint8_t* curr, uint16_t 
 		sumGxx = vmladavaq_s16(sumGxx, gx, gx);
 		sumGxy = vmladavaq_s16(sumGxy, gx, gy);
 		sumGyy = vmladavaq_s16(sumGyy, gy, gy);
+
+		// Slide rows down for next iteration
+		rUp = rCenter;
+		rCenter = rDown;
+		pRow = pRowNext;
 	}
 
 	// Scale structure tensor by 0.25f to compensate for 2x central gradient
@@ -251,7 +255,7 @@ bool OpticalFlow::TrackPatch(const uint8_t* prev, const uint8_t* curr, uint16_t 
 	float maxCoord = (float)(stride - patchSize - 2);
 	int32_t maxAbsResQ6 = (int32_t)(this->config.maxRes * 4096.0f);
 	int32_t absResSum = 0;
-	for(uint8_t iter = 0; iter < maxIter; iter++) {
+	for(uint8_t iter = 0; iter < targetIter; iter++) {
 		float curTlX = (float)tlX + u;
 		float curTlY = (float)tlY + v;
 
@@ -276,16 +280,18 @@ bool OpticalFlow::TrackPatch(const uint8_t* prev, const uint8_t* curr, uint16_t 
 		int32_t bYFixed = 0;
 		absResSum = 0;
 
+		// Preload row 0 (c00, c01) and slide vertically so each row only performs 2 loads instead of 4
+		const uint8_t* cRow = curr + intY * stride + intX;
+		uint16x8_t c00 = vldrbq_u16(cRow);
+		uint16x8_t c01 = vldrbq_u16(cRow + 1);
+
 		// Vectorized 8x8 Bilinear Warp + Residual + Gradient Dot-Product (8 pixels per iteration)
 		for(int32_t py = 0; py < patchSize; py++) {
-			const uint8_t* cRow0 = curr + (intY + py) * stride + intX;
-			const uint8_t* cRow1 = cRow0 + stride;
+			const uint8_t* cRowNext = cRow + stride;
 			int32_t rowOffset = py * patchSize;
 
-			uint16x8_t c00 = vldrbq_u16(cRow0);
-			uint16x8_t c01 = vldrbq_u16(cRow0 + 1);
-			uint16x8_t c10 = vldrbq_u16(cRow1);
-			uint16x8_t c11 = vldrbq_u16(cRow1 + 1);
+			uint16x8_t c10 = vldrbq_u16(cRowNext);
+			uint16x8_t c11 = vldrbq_u16(cRowNext + 1);
 
 			// Q8 bilinear interpolation (max 255 * 256 = 65280, fits in uint16x8_t without overflow)
 			uint16x8_t warpedQ8 = vmulq_n_u16(c00, w00);
@@ -304,6 +310,11 @@ bool OpticalFlow::TrackPatch(const uint8_t* prev, const uint8_t* curr, uint16_t 
 			bXFixed = vmladavaq_s16(bXFixed, diffQ6, gxRow);
 			bYFixed = vmladavaq_s16(bYFixed, diffQ6, gyRow);
 			absResSum = vaddvaq_s16(absResSum, vabsq_s16(diffQ6));
+
+			// Slide row registers down for next py iteration
+			c00 = c10;
+			c01 = c11;
+			cRow = cRowNext;
 		}
 
 		// Scale back to float: 1 / (64 [Q6] * 2 [central diff]) = 1 / 128.0f
@@ -326,7 +337,7 @@ bool OpticalFlow::TrackPatch(const uint8_t* prev, const uint8_t* curr, uint16_t 
 	return (absResSum <= maxAbsResQ6);
 }
 
-void OpticalFlow::SolveVelocity(const float* uArr, const float* vArr, uint8_t count, float dt, const float gyro[3]) {
+__attribute__((section(".itcm_text"))) void OpticalFlow::SolveVelocity(const float* uArr, const float* vArr, uint8_t count, float dt, const float gyro[3]) {
 	if(count < this->config.minValid) {
 		this->output.validCount = count;
 		this->output.quality = 0.0f;
@@ -392,7 +403,7 @@ void OpticalFlow::SolveVelocity(const float* uArr, const float* vArr, uint8_t co
 	this->output.isValid = true;
 }
 
-float OpticalFlow::Median(float* buf, uint8_t count) {
+__attribute__((section(".itcm_text"))) float OpticalFlow::Median(float* buf, uint8_t count) {
 	// Insertion sort on <= 25 elements is faster and more branch-predictable than Quickselect on Cortex-M
 	for(uint8_t i = 1; i < count; i++) {
 		float key = buf[i];

@@ -30,6 +30,7 @@ void RegisterInstinctLinkCommands();
 void RegisterI2CCommands();
 void RegisterI3CCommands();
 void RegisterGPIOCommands();
+void RegisterOpticalFlowCommands();
 void RegisterParamCommands();
 void RegisterPWMCommands();
 void RegisterSerialCommands();

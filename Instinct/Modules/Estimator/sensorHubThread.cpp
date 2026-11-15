@@ -59,6 +59,7 @@ void SensorHubThread::Init() {
 }
 
 void SensorHubThread::Run(ULONG input) {
+	(void)input;
 	LOG_INFO("Sensor Hub Thread Initialized.");
 
 	// Wait for all the sensor threads to initialize. They are lower priority so we ahve to wait here.
@@ -145,7 +146,6 @@ void SensorHubThread::Run(ULONG input) {
 			}
 
 			if(magUpdated == true) {
-				// MagMsg virtualMag = SelectMag(rawMagOn, rawMagOff);
 				MagMsg virtualMag = SensorHubThread::SelectMag(magMsgs, activeMagCount);
 				topicVirtualMag.Publish(magMsgs[0]);
 			}

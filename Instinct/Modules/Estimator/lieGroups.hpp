@@ -14,7 +14,7 @@
 class LieGroups {
 	public:
 		// Skew-Symmetric Operator (w^): Converts a 3x1 vector into a 3x3 cross-product matrix.
-		static Matrix3f Skew(const Vector3fMat& v) {
+		__attribute__((always_inline)) inline static Matrix3f Skew(const Vector3fMat& v) {
 			Matrix3f S(InitType::Uninitialized);
 			S.data[0] = 0.0f;
 			S.data[1] = -v.data[2];
@@ -29,7 +29,7 @@ class LieGroups {
 		}
 
 		// SO(3) Exponential Map (Rodrigues' Formula): Maps a 3x1 angular velocity vector onto the SO(3) rotation manifold.
-		static Matrix3f ExpSO3(const Vector3fMat& w) {
+		__attribute__((always_inline)) inline static Matrix3f ExpSO3(const Vector3fMat& w) {
 			float thetaSq = 	(w.data[0] * w.data[0]) + 
 								(w.data[1] * w.data[1]) + 
 								(w.data[2] * w.data[2]);
@@ -61,7 +61,7 @@ class LieGroups {
 			return result;
 		}
 
-		static void CalculateKinematicsSO3(const Vector3fMat& w, Matrix3f& R, Matrix3f& JL) {
+		__attribute__((always_inline)) inline static void CalculateKinematicsSO3(const Vector3fMat& w, Matrix3f& R, Matrix3f& JL) {
 			float thetaSq = (w.data[0] * w.data[0]) + 
 							(w.data[1] * w.data[1]) + 
 							(w.data[2] * w.data[2]);
@@ -93,7 +93,7 @@ class LieGroups {
 		}
 
 		// SO(3) Left Jacobian: Required to integrate Velocity and Position on the curved manifold.
-		static Matrix3f LeftJacobianSO3(const Vector3fMat& w) {
+		__attribute__((always_inline)) inline static Matrix3f LeftJacobianSO3(const Vector3fMat& w) {
 			float thetaSq =	(w.data[0] * w.data[0]) + 
 								(w.data[1] * w.data[1]) + 
 								(w.data[2] * w.data[2]);
@@ -125,7 +125,7 @@ class LieGroups {
 		}
 
 		// SE_2(3) Exponential Map: Maps a 9x1 error state [rotation, velocity, position] into the 5x5 Matrix.
-		static void ExpSE23(const Vector9fMat& xi, Matrix5f& X) {
+		__attribute__((always_inline)) inline static void ExpSE23(const Vector9fMat& xi, Matrix5f& X) {
 			Vector3fMat w(InitType::Uninitialized);
 			Vector3fMat u(InitType::Uninitialized);
 			Vector3fMat v(InitType::Uninitialized);
@@ -158,7 +158,7 @@ class LieGroups {
 		}
 
 		// SE_2(3) Adjoint Map: Maps vectors from the global frame into the local body frame through the manifold. Required to propagate the Error Covariance Matrix.
-		static Matrix9f AdjointSE23(const Matrix5f& X) {
+		__attribute__((always_inline)) inline static Matrix9f AdjointSE23(const Matrix5f& X) {
 			Matrix9f Ad; // Constructor zeroes it out
 			
 			// Extract R, v, p from the 5x5 State Matrix

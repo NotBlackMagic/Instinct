@@ -176,7 +176,8 @@ class Dcmipp {
 
 		// Event Flags Definitions
 		static constexpr uint32_t EVT_TRANS_CPLT = 0x01;
-		static constexpr uint32_t EVT_ERR = 0x02;
+		static constexpr uint32_t EVT_VSYNC = 0x02;
+		static constexpr uint32_t EVT_ERR = 0x04;
 
 		/// @brief Helper to configure Resource Isolation Framework (RIF)
 		void ConfigureRIF(void);

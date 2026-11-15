@@ -20,6 +20,7 @@ static void PrintHelp() {
 	Logger::Instance().Write("  <target> brightness [val]  - Set camera sensor brightness\r\n");
 	Logger::Instance().Write("  <target> contrast [val]    - Set camera sensor contrast\r\n");
 	Logger::Instance().Write("  <target> flicker [val]     - Set camera sensor flicker filter\r\n");
+	Logger::Instance().Write("  <target> focus [auto|lock|0..255]  - Set AF mode or manual focus step\r\n");
 	Logger::Instance().Write("  <target> test [val]        - Enable/disable test pattern output\r\n");
 	Logger::Instance().Write("-----------------------\r\n");
 }
@@ -169,6 +170,58 @@ static bool CommandCam(const char* args) {
 		if(routeDcmi == true) {
 			// cameraSD.GetSensor().SetBandingFilter(filter);
 			Logger::Instance().Printf("DCMI Flicker filter set to %s.\r\n", filterName);
+		}
+		return true;
+	}
+
+	if(strcmp(action, "focus") == 0) {
+		if(routeDcmi == true) {
+			Logger::Instance().Write("DCMI camera does not support focus control.\r\n");
+		}
+
+		if(routeMipi == true) {
+			if(count >= 3) {
+				if(val < 0) {
+					val = 0;
+				}
+				if(val > 255) {
+					val = 255;
+				}
+
+				if(cameraHD.GetSensor().SetManualFocus(static_cast<uint8_t>(val)) == Status::Ok) {
+					Logger::Instance().Printf("MIPI Manual Focus set to %d.\r\n", val);
+				}
+				else {
+					Logger::Instance().Write("Error: Failed to set MIPI Manual Focus.\r\n");
+				}
+			}
+			else {
+				char mode[16] = {0};
+				if(sscanf(args, "%*9s %*15s %15s", mode) == 1) {
+					if(strcmp(mode, "auto") == 0) {
+						if(cameraHD.GetSensor().SetAutoFocus(true) == Status::Ok) {
+							Logger::Instance().Write("MIPI Continuous AutoFocus ENABLED.\r\n");
+						}
+						else {
+							Logger::Instance().Write("Error: Failed to enable MIPI AutoFocus.\r\n");
+						}
+					}
+					else if(strcmp(mode, "single") == 0) {
+						if(cameraHD.GetSensor().TriggerSingleAutoFocus(true) == Status::Ok) {
+							Logger::Instance().Write("MIPI Single AutoFocus locked.\r\n");
+						}
+						else {
+							Logger::Instance().Write("Error: MIPI Single AutoFocus failed.\r\n");
+						}
+					}
+					else {
+						Logger::Instance().Printf("Error: Invalid focus option '%s'. Use 'auto', 'single', or 0..255.\r\n", mode);
+					}
+				}
+				else {
+					Logger::Instance().Write("Usage: cam mipi focus <auto|single|0..255>\r\n");
+				}
+			}
 		}
 		return true;
 	}

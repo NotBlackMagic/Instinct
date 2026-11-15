@@ -38,7 +38,8 @@ class MavlinkThread {
 			Count
 		};
 
-		static void Init();
+		/// @brief Initializes the MAVLink thread and binds to the target UART.
+		static void Init(UART* uart);
 
 		static void SetRate(Stream stream, float rateHz);
 
@@ -46,6 +47,8 @@ class MavlinkThread {
 		static TX_THREAD threadPtr;
 		static const uint16_t threadStackSize = 4096;
 		__attribute__((aligned(32))) static uint8_t threadStack[threadStackSize];
+
+		static UART* linkPort;
 
 		// Subscribers
 		static Subscriber<StateMsg> subState;
@@ -70,8 +73,8 @@ class MavlinkThread {
 		// Stream/message scheduler
 
 		struct StreamConfig {
-			uint32_t intervalUs;
-			uint64_t lastSentUs;
+			uint32_t interval;
+			uint64_t timestamp;
 		};
 
 		static StreamConfig streams[static_cast<uint8_t>(Stream::Count)];

@@ -7,7 +7,7 @@
 
 #include "rotations.hpp"
 
-float Rotations::ExtractYawFromQuaternion(const Quaternion& q) {
+__attribute__((section(".itcm_text"))) float Rotations::ExtractYawFromQuaternion(const Quaternion& q) {
 	// Aerospace ZYX Euler extraction for Yaw
 	float siny_cosp = 2.0f * (q.w * q.z + q.x * q.y);
 	float cosy_cosp = 1.0f - 2.0f * (q.y * q.y + q.z * q.z);
@@ -16,7 +16,7 @@ float Rotations::ExtractYawFromQuaternion(const Quaternion& q) {
 	return atan2;
 }
 
-Quaternion Rotations::EulerToQuaternion(float roll, float pitch, float yaw) {
+__attribute__((section(".itcm_text"))) Quaternion Rotations::EulerToQuaternion(float roll, float pitch, float yaw) {
 	// Converts Roll, Pitch, Yaw (in radians) to a Quaternion
 	float cy = arm_cos_f32(yaw * 0.5f);
 	float sy = arm_sin_f32(yaw * 0.5f);
@@ -49,7 +49,7 @@ Vector3f Rotations::QuaternionToEuler(const Quaternion& q) {
 		angles.y = copysignf(3.14159265f / 2.0f, sinp); 
 	}
 	else {
-		angles.y = arm_sin_f32(sinp);
+		angles.y = asinf(sinp);
 	}
 
 	// Yaw (z-axis rotation)
@@ -60,7 +60,7 @@ Vector3f Rotations::QuaternionToEuler(const Quaternion& q) {
 	return angles;
 }
 
-float Rotations::WrapAngle(float angle) {
+__attribute__((section(".itcm_text"))) float Rotations::WrapAngle(float angle) {
 	// Keeps the angle bound strictly between -PI and +PI
 	while(angle > 3.1415926535f) {
 		angle -= 6.283185307f;
@@ -71,7 +71,7 @@ float Rotations::WrapAngle(float angle) {
 	return angle;
 }
 
-float Rotations::ApplyDeadband(float value, float deadband) {
+__attribute__((section(".itcm_text"))) float Rotations::ApplyDeadband(float value, float deadband) {
 	if(fabsf(value) < deadband) {
 		return 0.0f;
 	}
@@ -80,7 +80,7 @@ float Rotations::ApplyDeadband(float value, float deadband) {
 	return sign * ((fabsf(value) - deadband) / (1.0f - deadband));
 }
 
-Quaternion Rotations::Inverse(const Quaternion& q) {
+__attribute__((section(".itcm_text"))) Quaternion Rotations::Inverse(const Quaternion& q) {
 	// For a normalized unit quaternion, the inverse is just the conjugate.
 	Quaternion res;
 	res.w = q.w;
@@ -90,7 +90,7 @@ Quaternion Rotations::Inverse(const Quaternion& q) {
 	return res;
 }
 
-Quaternion Rotations::Multiply(const Quaternion& q1, const Quaternion& q2) {
+__attribute__((section(".itcm_text"))) Quaternion Rotations::Multiply(const Quaternion& q1, const Quaternion& q2) {
 	// Standard Hamilton product of two quaternions
 	Quaternion res;
 	res.w = q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z;

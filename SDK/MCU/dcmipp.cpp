@@ -490,7 +490,15 @@ Status Dcmipp::CaptureAbort(PipeID pipe) {
 Status Dcmipp::CaptureWait(PipeID pipe, uint32_t timeoutTicks) {
 	// Wait for event
 	ULONG events;
-	UINT status = tx_event_flags_get(&this->event, EVT_TRANS_CPLT | EVT_ERR, TX_OR_CLEAR, &events, timeoutTicks);
+	uint32_t waitMask = EVT_TRANS_CPLT | EVT_ERR;
+
+	if(pipe == PipeID::Main && (this->instance->P1PPCR & DCMIPP_P1PPCR_LMAWE) != 0U) {
+		// In line-wrapping mode, synchronize on a fresh VSYNC so VENC is armed at line 0
+		tx_event_flags_set(&this->event, ~EVT_VSYNC, TX_AND);
+		waitMask = EVT_VSYNC | EVT_ERR;
+	}
+
+	UINT status = tx_event_flags_get(&this->event, waitMask, TX_OR_CLEAR, &events, timeoutTicks);
 
 	if(status != TX_SUCCESS) {
 		this->CaptureAbort(pipe);
@@ -620,6 +628,8 @@ void Dcmipp::InterruptHandler() {
 		this->stats[1].lastLineTimestamp = this->stats[1].lastVsyncTimestamp;
 		// Clear Interrupt
 		WRITE_REG(this->instance->CMFCR, DCMIPP_CMFCR_CP1VSYNCF);
+
+		tx_event_flags_set(&this->event, EVT_VSYNC, TX_OR);
 	}
 
 	// Handle Pipe 1 Frame End Event

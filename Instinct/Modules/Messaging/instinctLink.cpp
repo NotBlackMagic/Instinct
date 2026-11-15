@@ -12,6 +12,10 @@ __attribute__((aligned(32))) uint8_t InstinctLink::threadStack[InstinctLink::thr
 
 UART* InstinctLink::linkPort = nullptr;
 InstinctLink::StreamSlot InstinctLink::streams[InstinctLink::maxStreams]{};
+InstinctLink::Statistics InstinctLink::stats{};
+uint32_t InstinctLink::txBytesAccum = 0;
+uint32_t InstinctLink::rxBytesAccum = 0;
+uint64_t InstinctLink::statsTimestamp = 0;
 
 Subscriber<ParamUpdateMsg> InstinctLink::subParamUpdate;
 Topic<ParamUpdateMsg>* InstinctLink::topicParamUpdate = nullptr;
@@ -37,7 +41,11 @@ void InstinctLink::Init(UART* uart) {
 		streams[i].interval = 0;
 		streams[i].timestamp = 0;
 		streams[i].version = 0;
+		streams[i].averagePeriod = 0;
+		streams[i].txPackets = 0;
 	}
+
+	ResetStatistics();
 }
 
 void InstinctLink::Run(ULONG input) {
@@ -58,6 +66,7 @@ void InstinctLink::Run(ULONG input) {
 	uint8_t payloadBuf[maxPayloadSize];
 	ParamUpdateMsg paramUpdateMsg{};
 
+	statsTimestamp = Time::GetUs();
 	while(1) {
 		if(linkPort == nullptr) {
 			tx_thread_sleep(10);
@@ -69,7 +78,8 @@ void InstinctLink::Run(ULONG input) {
 		while(bytesAvailable > 0) {
 			uint32_t toRead = (bytesAvailable > sizeof( uartRXBuf)) ? sizeof( uartRXBuf) : bytesAvailable;
 			uint32_t bytesRead = linkPort->Receive( uartRXBuf, toRead);
-			bytesAvailable -= bytesRead;
+			bytesAvailable = bytesAvailable - bytesRead;
+			rxBytesAccum = rxBytesAccum + bytesRead;
 
 			for(uint32_t i = 0; i < bytesRead; i++) {
 				uint8_t b = uartRXBuf[i];
@@ -109,6 +119,9 @@ void InstinctLink::Run(ULONG input) {
 								uint16_t packetID = static_cast<uint16_t>(rxFrame[2]) | (static_cast<uint16_t>(rxFrame[3]) << 8);
 								ProcessPacket(packetID, &rxFrame[5], payloadLen);
 							}
+							else {
+								stats.crcErrors = stats.crcErrors + 1;
+							}
 
 							rxIndex = 0;
 						}
@@ -132,8 +145,8 @@ void InstinctLink::Run(ULONG input) {
 
 			while(dumpParamIdx < paramCount && sentCount < 2) {
 				if(SendParamInfo(dumpParamIdx) == true) {
-					dumpParamIdx += 1;
-					sentCount += 1;
+					dumpParamIdx = dumpParamIdx + 1;
+					sentCount = sentCount + 1;
 				}
 				else {
 					// UART TX buffer full, retry on next tick
@@ -151,8 +164,6 @@ void InstinctLink::Run(ULONG input) {
 		for(uint8_t i = 0; i < maxStreams; i++) {
 			if(streams[i].topic != nullptr && streams[i].interval > 0) {
 				if((now - streams[i].timestamp) >= streams[i].interval) {
-					streams[i].timestamp = now;
-
 					uint32_t currentVer = 0;
 					uint8_t payloadSize = streams[i].topic->GetPayloadSize();
 
@@ -161,12 +172,35 @@ void InstinctLink::Run(ULONG input) {
 						if(currentVer != streams[i].version) {
 							uint16_t fulltopicID = (static_cast<uint16_t>(streams[i].topic->GetInstance()) << 8) | streams[i].topic->GetTopicID();
 							if(SendPacket(fulltopicID, payloadBuf, payloadSize) == true) {
+								// Update moving-average period (using fast bitwise shifts)
+								if(streams[i].timestamp != 0) {
+									uint32_t delta = static_cast<uint32_t>(now - streams[i].timestamp);
+									if(streams[i].averagePeriod == 0) {
+										streams[i].averagePeriod = delta;
+									}
+									else {
+										streams[i].averagePeriod = streams[i].averagePeriod - (streams[i].averagePeriod >> 3) + (delta >> 3);
+									}
+								}
+								streams[i].timestamp = now;
 								streams[i].version = currentVer;
+								streams[i].txPackets = streams[i].txPackets + 1;
 							}
 						}
 					}
 				}
 			}
+		}
+
+		// Update link byte-rate statistics every 1 second
+		uint64_t statsElapsed = now - statsTimestamp;
+		if(statsElapsed >= 1000000) {
+			float dtSec = static_cast<float>(statsElapsed) / 1000000.0f;
+			stats.txByteRate = static_cast<float>(txBytesAccum) / dtSec;
+			stats.rxByteRate = static_cast<float>(rxBytesAccum) / dtSec;
+			txBytesAccum = 0;
+			rxBytesAccum = 0;
+			statsTimestamp = now;
 		}
 
 		// Run link loop at 500Hz (2ms) for low-latency tuning and HITL
@@ -189,11 +223,13 @@ bool InstinctLink::ConfigureStream(uint8_t topicID, uint8_t instance, float rate
 	for(uint8_t i = 0; i < maxStreams; i++) {
 		if(streams[i].topic == targetTopic) {
 			streams[i].interval = newinterval;
+			streams[i].averagePeriod = 0;
 			if(newinterval == 0) {
 				// Disable and free slot
 				streams[i].topic = nullptr;
 				streams[i].timestamp = 0;
 				streams[i].version = 0;
+				streams[i].txPackets = 0;
 			}
 			return true;
 		}
@@ -211,12 +247,52 @@ bool InstinctLink::ConfigureStream(uint8_t topicID, uint8_t instance, float rate
 			streams[i].interval = newinterval;
 			streams[i].timestamp = 0;
 			streams[i].version = 0;
+			streams[i].averagePeriod = 0;
+			streams[i].txPackets = 0;
 			return true;
 		}
 	}
 
 	LOG_WARN("InstinctLink: No free stream slots.");
 	return false;
+}
+
+bool InstinctLink::GetStreamStatistics(uint8_t slotIndex, StreamStatistics& outStats) {
+	if(slotIndex >= maxStreams || streams[slotIndex].topic == nullptr) {
+		return false;
+	}
+
+	TopicBase* topic = streams[slotIndex].topic;
+	outStats.topicID = topic->GetTopicID();
+	outStats.instance = topic->GetInstance();
+	outStats.txPackets = streams[slotIndex].txPackets;
+	outStats.targetRate = (streams[slotIndex].interval > 0) ? (1000000.0f / static_cast<float>(streams[slotIndex].interval)) : 0.0f;
+
+	uint64_t now = Time::GetUs();
+	// If no packet sent yet or stream stalled for > 4 intervals, report 0 Hz
+	if(streams[slotIndex].averagePeriod == 0 || (now - streams[slotIndex].timestamp) > (streams[slotIndex].interval * 4)) {
+		outStats.actualRate = 0.0f;
+		outStats.byteRate = 0.0f;
+	}
+	else {
+		outStats.actualRate = 1000000.0f / static_cast<float>(streams[slotIndex].averagePeriod);
+		uint8_t size = 6 + topic->GetPayloadSize();
+		outStats.byteRate = outStats.actualRate * static_cast<float>(size);
+	}
+
+	return true;
+}
+
+void InstinctLink::ResetStatistics() {
+	stats = {};
+	txBytesAccum = 0;
+	rxBytesAccum = 0;
+	statsTimestamp = Time::GetUs();
+
+	for(uint8_t i = 0; i < maxStreams; i++) {
+		streams[i].averagePeriod = 0;
+		streams[i].txPackets = 0;
+	}
 }
 
 void InstinctLink::ProcessPacket(uint16_t packetID, const uint8_t* payload, uint8_t len) {
@@ -309,9 +385,14 @@ bool InstinctLink::SendPacket(uint16_t packetID, const uint8_t* payload, uint8_t
 
 	frame[5 + len] = crc;
 
-	if(linkPort->Transmit(frame, static_cast<uint16_t>(6 + len)) == Status::Ok) {
+	uint16_t size = static_cast<uint16_t>(6 + len);
+	if(linkPort->Transmit(frame, size) == Status::Ok) {
+		stats.txPackets = stats.txPackets + 1;
+		txBytesAccum = txBytesAccum + size;
 		return true;
 	}
+
+	stats.txDrops = stats.txDrops + 1;
 	return false;
 }
 

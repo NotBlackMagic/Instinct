@@ -9,9 +9,10 @@
 #include "opticalFlowThread.hpp"
 
 // Allocate the static variables
-TX_THREAD OpticalFlowThread::threadPtr;
-__attribute__((aligned(32))) uint8_t OpticalFlowThread::threadStack[OpticalFlowThread::threadStackSize];
-TX_EVENT_FLAGS_GROUP OpticalFlowThread::event;
+__attribute__((section(".dtcm_bss"), aligned(32))) TX_THREAD OpticalFlowThread::threadPtr;
+__attribute__((section(".dtcm_bss"), aligned(32))) uint8_t OpticalFlowThread::threadStack[OpticalFlowThread::threadStackSize];
+__attribute__((section(".dtcm_bss"), aligned(32))) TX_EVENT_FLAGS_GROUP OpticalFlowThread::event;
+__attribute__((section(".dtcm_bss"), aligned(32))) OpticalFlowThread::Statistics OpticalFlowThread::stats;
 
 // __attribute__((section(".axisram1"), aligned(32)))
 
@@ -19,7 +20,7 @@ __attribute__((aligned(32))) uint8_t frameBufferSRAM1[65536];
 __attribute__((aligned(32))) uint8_t frameBufferSRAM2[65536];
 static VisionFrame rawFrameBuffer[2];
 static uint8_t captureIndex = 0;
-OpticalFlow OpticalFlowThread::flow;
+__attribute__((section(".dtcm_bss"), aligned(32))) OpticalFlow OpticalFlowThread::flow;
 
 // Output Publisher
 Topic<FlowMsg> OpticalFlowThread::topicFlow = Topic<FlowMsg>("flow", static_cast<uint8_t>(TopicID::Flow), 0);
@@ -27,13 +28,13 @@ Topic<RangeMsg> OpticalFlowThread::topicRange = Topic<RangeMsg>("range", static_
 
 Topic<IMUMsg>* OpticalFlowThread::topicVirtualIMU = nullptr;
 
-void OpticalFlowThread::ToFIntCallback(void* ctx, EXTIManager::Edge edge) {
+__attribute__((section(".itcm_text"))) void OpticalFlowThread::ToFIntCallback(void* ctx, EXTIManager::Edge edge) {
 	(void)ctx;
 	(void)edge;
 	tx_event_flags_set(&event, EVT_TOF_DRDY, TX_OR);
 }
 
-void OpticalFlowThread::DCMIFrameCallback(void* ctx, CameraDCMI::Event evt) {
+__attribute__((section(".itcm_text"))) void OpticalFlowThread::DCMIFrameCallback(void* ctx, CameraDCMI::Event evt) {
 	(void)ctx;
 	if(evt == CameraDCMI::Event::FrameComplete) {
 		tx_event_flags_set(&event, EVT_DCMI_FRAME, TX_OR);
@@ -65,6 +66,11 @@ void OpticalFlowThread::Run(ULONG input) {
 	float distanceMatrix[64];
 	uint8_t targetStatus[64];
 	uint64_t lastCaptureTime = 0;
+	
+	// Rate measurement trackers
+	uint64_t rateWindowStart = Time::GetUs();
+	uint32_t windowCamFrames = 0;
+	uint32_t windowTofSamples = 0;
 
 	// General camera configurations
 	// OV9281 Native Resolution: 1280x800 -> Hardware binning 2x2: 640x400 -> Hardware windowing: 256x256
@@ -160,8 +166,6 @@ void OpticalFlowThread::Run(ULONG input) {
 	IMUMsg imuMsg{};
 
 	uint64_t timestamp = Time::GetUs();
-	uint64_t deltaTime = 0;
-	uint32_t timeProc;
 
 	ULONG events = 0;
 	UINT txStatus = TX_SUCCESS;
@@ -175,7 +179,7 @@ void OpticalFlowThread::Run(ULONG input) {
 		uint64_t currentTime = Time::GetUs();
 
 		// Handle Camera New Frame
-		if((events & EVT_DCMI_FRAME) == EVT_DCMI_FRAME) {
+		if((events & EVT_DCMI_FRAME) == EVT_DCMI_FRAME) {			
 			// Ping-pong frame buffers
 			uint8_t completedIndex = captureIndex;
 			captureIndex ^= 1;
@@ -189,6 +193,9 @@ void OpticalFlowThread::Run(ULONG input) {
 				cameraSD.CaptureAbort();
 				cameraSD.CaptureAsync(rawFrameBuffer[captureIndex]);
 				lastCaptureTime = Time::GetUs();
+
+				// Update stats
+				stats.frameDrops = stats.frameDrops + 1;
 			}
 
 			// Work on the completed frame
@@ -216,24 +223,43 @@ void OpticalFlowThread::Run(ULONG input) {
 					flowMsg.flowRate[1] = flowOutput.flowRate.y;
 					flowMsg.quality = flowOutput.quality;
 					topicFlow.Publish(flowMsg);
+
+					// Update stats
+					stats.lastQuality = flowOutput.quality;
+				}
+				else {
+					// Update stats
+					stats.flowDrops = stats.flowDrops + 1;
 				}
 				// LOG_INFO("Optical Flow: x: %.2f, y: %.2f, q: %.2f", flowOutput.flowRate.x, flowOutput.flowRate.y, flowOutput.quality);
 			}
-
-			timeProc = Time::GetUs() - timestamp;
-			if(deltaTime < Time::GetMs()) {
-				// Original, first version: "PROC 3316 us"
-				// 1st Opt. (moving more to MVE extensions and reducing certain iterations in L2 and L1): "PRE 63 PROC 1530 us"
-				// 2nd Opt. (move frame buffer from PSRAM to SRAM): "PRE 64 PROC 1290 us"
-				// LOG_INFO("Optical Flow Thread: PRE %d PROC %d us", timePre, timeProc);
-				deltaTime = Time::GetMs() + 5000;
+			else {
+				// Update stats
+				stats.flowDrops = stats.flowDrops + 1;
 			}
+
+			stats.procTime = static_cast<uint32_t>(Time::GetUs() - timestamp);
+			if(stats.procTime > stats.maxProcTime) {
+				stats.maxProcTime = stats.procTime;
+			}
+
+			// Original, first version: "PROC 3316 us"
+			// 1st Opt. (moving more to MVE extensions and reducing certain iterations in L2 and L1): "PRE 63 PROC 1530 us"
+			// 2nd Opt. (move frame buffer from PSRAM to SRAM): "PRE 64 PROC 1290 us" (PROC is between 1081 us and 1356 us)
+			// 3rd Opt. (pre-load some stuff): "PROC 1254" (PROC is between 835 us and 1254 us)
+			// 4th Opt. (move OF to ITCM and part to DTCM): "PROC 1097" (PROC is between 828 us and 1148 us)
+			// LOG_INFO("Optical Flow Thread: PROC %d us", timeProc);
+
 
 			// Debug USB stream: submit the frame without blocking the capture loop
 			// status = usbUVC.SubmitFrame(&completedFrame, nullptr);
-			// if(status != Status::Ok) {
-			// 	// USB endpoint busy: drop the preview frame without affecting flow calculations
-			// }
+			if(status != Status::Ok) {
+				// USB endpoint busy: drop the preview frame without affecting flow calculations
+			}
+
+			// Update stats
+			stats.frameCount = stats.frameCount + 1;
+			windowCamFrames = windowCamFrames + 1;
 		}
 		else {
 			// Check for transfer failure or camera hang (> 150 ms without a completed frame)
@@ -248,6 +274,9 @@ void OpticalFlowThread::Run(ULONG input) {
 				
 				cameraSD.CaptureAsync(rawFrameBuffer[captureIndex]);
 				lastCaptureTime = Time::GetUs();
+
+				// Update stats
+				stats.frameDrops = stats.frameDrops + 1;
 			}
 		}
 
@@ -264,8 +293,8 @@ void OpticalFlowThread::Run(ULONG input) {
 					uint8_t idx = centerZones[i];
 					// Target status 5 and 9 indicate valid ranging targets in ST ULD
 					if(targetStatus[idx] == 5 || targetStatus[idx] == 9) {
-						sumDistanceMm += distanceMatrix[idx];
-						validCount++;
+						sumDistanceMm = sumDistanceMm + distanceMatrix[idx];
+						validCount = validCount + 1;
 					}
 				}
 
@@ -275,7 +304,27 @@ void OpticalFlowThread::Run(ULONG input) {
 					rangeMsg.distance = (sumDistanceMm / static_cast<float>(validCount)) * 0.001f;
 					topicRange.Publish(rangeMsg);
 				}
+				else {
+					// Update stats
+					stats.tofDrops = stats.tofDrops + 1;
+				}
 			}
+
+			// Update stats
+			stats.tofSamples = stats.tofSamples + 1;
+			windowTofSamples = windowTofSamples + 1;
+		}
+
+		// Rate Estimation Window (1 Hz Epoch)
+		uint64_t elapsed = currentTime - rateWindowStart;
+		if(elapsed >= 1000000) {
+			float invDt = 1000000.0f / static_cast<float>(elapsed);
+			stats.camFPS = static_cast<float>(windowCamFrames) * invDt;
+			stats.tofFPS = static_cast<float>(windowTofSamples) * invDt;
+
+			windowCamFrames = 0;
+			windowTofSamples = 0;
+			rateWindowStart = currentTime;
 		}
 	}
 }

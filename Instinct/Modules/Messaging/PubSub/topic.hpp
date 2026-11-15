@@ -124,7 +124,7 @@ class Topic : public TopicBase {
 			tx_interrupt_control(state);
 		}
 
-		void Publish(const T& msg) {
+		__attribute__((always_inline)) inline void Publish(const T& msg) {
 			// Capture time
 			uint64_t now = Time::GetUs();
 
@@ -181,7 +181,7 @@ class Topic : public TopicBase {
 			}
 		}
 
-		bool Peek(T& msg, uint32_t* outVersion = nullptr) {
+		__attribute__((always_inline)) inline bool Peek(T& msg, uint32_t* outVersion = nullptr) {
 			uint32_t v1, v2;
 			uint8_t retries = 0;
 			const uint8_t maxRetries = 5;
@@ -217,7 +217,7 @@ class Topic : public TopicBase {
 		}
 
 		/// @brief Lock-free check if new data was published since last check (consumes update).
-		bool HasUpdate(Subscriber<T>* sub) {
+		__attribute__((always_inline)) inline bool HasUpdate(Subscriber<T>* sub) {
 			if(sub == nullptr) {
 				return false;
 			}
@@ -233,7 +233,7 @@ class Topic : public TopicBase {
 			return true;
 		}
 
-		bool Take(Subscriber<T>* sub, T& msg, ULONG ticks) {
+		__attribute__((always_inline)) inline bool Take(Subscriber<T>* sub, T& msg, ULONG ticks) {
 			if(sub == nullptr) {
 				return false;
 			}

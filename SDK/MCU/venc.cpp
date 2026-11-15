@@ -192,6 +192,9 @@ Status Venc::EncodeFrame(const FrameBuffer& params, uint32_t& generatedBytes, Fr
 		this->jpegEncIn.busOutBuf = reinterpret_cast<uint32_t>(params.outBuffer);
 		this->jpegEncIn.outBufSize = params.outBufSize;
 
+		// Clear any stale event flags before starting hardware encode
+		tx_event_flags_set(&this->event, 0, TX_AND);
+
 		JpegEncRet ret = JPEGENC_OK;
 		do {
 			ret = JpegEncEncode(this->jpegEncoder, &this->jpegEncIn, &this->jpegEncOut, nullptr, nullptr);
@@ -199,8 +202,17 @@ Status Venc::EncodeFrame(const FrameBuffer& params, uint32_t& generatedBytes, Fr
 				case JPEGENC_RESTART_INTERVAL:
 					break;
 				case JPEGENC_FRAME_READY:
-					generatedBytes = this->jpegEncOut.jfifSize;
-					status = Status::Ok;
+					if(this->jpegEncOut.jfifSize > 0) {
+						this->stats.lastFrameBytes = this->jpegEncOut.jfifSize;
+						this->stats.encodedFrames++;
+
+						generatedBytes = this->jpegEncOut.jfifSize;
+						this->frameCount++;
+						if(config.EventCallback != nullptr) {
+							config.EventCallback(config.callbackContext, Event::FrameReady);
+						}
+						status = Status::Ok;
+					}
 					break;
 				case JPEGENC_SYSTEM_ERROR:
 				default:
@@ -251,7 +263,11 @@ Status Venc::Stop(uint32_t* outBuffer, uint32_t outBufSize, uint32_t& generatedB
 }
 
 void Venc::Reset() {
-
+	// Disable ASIC and clear status/IRQ bits
+	LL_VENC_WriteRegister(1UL, 0U);
+	// Clear input line buffer handshake control register
+	LL_VENC_WriteRegister(BASE_HEncInstantInput >> 2U, 0U);
+	tx_event_flags_set(&this->event, 0, TX_AND);
 }
 
 Status Venc::SetBitrate(uint32_t bps) {
@@ -441,20 +457,19 @@ void Venc::InterruptHandler() {
 		LL_VENC_WriteRegister(1UL, ASIC_STATUS_SLICE_READY | ASIC_IRQ_LINE);
 		
 		// Signal waiting thread via RTOS event flag
-		if((irqStatus & (ASIC_STATUS_FRAME_READY | ASIC_STATUS_SLICE_READY)) != 0U) {
-			this->stats.lastSliceEndTimestamp = now;			
-			tx_event_flags_set(&this->event, EVT_SLICE_RDY, TX_OR);
-		}
-
 		if((irqStatus & ASIC_STATUS_FRAME_READY) != 0U) {
 			this->stats.lastFrameEndTimestamp = now;
 			this->stats.lastSliceEndTimestamp = now;
 		}
-
-		if((irqStatus & (ASIC_STATUS_HW_TIMEOUT | ASIC_STATUS_ERROR)) != 0U) {
-			this->stats.hwErrors++;
-			tx_event_flags_set(&this->event, EVT_ERR, TX_OR);
+		else if((irqStatus & ASIC_STATUS_SLICE_READY) != 0U) {
+			this->stats.lastSliceEndTimestamp = now;
 		}
+
+		if((irqStatus & (ASIC_STATUS_HW_TIMEOUT | ASIC_STATUS_ERROR | ASIC_STATUS_FUSE | ASIC_STATUS_BUFF_FULL)) != 0U) {
+			this->stats.hwErrors++;
+		}
+
+		tx_event_flags_set(&this->event, EVT_SLICE_RDY, TX_OR);
 	}
 }
 
@@ -640,8 +655,8 @@ Status Venc::SetCodingControl() {
 		uint32_t totalLines = 1U << static_cast<uint32_t>(this->config.lineWrap);
 		uint32_t triggerLines = 1U << static_cast<uint32_t>(this->config.lineTrigger);
 
-		// Number of handshake triggers per circular buffer cycle: totalLines / triggerLines
-		codingCtrl.inputLineBufDepth = totalLines / 16;
+		// Must equal the number of MB rows (16 lines) written per DCMIPP line trigger. Note: lineWrap must be configured to 2 * triggerLines in DCMIPP
+		codingCtrl.inputLineBufDepth = triggerLines / 16;
 	}
 	else {
 		codingCtrl.inputLineBufEn = 0;

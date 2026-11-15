@@ -7,11 +7,11 @@
 
 #include "estimatorThread.hpp"
 
-TX_THREAD EstimatorThread::threadPtr;
-__attribute__((aligned(32))) uint8_t EstimatorThread::threadStack[EstimatorThread::threadStackSize];
+__attribute__((section(".dtcm_bss"))) TX_THREAD EstimatorThread::threadPtr;
+__attribute__((section(".dtcm_bss"), aligned(32))) uint8_t EstimatorThread::threadStack[EstimatorThread::threadStackSize];
 
 // Instantiate the Math Engine
-InEKF EstimatorThread::filter;
+__attribute__((section(".dtcm_bss"))) InEKF EstimatorThread::filter;
 
 // Output Publisher
 Topic<StateMsg> EstimatorThread::topicState("state", static_cast<uint8_t>(TopicID::State));
@@ -44,6 +44,7 @@ void EstimatorThread::Init() {
 }
 
 void EstimatorThread::Run(ULONG input) {
+	(void)input;
 	LOG_INFO("Estimator InEKF Thread Initialized.");
 
 	// Enforce Hardware Flush-to-Zero (FZ) for this specific thread's FPU context
@@ -192,6 +193,9 @@ void EstimatorThread::Run(ULONG input) {
 				// Current state is:
 				// From XIP: "EST Thread: TOTAL 142/1243 us, PRED 70 us, UPT G 48 us"
 				// From XIP (new, unverified): "EST Thread: TOTAL 93/1274 us, PRED 64 us, UPT G 49 us"
+				// From XIP (WORKING Tested): "EST Thread: TOTAL 95/1274 us, PRED 64 us, UPT G 47 us"
+				// From XIP w. ITCM/DTCM: "TOTAL 60/1287 us, PRED 41 us, UPT G 21 us"´
+				// From XIP w. ITCM/DTCM (added math functions to): "TOTAL 62/1258 us, PRED 32 us, UPT G 13 us"
 				// LOG_INFO("EST Thread: TOTAL %d/%d us, PRED %d us, UPT G %d us", timeCycle, timePeriod, timePred, timeUpd);
 				deltaTime = Time::GetMs() + 5000;
 			}

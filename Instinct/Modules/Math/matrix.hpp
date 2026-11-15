@@ -20,22 +20,22 @@ struct Matrix {
 	arm_matrix_instance_f32 instance;
 
 	// Constructor
-	Matrix() {
+	__attribute__((always_inline)) inline Matrix() {
 		memset(data, 0, sizeof(data));
 		instance = {Rows, Cols, data};
 	}
 
-	Matrix(InitType) {
+	__attribute__((always_inline)) inline Matrix(InitType) {
 		instance = {Rows, Cols, data};
 	}
 
-	Matrix(const Matrix& other) {
+	__attribute__((always_inline)) inline Matrix(const Matrix& other) {
 		memcpy(data, other.data, sizeof(data));
 		instance = {Rows, Cols, data};
 	}
 
 	// Hardware unrolled fast math for small matrixes (Faster then CMSIS-DSP math)
-	static void Multiply3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& result) {
+	__attribute__((always_inline)) inline static void Multiply3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& result) {
 		result.data[0] = a.data[0]*b.data[0] + a.data[1]*b.data[3] + a.data[2]*b.data[6];
 		result.data[1] = a.data[0]*b.data[1] + a.data[1]*b.data[4] + a.data[2]*b.data[7];
 		result.data[2] = a.data[0]*b.data[2] + a.data[1]*b.data[5] + a.data[2]*b.data[8];
@@ -48,7 +48,7 @@ struct Matrix {
 	}
 
 	// Hardware-accelerated Fused Multiply-Accumulate: result += a * b
-	static void MultiplyAccumulate3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& result) {
+	__attribute__((always_inline)) inline static void MultiplyAccumulate3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& result) {
 		result.data[0] += a.data[0]*b.data[0] + a.data[1]*b.data[3] + a.data[2]*b.data[6];
 		result.data[1] += a.data[0]*b.data[1] + a.data[1]*b.data[4] + a.data[2]*b.data[7];
 		result.data[2] += a.data[0]*b.data[2] + a.data[1]*b.data[5] + a.data[2]*b.data[8];
@@ -63,7 +63,7 @@ struct Matrix {
 	}
 
 	// Hardware-accelerated Fused Multiply-Subtract: result -= a * b
-	static void MultiplySubtract3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& result) {
+	__attribute__((always_inline)) inline static void MultiplySubtract3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& result) {
 		result.data[0] -= a.data[0]*b.data[0] + a.data[1]*b.data[3] + a.data[2]*b.data[6];
 		result.data[1] -= a.data[0]*b.data[1] + a.data[1]*b.data[4] + a.data[2]*b.data[7];
 		result.data[2] -= a.data[0]*b.data[2] + a.data[1]*b.data[5] + a.data[2]*b.data[8];
@@ -78,7 +78,7 @@ struct Matrix {
 	}
 
 	// Fast C = A * B^T (Eliminates explicit transpose temporary matrices)
-	static void MultiplyTransposedB3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& res) {
+	__attribute__((always_inline)) inline static void MultiplyTransposedB3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& res) {
 		res.data[0] = a.data[0]*b.data[0] + a.data[1]*b.data[1] + a.data[2]*b.data[2];
 		res.data[1] = a.data[0]*b.data[3] + a.data[1]*b.data[4] + a.data[2]*b.data[5];
 		res.data[2] = a.data[0]*b.data[6] + a.data[1]*b.data[7] + a.data[2]*b.data[8];
@@ -93,7 +93,7 @@ struct Matrix {
 	}
 
 	// Fast C += A * B^T
-	static void MultiplyAccumulateTransposedB3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& res) {
+	__attribute__((always_inline)) inline static void MultiplyAccumulateTransposedB3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& res) {
 		res.data[0] += a.data[0]*b.data[0] + a.data[1]*b.data[1] + a.data[2]*b.data[2];
 		res.data[1] += a.data[0]*b.data[3] + a.data[1]*b.data[4] + a.data[2]*b.data[5];
 		res.data[2] += a.data[0]*b.data[6] + a.data[1]*b.data[7] + a.data[2]*b.data[8];
@@ -108,7 +108,7 @@ struct Matrix {
 	}
 
 	// Fast res = (Skew(u) * M) * scale
-	static void SkewMultiplyScalar3x3(const Matrix<3, 1>& u, const Matrix<3, 3>& m, float scale, Matrix<3, 3>& res) {
+	__attribute__((always_inline)) inline static void SkewMultiplyScalar3x3(const Matrix<3, 1>& u, const Matrix<3, 3>& m, float scale, Matrix<3, 3>& res) {
 		float ux = u.data[0] * scale;
 		float uy = u.data[1] * scale;
 		float uz = u.data[2] * scale;
@@ -126,7 +126,7 @@ struct Matrix {
 		res.data[8] = ux * m.data[5] - uy * m.data[2];
 	}
 
-	static void Multiply5x5(const Matrix<5, 5>& a, const Matrix<5, 5>& b, Matrix<5, 5>& result) {
+	__attribute__((always_inline)) inline static void Multiply5x5(const Matrix<5, 5>& a, const Matrix<5, 5>& b, Matrix<5, 5>& result) {
 		for(int r = 0; r < 5; r++) {
 			for(int c = 0; c < 5; c++) {
 				result.data[r * 5 + c] =	a.data[r * 5 + 0] * b.data[0 * 5 + c] +
@@ -138,43 +138,43 @@ struct Matrix {
 		}
 	}
 
-	static void Multiply3x3Vector3(const Matrix<3, 3>& m, const Matrix<3, 1>& v, Matrix<3, 1>& res) {
+	__attribute__((always_inline)) inline static void Multiply3x3Vector3(const Matrix<3, 3>& m, const Matrix<3, 1>& v, Matrix<3, 1>& res) {
 		res.data[0] = m.data[0]*v.data[0] + m.data[1]*v.data[1] + m.data[2]*v.data[2];
 		res.data[1] = m.data[3]*v.data[0] + m.data[4]*v.data[1] + m.data[5]*v.data[2];
 		res.data[2] = m.data[6]*v.data[0] + m.data[7]*v.data[1] + m.data[8]*v.data[2];
 	}
 
-	static void MultiplyTransposed3x3Vector3(const Matrix<3, 3>& m, const Matrix<3, 1>& v, Matrix<3, 1>& res) {
+	__attribute__((always_inline)) inline static void MultiplyTransposed3x3Vector3(const Matrix<3, 3>& m, const Matrix<3, 1>& v, Matrix<3, 1>& res) {
 		res.data[0] = m.data[0]*v.data[0] + m.data[3]*v.data[1] + m.data[6]*v.data[2];
 		res.data[1] = m.data[1]*v.data[0] + m.data[4]*v.data[1] + m.data[7]*v.data[2];
 		res.data[2] = m.data[2]*v.data[0] + m.data[5]*v.data[1] + m.data[8]*v.data[2];
 	}
 
-	static void Transpose3x3(const Matrix<3, 3>& src, Matrix<3, 3>& dst) {
+	__attribute__((always_inline)) inline static void Transpose3x3(const Matrix<3, 3>& src, Matrix<3, 3>& dst) {
 		dst.data[0] = src.data[0]; dst.data[1] = src.data[3]; dst.data[2] = src.data[6];
 		dst.data[3] = src.data[1]; dst.data[4] = src.data[4]; dst.data[5] = src.data[7];
 		dst.data[6] = src.data[2]; dst.data[7] = src.data[5]; dst.data[8] = src.data[8];
 	}
 
-	static void Add3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& result) {
+	__attribute__((always_inline)) inline static void Add3x3(const Matrix<3, 3>& a, const Matrix<3, 3>& b, Matrix<3, 3>& result) {
 		for(int i = 0; i < 9; i++) {
 			result.data[i] = a.data[i] + b.data[i];
 		}
 	}
 
-	static void MultiplyScalar3x3(const Matrix<3, 3>& m, float scalar, Matrix<3, 3>& res) {
+	__attribute__((always_inline)) inline static void MultiplyScalar3x3(const Matrix<3, 3>& m, float scalar, Matrix<3, 3>& res) {
 		for(int i = 0; i < 9; i++) {
 			res.data[i] = m.data[i] * scalar;
 		}
 	}
 
-	static void MultiplyScalarVector3(const Matrix<3, 1>& v, float scalar, Matrix<3, 1>& res) {
+	__attribute__((always_inline)) inline static void MultiplyScalarVector3(const Matrix<3, 1>& v, float scalar, Matrix<3, 1>& res) {
 		res.data[0] = v.data[0] * scalar;
 		res.data[1] = v.data[1] * scalar;
 		res.data[2] = v.data[2] * scalar;
 	}
 
-	Matrix<3, 3> Inverse3x3() const {
+	__attribute__((always_inline)) inline Matrix<3, 3> Inverse3x3() const {
 		static_assert(Rows == 3 && Cols == 3, "Analytical inverse strictly requires a 3x3 matrix.");
 		Matrix<3, 3> result(InitType::Uninitialized);
 		
@@ -199,17 +199,17 @@ struct Matrix {
 	}
 
 	// Generic math (Auto-vectorized by compiler)
-	static void Add(const Matrix<Rows, Cols>& a, const Matrix<Rows, Cols>& b, Matrix<Rows, Cols>& result) {
+	__attribute__((always_inline)) inline static void Add(const Matrix<Rows, Cols>& a, const Matrix<Rows, Cols>& b, Matrix<Rows, Cols>& result) {
 		// arm_mat_add_f32(&a.instance, &b.instance, &result.instance);
 		for(uint16_t i = 0; i < Rows * Cols; i++) result.data[i] = a.data[i] + b.data[i];
 	}
 
-	static void Subtract(const Matrix<Rows, Cols>& a, const Matrix<Rows, Cols>& b, Matrix<Rows, Cols>& result) {
+	__attribute__((always_inline)) inline static void Subtract(const Matrix<Rows, Cols>& a, const Matrix<Rows, Cols>& b, Matrix<Rows, Cols>& result) {
 		// arm_mat_sub_f32(&a.instance, &b.instance, &result.instance);
 		for(uint16_t i = 0; i < Rows * Cols; i++) result.data[i] = a.data[i] - b.data[i];
 	}
 
-	void SetIdentity() {
+	__attribute__((always_inline)) inline void SetIdentity() {
 		memset(data, 0, sizeof(data));
 		uint16_t minDim = (Rows < Cols) ? Rows : Cols;
 		for(uint16_t i = 0; i < minDim; i++) {
@@ -219,16 +219,16 @@ struct Matrix {
 
 	// CMSIS-DSP wrappers (For Large Matrix Multiplication and Inversion)
 	template <uint16_t ResCols>
-	static void Multiply(const Matrix<Rows, Cols>& a, const Matrix<Cols, ResCols>& b, Matrix<Rows, ResCols>& result) {
+	__attribute__((always_inline)) inline static void Multiply(const Matrix<Rows, Cols>& a, const Matrix<Cols, ResCols>& b, Matrix<Rows, ResCols>& result) {
 		arm_mat_mult_f32(&a.instance, &b.instance, &result.instance);
 	}
 
-	static void Transpose(const Matrix<Rows, Cols>& src, Matrix<Cols, Rows>& dst) {
+	__attribute__((always_inline)) inline static void Transpose(const Matrix<Rows, Cols>& src, Matrix<Cols, Rows>& dst) {
 		arm_mat_trans_f32(&src.instance, &dst.instance);
 	}
 
 	// Hardware-Accelerated Matrix Inversion (Crucial for the Kalman Gain)
-	Matrix<Rows, Cols> Inverse() const {
+	__attribute__((always_inline)) inline Matrix<Rows, Cols> Inverse() const {
 		static_assert(Rows == Cols, "Inverse only exists for square matrices.");
 		Matrix<Rows, Cols> result(InitType::Uninitialized);
 		arm_mat_inverse_f32(&this->instance, &result.instance);
@@ -236,7 +236,7 @@ struct Matrix {
 	}
 
 	// Hardware-Accelerated Transpose
-	Matrix<Cols, Rows> Transpose() const {
+	__attribute__((always_inline)) inline Matrix<Cols, Rows> Transpose() const {
 		Matrix<Cols, Rows> result(InitType::Uninitialized);
 		arm_mat_trans_f32(&this->instance, &result.instance);
 		return result;
@@ -244,7 +244,7 @@ struct Matrix {
 
 	// Operator overloads
 	// Copy Assignment Operator
-	Matrix& operator=(const Matrix& other) {
+	__attribute__((always_inline)) inline Matrix& operator=(const Matrix& other) {
 		if(this != &other) {
 			memcpy(data, other.data, sizeof(data));
 		}
@@ -252,7 +252,7 @@ struct Matrix {
 	}
 
 	// Addition Overload
-	Matrix<Rows, Cols> operator+(const Matrix<Rows, Cols>& other) const {
+	__attribute__((always_inline)) inline Matrix<Rows, Cols> operator+(const Matrix<Rows, Cols>& other) const {
 		Matrix<Rows, Cols> result(InitType::Uninitialized);
 		// arm_mat_add_f32(&this->instance, &other.instance, &result.instance);
 		for(uint16_t i = 0; i < Rows * Cols; i++) result.data[i] = data[i] + other.data[i];
@@ -260,7 +260,7 @@ struct Matrix {
 	}
 
 	// Subtraction Overload
-	Matrix<Rows, Cols> operator-(const Matrix<Rows, Cols>& other) const {
+	__attribute__((always_inline)) inline Matrix<Rows, Cols> operator-(const Matrix<Rows, Cols>& other) const {
 		Matrix<Rows, Cols> result(InitType::Uninitialized);
 		// arm_mat_sub_f32(&this->instance, &other.instance, &result.instance);
 		for(uint16_t i = 0; i < Rows * Cols; i++) result.data[i] = data[i] - other.data[i];
@@ -269,14 +269,14 @@ struct Matrix {
 
 	// Multiplication Overload (Handles inner dimension matching automatically)
 	template <uint16_t ResCols>
-	Matrix<Rows, ResCols> operator*(const Matrix<Cols, ResCols>& other) const {
+	__attribute__((always_inline)) inline Matrix<Rows, ResCols> operator*(const Matrix<Cols, ResCols>& other) const {
 		Matrix<Rows, ResCols> result(InitType::Uninitialized);
 		arm_mat_mult_f32(&this->instance, &other.instance, &result.instance);
 		return result;
 	}
 
 	// Scalar Multiplication
-	Matrix<Rows, Cols> operator*(float scalar) const {
+	__attribute__((always_inline)) inline Matrix<Rows, Cols> operator*(float scalar) const {
 		Matrix<Rows, Cols> result(InitType::Uninitialized);
 		// arm_mat_scale_f32(&this->instance, scalar, &result.instance);
 		for(uint16_t i = 0; i < Rows * Cols; i++) result.data[i] = data[i] * scalar;

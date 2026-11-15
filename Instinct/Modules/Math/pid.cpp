@@ -44,7 +44,7 @@ void PID::Reset() {
 	isFirstUpdate = true;
 }
 
-float PID::Update(float target, float measurement, float dt) {
+__attribute__((section(".itcm_text"))) float PID::Update(float target, float measurement, float dt) {
 	if(dt <= 0.0f) {
 		return 0.0f;
 	}
@@ -101,7 +101,7 @@ float PID::Update(float target, float measurement, float dt) {
 	return output;
 }
 
-float PID::CalculateLowPassAlpha(float dt, float cutoffHz) {
+__attribute__((section(".itcm_text"))) float PID::CalculateLowPassAlpha(float dt, float cutoffHz) {
 	if(cutoffHz <= 0.0f) {
 		return 1.0f; // Filter disabled
 	}

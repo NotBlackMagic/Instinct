@@ -37,7 +37,9 @@ MEMORY
 _estack = ORIGIN(AXISRAM2) + LENGTH(AXISRAM2); /* end of "RAM" Ram type memory */
 _sstack = _estack - _Min_Stack_Size;
 
-/* Export DTCM bounds for initialization */
+/* Export I/DTCM bounds for initialization */
+_sITCM = ORIGIN(ITCM);
+_eITCM = ORIGIN(ITCM) + LENGTH(ITCM);
 _sDTCM = ORIGIN(DTCM);
 _eDTCM = ORIGIN(DTCM) + LENGTH(DTCM);
 
@@ -69,6 +71,25 @@ SECTIONS
 		KEEP(*(.isr_vector)) /* Startup code */
 		. = ALIGN(4);
 	} >ROM
+
+	/* ITCM critical execution code */
+	.itcm_text :
+	{
+		. = ALIGN(4);
+		_sitcm = .;
+		*(.itcm_text)
+		*(.itcm_text*)
+
+		/* ThreadX Core Engine & Low-Level Port (All tx_* objects and archives) */
+		*tx_*.o*(.text .text*)
+		*tx_*.obj*(.text .text*)
+		*libtx*.a:*(.text .text*)
+		*libthreadx*.a:*(.text .text*)
+
+		. = ALIGN(4);
+		_eitcm = .;
+	} >ITCM AT> ROM
+	_siitcm = LOADADDR(.itcm_text);
 
 	/* The program code and other data into "RAM" Ram type memory */
 	.text :
@@ -153,17 +174,24 @@ SECTIONS
 
 	/* RAM & TCM Sections with Load Addresses in ROM */
 
-	/* ITCM critical execution code */
-	.itcm_text :
+	/* DTCM initialized data & fast tables */
+	.dtcm_data : ALIGN(4)
 	{
+		_sdtcm_data = .;
+		*(.dtcm_data)
+		*(.dtcm_data*)
+		*(.dtcm_rodata*)
+
+		/* ThreadX Initialized Globals & Tables */
+		*tx_*.o(.data .data* .rodata .rodata*)
+		*tx_*.obj(.data .data* .rodata .rodata*)
+		*libtx*.a:*(.data .data* .rodata .rodata*)
+		*libthreadx*.a:*(.data .data* .rodata .rodata*)
+
 		. = ALIGN(4);
-		_sitcm = .;
-		*(.itcm_text)
-		*(.itcm_text*)
-		. = ALIGN(4);
-		_eitcm = .;
-	} >ITCM AT> ROM
-	_siitcm = LOADADDR(.itcm_text);
+		_edtcm_data = .;
+	} >DTCM AT> ROM
+	_sidtcm_data = LOADADDR(.dtcm_data);
 
 	/* AXISRAM2 initialized data */
 	.data :
@@ -186,18 +214,6 @@ SECTIONS
 		PROVIDE(__data_end = .);
 		PROVIDE(__tdata_end = .);
 	} >AXISRAM2 AT> ROM
-
-	/* DTCM initialized data & fast tables */
-	.dtcm_data : ALIGN(4)
-	{
-		_sdtcm_data = .;
-		*(.dtcm_data)
-		*(.dtcm_data*)
-		*(.dtcm_rodata*)
-		. = ALIGN(4);
-		_edtcm_data = .;
-	} >DTCM AT> ROM
-	_sidtcm_data = LOADADDR(.dtcm_data);
 
 	/* The absolute end of the ROM payload is the Load Address (LMA) of .dtcm_data plus its size */
 	_erom = LOADADDR(.dtcm_data) + SIZEOF(.dtcm_data);
@@ -323,6 +339,25 @@ SECTIONS
 		PROVIDE( __tbss_end = . );
 	} >AXISRAM2
 
+	/* Fast uninitialized data stored in DTCM */
+	.dtcm_bss (NOLOAD) :
+	{
+		. = ALIGN(4);
+		_sdtcm_bss = .;
+		*(.dtcm_bss)
+		*(.dtcm_bss*)
+
+		/* ThreadX Internal State Variables */
+		/* (_tx_thread_current_ptr, _tx_thread_system_state, priorities, etc.) */
+		*tx_*.o(.bss .bss* COMMON)
+		*tx_*.obj(.bss .bss* COMMON)
+		*libtx*.a:*(.bss .bss* COMMON)
+		*libthreadx*.a:*(.bss .bss* COMMON)
+
+		. = ALIGN(4);
+		_edtcm_bss = .;
+	} >DTCM
+
 	.bss (NOLOAD) : ALIGN(4)
 	{
 		/* This is used by the startup in order to initialize the .bss section */
@@ -334,17 +369,6 @@ SECTIONS
 		__bss_end__ = _ebss;
 		PROVIDE( __bss_end = .);
 	} >AXISRAM2
-
-	/* Fast uninitialized data stored in DTCM */
-	.dtcm_bss (NOLOAD) :
-	{
-		. = ALIGN(4);
-		_sdtcm_bss = .;
-		*(.dtcm_bss)
-		*(.dtcm_bss*)
-		. = ALIGN(4);
-		_edtcm_bss = .;
-	} >DTCM
 
 	/* User_heap_stack section, used to check that there is enough "RAM" Ram type memory left */
 	._user_heap_stack (NOLOAD) :
