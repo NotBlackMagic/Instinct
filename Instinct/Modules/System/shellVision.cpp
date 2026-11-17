@@ -41,14 +41,13 @@ static bool CommandVision(const char* args) {
 		Logger::Instance().Printf("  FPS:         %.1f\r\n", stats.fps);
 		Logger::Instance().Printf("  Frames:      %lu (UVC Drop: %lu, Restarts: %lu)\r\n", stats.totalFrames, stats.uvcDroppedCount, stats.pipelineRestarts);
 		Logger::Instance().Printf("  Bitrate:     %lu kbps (%lu B/frame)\r\n", stats.bitrateBps / 1000, stats.lastFrameBytes);
-		Logger::Instance().Printf("  Compression: %.1fx\r\n", stats.compressionRatio);
+		Logger::Instance().Printf("  Compression: %.1fx (Min %.1fx)\r\n", stats.compression, stats.compressionMin);
 
 		Logger::Instance().Write("[LATENCY (us)]\r\n");
 #if USE_LINE_MODE
 		Logger::Instance().Printf("  Slice:       Cap %lu | Enc %lu (Max %lu)\r\n", stats.sliceCap, stats.sliceEnc, stats.maxSliceEnc);
-#else
-		Logger::Instance().Printf("  Capture:     %lu\r\n", stats.capTime);
 #endif
+		Logger::Instance().Printf("  Capture:     %lu\r\n", stats.capTime);
 		Logger::Instance().Printf("  Encode:      %lu (Max %lu)\r\n", stats.encTime, stats.maxEncTime);
 		Logger::Instance().Printf("  I/O:         %lu\r\n", stats.ioTime);
 

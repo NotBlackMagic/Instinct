@@ -20,7 +20,7 @@ static void PrintHelp() {
 	Logger::Instance().Write("  <target> brightness [val]  - Set camera sensor brightness\r\n");
 	Logger::Instance().Write("  <target> contrast [val]    - Set camera sensor contrast\r\n");
 	Logger::Instance().Write("  <target> flicker [val]     - Set camera sensor flicker filter\r\n");
-	Logger::Instance().Write("  <target> focus [auto|lock|0..255]  - Set AF mode or manual focus step\r\n");
+	Logger::Instance().Write("  <target> focus [auto|single|0..255]  - Set AF mode or manual focus step\r\n");
 	Logger::Instance().Write("  <target> test [val]        - Enable/disable test pattern output\r\n");
 	Logger::Instance().Write("-----------------------\r\n");
 }
@@ -100,10 +100,11 @@ static bool CommandCam(const char* args) {
 	if(strcmp(action, "fps") == 0 && count >= 3) {
 		if(routeDcmi == true) {
 			cameraSD.GetSensor().SetFPS((uint32_t)val);
-			Logger::Instance().Printf("DCMI Gain set to %d.\r\n", (uint32_t)val);
+			Logger::Instance().Printf("DCMI FPS set to %d.\r\n", (uint32_t)val);
 		}
 		if(routeMipi == true) {
-			// cameraMipi.GetSensor().SetBrightness((int8_t)val);
+			cameraHD.GetSensor().SetFPS((uint32_t)val);
+			Logger::Instance().Printf("MIPI FPS set to %d.\r\n", (uint32_t)val);
 		}
 		return true;
 	}
@@ -136,7 +137,8 @@ static bool CommandCam(const char* args) {
 			Logger::Instance().Printf("DCMI Brightness set to %d.\r\n", (int8_t)val);
 		}
 		if(routeMipi == true) {
-			// cameraMipi.GetSensor().SetBrightness((int8_t)val);
+			cameraHD.GetSensor().SetBrightness((int8_t)val);
+			Logger::Instance().Printf("MIPI Brightness set to %d.\r\n", (int8_t)val);
 		}
 		return true;
 	}
@@ -145,6 +147,10 @@ static bool CommandCam(const char* args) {
 		if(routeDcmi == true) {
 			// cameraSD.GetSensor().SetContrast((uint8_t)val);
 			Logger::Instance().Printf("DCMI Contrast set to %u.\r\n", (uint8_t)val);
+		}
+		if(routeMipi == true) {
+			cameraHD.GetSensor().SetContrast((uint8_t)val);
+			Logger::Instance().Printf("MIPI Contrast set to %u.\r\n", (uint8_t)val);
 		}
 		return true;
 	}

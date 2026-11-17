@@ -850,49 +850,48 @@ Status OV5645::SetFPS(uint32_t fps) {
 	// FPS = fsys / (HTS * VTS)
 	// VTS = fsys / (HTS * fps)
 
-	// Minimum baseline VTS required per mode
+	// Minimum baseline VTS and HTS required per mode
 	uint16_t minVts = 0x0460;
+	uint16_t minHts = 0x09C4;
 	switch(this->sensorInfo.height) {
 		case 1088:
 		case 1080:
 		case 720:
 			minVts = 0x0460;	// 1120 lines (Active + blanking floor)
+			minHts = 0x09C4;    // 2500 pclk
 			break;
 		case 1944:
 		case 1440:
 			minVts = 0x07B0;	// 1968 lines
+			minHts = 0x0B1C;    // 2844 pclk
 			break;
 		case 1024:
 			minVts = 0x0510;	// 1296 lines
+			minHts = 0x0900;    // 2304 pclk
 			break;
 		case 480:
 			minVts = 0x03D8;	// 984 lines
+			minHts = 0x0768;    // 1896 pclk
 			break;
 		default:
 			return Status::Error;
 	}
 
-	// Read active HTS
-	uint8_t htsHigh = 0;
-	uint8_t htsLow = 0;
-	Status status = this->ReadRegister(static_cast<Register>(0x380C), htsHigh);
-	if(status != Status::Ok) {
-		return status;
-	}
-	status = this->ReadRegister(static_cast<Register>(0x380D), htsLow);
-	if(status != Status::Ok) {
-		return status;
-	}
+	// Total sysClk cycles per frame = sysClk / fps
+	uint32_t totalCyclesPerFrame = this->sysClk / fps;
 
-	uint32_t hts = (static_cast<uint32_t>(htsHigh) << 8) | htsLow;
-	if(hts == 0) {
-		return Status::Error;
+	// Stretch HTS first (up to the 12-bit hardware limit 0x0FFF = 4095) to space active lines out (for VENC line mode)
+	uint32_t hts = (totalCyclesPerFrame + (minVts / 2)) / minVts;
+	if(hts < minHts) {
+		hts = minHts;
 	}
+	if(hts > 0x0FFF) {
+		hts = 0x0FFF;
+	}
+	hts = hts & ~0x03U;		// Force multiple of 4, i.e. to fit complete number of pixel bytes
 
-	// Calculate target VTS = round(sysClk / (HTS * FPS))
-	uint32_t vts = (this->sysClk + ((hts * fps) / 2)) / (hts * fps);
-
-	// Clamp VTS within hardware boundaries
+	// Use VTS for any remaining frame period beyond HTS = 4095
+	uint32_t vts = (totalCyclesPerFrame + (hts / 2)) / hts;
 	if(vts < minVts) {
 		vts = minVts;
 	}
@@ -900,7 +899,17 @@ Status OV5645::SetFPS(uint32_t fps) {
 		vts = 0xFFFF;
 	}
 
-	// Write back new VTS
+	// Write updated HTS (0x380C[3:0] : 0x380D[7:0])
+	Status status = this->WriteRegister(static_cast<Register>(0x380C), static_cast<uint8_t>((hts >> 8) & 0x0F));
+	if(status != Status::Ok) {
+		return status;
+	}
+	status = this->WriteRegister(static_cast<Register>(0x380D), static_cast<uint8_t>(hts & 0xFF));
+	if(status != Status::Ok) {
+		return status;
+	}
+
+	// Write updated VTS (0x380E[7:0] : 0x380F[7:0])
 	status = this->WriteRegister(static_cast<Register>(0x380E), static_cast<uint8_t>(vts >> 8));
 	if(status != Status::Ok) {
 		return status;
@@ -910,7 +919,15 @@ Status OV5645::SetFPS(uint32_t fps) {
 		return status;
 	}
 
-	// Update 60Hz and 50Hz AEC maximum exposure ceilings to track the longer frame time
+	// Recalculate 50Hz and 60Hz AEC anti-banding step sizes for the new HTS
+	uint16_t bandStep50 = static_cast<uint16_t>(this->sysClk / (hts * 100U));
+	uint16_t bandStep60 = static_cast<uint16_t>(this->sysClk / (hts * 120U));
+	this->WriteRegister(static_cast<Register>(0x3A08), static_cast<uint8_t>((bandStep50 >> 8) & 0x03));
+	this->WriteRegister(static_cast<Register>(0x3A09), static_cast<uint8_t>(bandStep50 & 0xFF));
+	this->WriteRegister(static_cast<Register>(0x3A0A), static_cast<uint8_t>((bandStep60 >> 8) & 0x03));
+	this->WriteRegister(static_cast<Register>(0x3A0B), static_cast<uint8_t>(bandStep60 & 0xFF));
+
+	// Update 60Hz and 50Hz AEC maximum exposure ceilings
 	status = this->WriteRegister(static_cast<Register>(0x3A02), static_cast<uint8_t>(vts >> 8));
 	if(status != Status::Ok) {
 		return status;
@@ -928,9 +945,7 @@ Status OV5645::SetFPS(uint32_t fps) {
 		return status;
 	}
 
-	// Record the actual achieved frame rate
 	this->config.fps = this->sysClk / (hts * vts);
-
 	return Status::Ok;
 }
 

@@ -208,17 +208,17 @@ void tx_application_define(void *first_unused_memory) {
 	StorageThread::Init();
 	VisionThread::Init();
 	LoggerThread::Init();
-	InertialThread::Init();
-	AuxiliaryThread::Init();
-	OpticalFlowThread::Init();
-	RadioThread::Init();
+	// InertialThread::Init();
+	// AuxiliaryThread::Init();
+	// OpticalFlowThread::Init();
+	// RadioThread::Init();
 	// MavlinkThread::Init(&gps1);
-	SensorHubThread::Init();
-	EstimatorThread::Init();
-	ControllerThread::Init();
-	CommanderThread::Init();
+	// SensorHubThread::Init();
+	// EstimatorThread::Init();
+	// ControllerThread::Init();
+	// CommanderThread::Init();
 	// ActuatorThread::Init();
-	InstinctLink::Init(&telem2);
+	// InstinctLink::Init(&telem2);
 
 	// Configure blackbox (data logging to SD card) logging profile
 	// BlackboxConfig::ApplyTuningProfile();

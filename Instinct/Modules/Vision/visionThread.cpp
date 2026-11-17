@@ -13,6 +13,9 @@ __attribute__((aligned(32))) uint8_t VisionThread::threadStack[VisionThread::thr
 VisionThread::Statistics VisionThread::stats = {};
 uint32_t VisionThread::pipelineRestartCounter = 0;
 
+const uint32_t rawBufSize = 1920 * 64 * 2;
+__attribute__((section(".axisram1"), aligned(32))) uint8_t rawFrameBuf[rawBufSize];
+
 static VisionFrame rawFrameBuffer[2];
 static VisionFrame processedFrameBuffer;
 static VisionFrame jpegFrameBuffer[2];
@@ -115,7 +118,7 @@ void VisionThread::Run(ULONG input) {
 	// General camera configurations
 	uint32_t camWidth = 1920;
 	uint32_t camHeight = 1088;
-	uint8_t camFPS = 10;
+	uint8_t camFPS = 20;
 	PixelFormat camFormat = PixelFormat::YUV422_YUYV;
 
 	// Line mode parameters
@@ -124,7 +127,8 @@ void VisionThread::Run(ULONG input) {
 	constexpr Dcmipp::LineCount lineTrigger = Dcmipp::LineCount::Lines32;
 	// vv For statistics/metering only vv
 	constexpr uint32_t wrapLines = 1U << static_cast<uint32_t>(lineWrap);
-	const float numSlices = static_cast<float>(camHeight) / static_cast<float>(wrapLines);
+	constexpr uint32_t triggerLines = 1U << static_cast<uint32_t>(lineTrigger);
+	const float numSlices = static_cast<float>(camHeight) / static_cast<float>(triggerLines);
 #endif
 
 	// Initialize
@@ -191,7 +195,11 @@ void VisionThread::Run(ULONG input) {
 	vencConfig.codingControl.insertIdrHeader = true;
 	vencConfig.codingControl.disableDeblockingFilter = false;
 
-	// Ideal pool size can be found: VC8000NanoE Video Encoder Software Integration Guide, Section H264 4.3.1-4.3.4
+	// Required pool size can be found in "VC8000NanoE Video Encoder Software Integration Guide", Section H264 4.3.1-4.3.4
+	// Note: VENC always stores internal reference frames in 4:2:0 (1.5 B/px), regardless of input format.
+	//	Reference frames: W * H * 3.0 B (Double-buffered: 2 Luma + 2 Chroma = 6.27 MB @ 1920x1088)
+	//	Shared + SW bufs: W * H * 0.16 B + 54 KB (MV, NAL, CABAC tables = 0.38 MB @ 1920x1088)
+	// Minimum pool size = (W * H * 3.16) + 64 KB  (~6.7 MB for 1080p)
 	vencConfig.poolSize = 8 * 1024 * 1024;
 	vencConfig.poolAddress = externalPSRAM.Allocate(vencConfig.poolSize, 32);
 	status = vencEncoder.Init(vencConfig);
@@ -205,7 +213,7 @@ void VisionThread::Run(ULONG input) {
 
 	// Buffer sizing
 #if USE_LINE_MODE
-	uint32_t rawBufSize = camWidth * wrapLines * 2;
+	// uint32_t rawBufSize = camWidth * wrapLines * 2;
 #else
 	uint32_t rawBufSize = camWidth * camHeight * 2;
 #endif
@@ -217,7 +225,7 @@ void VisionThread::Run(ULONG input) {
 	rawFrameBuffer[0].format = camFormat;
 	rawFrameBuffer[0].payloadSize = rawBufSize;
 	rawFrameBuffer[0].allocatedSize = rawBufSize;
-	rawFrameBuffer[0].startAddress = externalPSRAM.Allocate(rawFrameBuffer[0].allocatedSize, 32);
+	rawFrameBuffer[0].startAddress = rawFrameBuf;	// externalPSRAM.Allocate(rawFrameBuffer[0].allocatedSize, 32);
 
 	rawFrameBuffer[1].width = camWidth;
 	rawFrameBuffer[1].height = camHeight;
@@ -456,22 +464,27 @@ void VisionThread::Run(ULONG input) {
 							uint64_t dcmippStart = cameraHD.GetPipeStatistics(Dcmipp::PipeID::Main).lastVsyncTimestamp;
 							uint64_t dcmippDone = cameraHD.GetPipeStatistics(Dcmipp::PipeID::Main).lastFrameTimestamp;
 							uint64_t vencDone = vencEncoder.GetStatistics().lastFrameEndTimestamp;
-							
+
+							// Camera active frame readout time (VSYNC to last line DMA complete)
+							timeCap = static_cast<uint32_t>(dcmippDone - dcmippStart);
+							stats.capTime = timeCap;
+
+							// HW encode time for one 32-line slice (measured on the final slice after DCMIPP finishes)
 							timeSliceEnc = static_cast<uint32_t>(vencDone - dcmippDone);
 							stats.sliceEnc = timeSliceEnc;
 							if(timeSliceEnc > stats.maxSliceEnc) {
 								stats.maxSliceEnc = timeSliceEnc;
 							}
 
-							// Total HW frame time (from VSYNC to VENC done)
-							timeEnc = static_cast<uint32_t>(vencDone - dcmippStart);
+							// Estimated pure VENC compute time for the full frame (excluding camera wait time)
+							timeEnc = timeSliceEnc * numSlices;
 							stats.encTime = timeEnc;
 							if(timeEnc > stats.maxEncTime) {
 								stats.maxEncTime = timeEnc;
 							}
 
-							// Estimated OS Cap time per slice
-							timeSliceCap = static_cast<uint32_t>(static_cast<float>(timeCap) / numSlices);
+							// Camera readout time per 32-line slice (must be > timeSliceEnc to avoid overrun)
+							timeSliceCap = timeCap / numSlices;
 
 							// Fetch byte counts
 							encOutBytes = vencEncoder.GetStatistics().lastFrameBytes;					
@@ -492,7 +505,10 @@ void VisionThread::Run(ULONG input) {
 							stats.lastFrameBytes = encOutBytes;
 							encRawBytes = (currentRaw.format == PixelFormat::YUV420_NV12) ? ((currentRaw.width * currentRaw.height * 3) / 2) : (currentRaw.width * currentRaw.height * 2);
 							if(encOutBytes > 0) {
-								stats.compressionRatio = static_cast<float>(encRawBytes) / static_cast<float>(encOutBytes);
+								stats.compression = static_cast<float>(encRawBytes) / static_cast<float>(encOutBytes);
+								if(stats.compressionMin > stats.compression) {
+									stats.compressionMin = stats.compression;
+								}
 								epochEncBytesSum += encOutBytes;
 							}
 
@@ -656,7 +672,10 @@ void VisionThread::Run(ULONG input) {
 									// Newest performance analysis for 1920x1080 H264. Code in HyperFlash/XIP. Full frame mode:
 									// HD-CAM & All Buf in HyperRAM:			Cap 60985 us, Full Enc 39028 (Max: 39969) us
 									// Out Buf in SRAM, rest in HyperRAM:		Cap 61032 us, Full Enc 38878 (Max: 39532) us
-									// Same but for JPEG:
+									// -- Same but in Line mode (32 lines): --
+									// HD-CAM & All Buf in HyperRAM:			Full Enc 33966 (Max: 34170) us, Slice 996 (Max: 1005) us
+									// Raw buffer in SRAM, rest in HyperRAM:	Full Enc 26690 (Max: 28798) us, Slice 785 (Max: 847) us
+									// -- Same but for JPEG: --
 									// HD-CAM & All Buf in HyperRAM:			Cap 77097 us, Full Enc 23266 (Max: 24000) us
 									// Out Buf in SRAM, rest in HyperRAM:		Cap 77003 us, Full Enc 23510 (Max: 23731) us
 

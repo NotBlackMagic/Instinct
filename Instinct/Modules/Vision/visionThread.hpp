@@ -27,7 +27,7 @@
 #include "tx_api.h"
 #include "fx_api.h"
 
-#define USE_LINE_MODE						0	// 1 = Hardware line mode (64 lines), 0 = Full-frame ping-pong
+#define USE_LINE_MODE						1	// 1 = Hardware line mode (64 lines), 0 = Full-frame ping-pong
 
 class VisionThread {
 	public:
@@ -36,7 +36,8 @@ class VisionThread {
 			// Rates and Throughput
 			float fps = 0.0f;
 			uint32_t bitrateBps = 0;
-			float compressionRatio = 0.0f;	///< Raw size / Compressed size
+			float compression = 0.0f;			///< Compression ratio: Raw size / Compressed size
+			float compressionMin = 1000.0f;		///< Minimum compression ratio (worst case): Raw size / Compressed size
 			uint32_t lastFrameBytes = 0;
 
 			// Counters & Drops
