@@ -74,7 +74,7 @@ Status PatternGenerator::ColorBar(VisionFrame& frame) {
 					break;
 				}
 
-				case PixelFormat::Grayscale:
+				case PixelFormat::Mono:
 					*ptr++ = yVals[barIdx]; // Luma (Y) channel directly maps to Grayscale
 					bytesWritten += 1;
 					break;
@@ -142,7 +142,7 @@ Status PatternGenerator::Checkerboard(VisionFrame& frame) {
 					break;
 				}
 
-				case PixelFormat::Grayscale:
+				case PixelFormat::Mono:
 					*ptr++ = yVal; // Luma (Y) channel directly maps to Grayscale
 					bytesWritten += 1;
 					break;

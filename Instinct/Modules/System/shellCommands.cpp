@@ -7,6 +7,8 @@
 
 #include "shellModules.hpp"
 
+#include "pubSub.hpp"
+
 // Linker exported symbols
 extern "C" {
 	// Memory capacities (values mapped directly as symbol addresses)
@@ -152,10 +154,15 @@ static bool CommandStatus(const char* args) {
 	float coreTempC = 25.0f;	//BoardInfo::ReadJunctionTemperature(); // Implement via DTS / ADC
 
 	Logger::Instance().Printf("CPU     : STM32N657 @ %lu MHz (Tj: %.1f C)\r\n", SystemCoreClock / 1000000, coreTempC);
-	Logger::Instance().Printf("Uptime  : %lu s (Tick: %lu ms)\r\n", HAL_GetTick() / 1000, HAL_GetTick());
+	Logger::Instance().Printf("Uptime  : %lu s (Tick: %lu ms)\r\n", Time::GetMs() / 1000, Time::GetMs());
+
+	// Read/get power monitoring
+	PowerMsg pwMsg;
+	Topic<PowerMsg>* powerTopic = Broker::GetTopic<PowerMsg>(static_cast<uint8_t>(TopicID::Power), 0);
+	if(powerTopic != nullptr && powerTopic->Peek(pwMsg) == true) {
+		Logger::Instance().Printf("Power   : %.2f V | Current: %.2f A\r\n", pwMsg.voltage, pwMsg.current);
+	}
 	
-	// Battery & safety critical telemetry
-	// Logger::Instance().Printf("Battery : %.2f V | Current: %.2f A\r\n", PowerMonitor::GetVoltage(), PowerMonitor::GetCurrent());
 	return true;
 }
 
@@ -801,9 +808,4 @@ static const Shell::CommandEntry systemCommands[] {
 	{ nullptr,	nullptr,		nullptr } // Terminator
 };
 
-// Static memory for the node
-static Shell::CommandList systemShellNode;
-
-void RegisterSystemCommands() {
-	Shell::RegisterCommands(&systemShellNode, systemCommands); //Register the table defined below
-}
+// Static memory for the node

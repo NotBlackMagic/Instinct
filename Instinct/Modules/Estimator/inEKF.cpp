@@ -69,7 +69,12 @@ Status InEKF::InitializeMagReference(const float magInit[3]) {
 
 	// Project raw boot magnetometer reading into the Global frame
 	Matrix3f::Multiply3x3Vector3(R, magBody, magRefNed);
-	magRefNed.data[1] = 0.0f;	// Force East (Y) to 0, locking heading as North
+
+	// Preserve full horizontal magnitude along North (+X) before zeroing East (+Y)
+	float horizMag;
+	arm_sqrt_f32(magRefNed.data[0] * magRefNed.data[0] + magRefNed.data[1] * magRefNed.data[1], &horizMag);
+	magRefNed.data[0] = horizMag;
+	magRefNed.data[1] = 0.0f;
 	return Status::Ok;
 }
 
@@ -419,13 +424,13 @@ __attribute__((section(".itcm_text"))) Status InEKF::UpdateMag(const float mag[3
 	z.data[1] = mag[1] - yExpected.data[1];
 	z.data[2] = mag[2] - yExpected.data[2];
 
-	// Direct formation of hMagAtt = R^T * Skew([mx, 0, mz])
+	// Right-Invariant Yaw-Only hMagAtt:
+	// Zero Columns 0 and 1 (Global Roll/Pitch) so magnetometer ONLY corrects Global Yaw (Col 2)
 	const float mx = magRefNed.data[0];
-	const float mz = magRefNed.data[2];
 	Matrix3f hMagAtt(InitType::Uninitialized);
-	hMagAtt.data[0] = mz * R.data[3]; hMagAtt.data[1] = mx * R.data[6] - mz * R.data[0]; hMagAtt.data[2] = -mx * R.data[3];
-	hMagAtt.data[3] = mz * R.data[4]; hMagAtt.data[4] = mx * R.data[7] - mz * R.data[1]; hMagAtt.data[5] = -mx * R.data[4];
-	hMagAtt.data[6] = mz * R.data[5]; hMagAtt.data[7] = mx * R.data[8] - mz * R.data[2]; hMagAtt.data[8] = -mx * R.data[5];
+	hMagAtt.data[0] = 0.0f; hMagAtt.data[1] = 0.0f; hMagAtt.data[2] = -mx * R.data[3];
+	hMagAtt.data[3] = 0.0f; hMagAtt.data[4] = 0.0f; hMagAtt.data[5] = -mx * R.data[4];
+	hMagAtt.data[6] = 0.0f; hMagAtt.data[7] = 0.0f; hMagAtt.data[8] = -mx * R.data[5];
 
 	// Compute H * P: An array of five 3x3 blocks
 	Matrix3f HP[5] = {
@@ -530,9 +535,9 @@ __attribute__((section(".itcm_text"))) Status InEKF::UpdateVerticalPosition(floa
 		p1c[7] = p1c[7] - (kVz * hpRow[c * 3 + 1]);
 		p1c[8] = p1c[8] - (kVz * hpRow[c * 3 + 2]);
 
-		p2c[6] = p1c[6] - (kPz * hpRow[c * 3 + 0]);
-		p2c[7] = p1c[7] - (kPz * hpRow[c * 3 + 1]);
-		p2c[8] = p1c[8] - (kPz * hpRow[c * 3 + 2]);
+		p2c[6] = p2c[6] - (kPz * hpRow[c * 3 + 0]);
+		p2c[7] = p2c[7] - (kPz * hpRow[c * 3 + 1]);
+		p2c[8] = p2c[8] - (kPz * hpRow[c * 3 + 2]);
 	}
 
 	// Keep upper-triangle blocks P[0][1], P[0][2], P[1][2] consistent before MirrorCovarianceLower

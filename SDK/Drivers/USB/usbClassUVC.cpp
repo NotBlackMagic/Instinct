@@ -314,7 +314,7 @@ const uint8_t* USBClassUVC::GetConfigDescriptor(USB::BusSpeed speed, uint16_t* l
 			this->activeUVCDescriptor[offset++] = 0x9B;
 			this->activeUVCDescriptor[offset++] = 0x71;
 		}
-		else if(activePixelFormat == PixelFormat::Grayscale) {
+		else if(activePixelFormat == PixelFormat::Mono) {
 			// Y800 GUID: 30303859-0000-0010-8000-00AA00389B71
 			this->activeUVCDescriptor[offset++] = 0x59; // 'Y'
 			this->activeUVCDescriptor[offset++] = 0x38; // '8'
@@ -355,7 +355,7 @@ const uint8_t* USBClassUVC::GetConfigDescriptor(USB::BusSpeed speed, uint16_t* l
 
 		// Set bits per pixel depending on used pixel format
 		uint8_t bitsPerPixel = 16;
-		if(activePixelFormat == PixelFormat::Grayscale) {
+		if(activePixelFormat == PixelFormat::Mono) {
 			bitsPerPixel = 8;
 		}
 		else if(activePixelFormat == PixelFormat::YUV420_NV12) {
@@ -391,7 +391,7 @@ const uint8_t* USBClassUVC::GetConfigDescriptor(USB::BusSpeed speed, uint16_t* l
 			}
 			
 			uint8_t bytesPerPixel = 2;
-			if(frame.format == PixelFormat::Grayscale) {
+			if(frame.format == PixelFormat::Mono) {
 				bytesPerPixel = 1;
 			}
 			else if(frame.format == PixelFormat::YUV420_NV12) {
@@ -712,7 +712,7 @@ Status USBClassUVC::OnDataOut(USB& usb, uint8_t epNum, uint32_t len) {
 
 					// Calculate hardware requirements dynamically based on the matched setting
 					uint8_t bytesPerPixel = 2;
-					if(activeCap.format == PixelFormat::Grayscale) {
+					if(activeCap.format == PixelFormat::Mono) {
 						bytesPerPixel = 1;
 					}
 					else if(activeCap.format == PixelFormat::YUV420_NV12) {

@@ -336,10 +336,8 @@ void EnterRecoveryMode(void) {
 
 		// Check for incoming UART firmware upload
 		if(debugUART.Available() > 0) {
-			LOG_INFO("UART FW flashing: Started...");
-
 			ledBlue.Write(0); // Blue solid ON
-			Status status = LoaderFWToPSRAM(&debugUART, FW_STAGING_RAM_ADDRESS, firmwareSize);
+			Status status = LoaderFWToPSRAM(&debugUART, FW_STAGING_RAM_ADDRESS, firmwareSize, 5000);
 			ledBlue.Write(1); // Blue OFF
 
 			if(status == Status::Ok) {
@@ -457,7 +455,7 @@ int main(void) {
 	Logger::Instance().RegisterConsole(&debugUART);
 
 	LOG_INFO("--------------------------------");
-	LOG_INFO("FSBL v0.7.3 Booting...");
+	LOG_INFO("FSBL v0.7.4 Booting...");
 	LOG_INFO("BOOTSR: 0x%08lX", (unsigned long)SYSCFG->BOOTSR);
 	LOG_INFO("BOOT Pins: BOOT0=%d BOOT1=%d", (SYSCFG->BOOTSR & SYSCFG_BOOTSR_BOOT0), (SYSCFG->BOOTSR & SYSCFG_BOOTSR_BOOT1));
 	LOG_INFO("Live Pins: PA6=%d PO5=%d", LL_GPIO_IsInputPinSet(GPIOA, LL_GPIO_PIN_6), userButton.Read());

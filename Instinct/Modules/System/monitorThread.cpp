@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/System/monitorThread.cpp
  */
@@ -10,7 +10,7 @@
 TX_THREAD MonitorThread::threadPtr;
 __attribute__((aligned(32))) uint8_t MonitorThread::threadStack[MonitorThread::threadStackSize];
 
-static Topic<PowerMsg> topicPower("power", static_cast<uint8_t>(TopicID::Power));
+Topic<PowerMsg> MonitorThread::topicPower("power", static_cast<uint8_t>(TopicID::Power), 0);
 
 void MonitorThread::Init() {
 	uint32_t status = tx_thread_create(&threadPtr, const_cast<char*>("Monitor"),
@@ -21,6 +21,8 @@ void MonitorThread::Init() {
 	if(status != TX_SUCCESS) {
 		LOG_ERR("ThreadX Monitor Thread Create Failed.");
 	}
+
+	Broker::RegisterTopic(&topicPower);
 }
 
 void MonitorThread::Run(ULONG input) {

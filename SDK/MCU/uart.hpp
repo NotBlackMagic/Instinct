@@ -81,6 +81,11 @@ class UART {
 		/// @return Status::Ok if initialization succeeded, or Status::Error if the config was invalid.
 		Status Init(const Config &config);
 
+		/// @brief Changes/sets the baudrate without reseting the peripheral.
+		/// @param baudrate Desired baudrate in bps.
+		/// @return Status::Ok if baudrate change succeeded, or Status::Error if invalid baudrate or failed change.
+		Status SetBaudrate(uint32_t baudrate);
+
 		/// @brief Writes data to the internal ring buffer.
 		/// @param buf Pointer to data to write (will be copied to ring buffer so does not need to be kept after function call).
 		/// @param len Number of bytes to write.
@@ -118,6 +123,7 @@ class UART {
 		IRQn_Type irqCall;
 		uint8_t irqPriority;
 
+		Config config;
 		bool isInitialized;
 		Statistics stats = {};
 

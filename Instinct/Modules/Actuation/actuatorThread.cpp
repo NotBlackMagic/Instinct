@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/Actuation/actuatorThread.cpp
  */
@@ -9,6 +9,9 @@
 
 TX_THREAD ActuatorThread::threadPtr;
 __attribute__((aligned(32))) uint8_t ActuatorThread::threadStack[ActuatorThread::threadStackSize];
+
+volatile bool ActuatorThread::manualBypass = false;
+volatile bool ActuatorThread::armedState = false;
 
 Subscriber<ActuatorMsg> ActuatorThread::subActuators;
 Topic<ActuatorMsg>* ActuatorThread::topicActuators = nullptr;
@@ -34,7 +37,7 @@ void ActuatorThread::Init() {
 		pinConfigs[i].min = 1000;
 		pinConfigs[i].max = 2000;
 		pinConfigs[i].center = 1000;
-		pinConfigs[i].idle = 900;
+		pinConfigs[i].idle = 1000;
 	}
 	// Set the rest as centered servos
 	for (uint8_t i = 4; i < 16; i++) {
@@ -73,12 +76,20 @@ void ActuatorThread::Run(ULONG input) {
 
 	bool inFailsafe = false;
 	while(1) {
-		// Deadman switch failsafe: if no message in 50ms assume controller thread crashed -> go to failsafe
-		if(topicActuators->Take(&subActuators, actuatorMsg, 50) == true) {
+		// Manual PWM bypass check
+		if(manualBypass == true) {
+			tx_thread_sleep(20);
+			continue;
+		}
+
+		// Deadman switch failsafe: if no message in 200ms assume controller thread crashed -> go to failsafe
+		if(topicActuators->Take(&subActuators, actuatorMsg, 200) == true) {
 			if(inFailsafe == true) {
 				LOG_INFO("ActuatorThread: Controller signal restored.");
 				inFailsafe = false;
 			}
+
+			armedState = actuatorMsg.isArmed;
 
 			if(actuatorMsg.isArmed == true) {
 				// Map and apply active outputs
@@ -101,10 +112,23 @@ void ActuatorThread::Run(ULONG input) {
 				inFailsafe = true;
 			}
 			ForceSafeOutputs();
+			armedState = false;
 			// Safeguard: If the middleware queue fails, force a yield.
 			tx_thread_sleep(1);
 		}
 	}
+}
+
+bool ActuatorThread::SetManualBypass(bool enable) {
+	if(enable == true && armedState == true) {
+		// Never allow shell takeover while armed
+		return false;
+	}
+	manualBypass = enable;
+	if(enable == false) {
+		ForceSafeOutputs();
+	}
+	return true;
 }
 
 uint16_t ActuatorThread::MapToMicroseconds(float output, const PinConfig& config) {

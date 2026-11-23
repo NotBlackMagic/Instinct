@@ -148,7 +148,7 @@ class InEKF {
 		// Fixed physical & statistical constants (not tunable)
 		static constexpr float gVal = 9.80665f;
 		static constexpr float gSq = gVal * gVal;
-		static constexpr float minCovDiag = 1e-6f;
+		static constexpr float minCovDiag = 1e-9f;
 		static constexpr float maxCovDiag = 100.0f;
 		static constexpr float gate3Sigma1D = 9.0f;		// Chi-square 1 DOF (99.7%)
 		static constexpr float gate3Sigma2D = 9.21f;	// Chi-square 2 DOF (99%)

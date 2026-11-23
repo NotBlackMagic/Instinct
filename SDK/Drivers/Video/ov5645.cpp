@@ -261,6 +261,12 @@ static constexpr OV5645::RegisterValuePair ov5645GlobalInit[] = {
 	// { static_cast<OV5645::Register>(0x3C00), 0x04}
 };
 
+// Mode: VGA (640x480) | 2x2 Binning + 2x ISP Scaling from 2624x1944 (X: 0..2623, Y: 6..1949)
+// Total Frame (HTS x VTS): 1896 x 984 (Min blanking floor in SetFPS)
+// Effective Output:        640 x 480 (DVPHO x DVPVO)
+// Pixel Readout (SCLK):    56 MHz (PLL1 = 896 MHz, SDIV0 = 2; PCLK = 112 MHz)
+// MIPI Clock (2-Lane DDR): 224 MHz (448 Mbps/lane, 896 Mbps total)
+// Frame Rate (Def / Max):  30.0 FPS default | 30.0 FPS max
 static constexpr OV5645::RegisterValuePair ov5645VGA[] = {
 	{ static_cast<OV5645::Register>(0x3612), 0xab },
 	{ static_cast<OV5645::Register>(0x3614), 0x50 },
@@ -312,6 +318,12 @@ static constexpr OV5645::RegisterValuePair ov5645VGA[] = {
 };
 
 // From Linux driver: https://github.com/torvalds/linux/blob/master/drivers/media/i2c/ov5645.c
+// Mode: SXGA (1280x1024) | 2x2 Binning from 2624x1944 (X: 0..2623, Y: 4..1947)
+// Total Frame (HTS x VTS): 2304 x 1296 (Min blanking floor in SetFPS)
+// Effective Output:        640 x 480 as programmed in 0x3808..0x380B (Change to 0x0500 x 0x0400 for 1280x1024)
+// Pixel Readout (SCLK):    56 MHz (PLL1 = 896 MHz, SDIV0 = 2; PCLK = 112 MHz)
+// MIPI Clock (2-Lane DDR): 224 MHz (448 Mbps/lane, 896 Mbps total)
+// Frame Rate (Def / Max):  18.75 FPS default | 18.75 FPS max
 static constexpr OV5645::RegisterValuePair ov5645SXGA[] = {
 	{ static_cast<OV5645::Register>(0x3612), 0xa9 },
 	{ static_cast<OV5645::Register>(0x3614), 0x50 },
@@ -361,6 +373,12 @@ static constexpr OV5645::RegisterValuePair ov5645SXGA[] = {
 };
 
 // From Linux driver: https://github.com/torvalds/linux/blob/master/drivers/media/i2c/ov5645.c
+// Mode: FHD (1920x1088) | 1:1 Center Crop from 1952x1096 (X: 336..2287, Y: 430..1525)
+// Total Frame (HTS x VTS): 2500 x 1120 (Min blanking floor in SetFPS)
+// Effective Output:        1920 x 1088 (DVPHO x DVPVO)
+// Pixel Readout (SCLK):    84 MHz (PLL1 = 672 MHz, SDIV0 = 1; PCLK = 168 MHz)
+// MIPI Clock (2-Lane DDR): 336 MHz (672 Mbps/lane, 1344 Mbps total)
+// Frame Rate (Def / Max):  30.0 FPS default | 30.0 FPS max
 static constexpr OV5645::RegisterValuePair ov5645FHD[] = {
 	{ static_cast<OV5645::Register>(0x3612), 0xab },
 	{ static_cast<OV5645::Register>(0x3614), 0x50 },
@@ -420,6 +438,12 @@ static constexpr OV5645::RegisterValuePair ov5645FHD[] = {
 };
 
 // From Linux driver: https://github.com/torvalds/linux/blob/master/drivers/media/i2c/ov5645.c
+// Mode: QSXGA (2592x1944) | 1:1 Full Sensor Readout from 2624x1952 (X: 0..2623, Y: 0..1951)
+// Total Frame (HTS x VTS): 2844 x 1968 (Min blanking floor in SetFPS)
+// Effective Output:        2592 x 1944 (DVPHO x DVPVO)
+// Pixel Readout (SCLK):    84 MHz (PLL1 = 672 MHz, SDIV0 = 1; PCLK = 168 MHz)
+// MIPI Clock (2-Lane DDR): 336 MHz (672 Mbps/lane, 1344 Mbps total)
+// Frame Rate (Def / Max):  15.0 FPS default | 15.0 FPS max
 static constexpr OV5645::RegisterValuePair ov5645QSXGA[] = {
 	{ static_cast<OV5645::Register>(0x3612), 0xab },
 	{ static_cast<OV5645::Register>(0x3614), 0x50 },
@@ -470,6 +494,12 @@ static constexpr OV5645::RegisterValuePair ov5645QSXGA[] = {
 	{ static_cast<OV5645::Register>(0x4202), 0x00 }
 };
 
+// Mode: QHD (2560x1440) | 1:1 Center Crop from 2592x1448 (X: 16..2607, Y: 252..1699)
+// Total Frame (HTS x VTS): 2844 x 1968 (Min blanking floor in SetFPS; VTS can be lowered to 1472 for 20 FPS)
+// Effective Output:        2560 x 1440 (DVPHO x DVPVO)
+// Pixel Readout (SCLK):    84 MHz (PLL1 = 672 MHz, SDIV0 = 1; PCLK = 168 MHz)
+// MIPI Clock (2-Lane DDR): 336 MHz (672 Mbps/lane, 1344 Mbps total)
+// Frame Rate (Def / Max):  15.0 FPS default | 15.0 FPS max
 static constexpr OV5645::RegisterValuePair ov5645QHD[] = {
 	{ static_cast<OV5645::Register>(0x3612), 0xab },
 	{ static_cast<OV5645::Register>(0x3614), 0x50 },

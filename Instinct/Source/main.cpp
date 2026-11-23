@@ -12,6 +12,7 @@
 #include "auxiliaryThread.hpp"
 #include "commanderThread.hpp"
 #include "controllerThread.hpp"
+#include "cvThread.hpp"
 #include "estimatorThread.hpp"
 #include "inertialThread.hpp"
 #include "instinctLink.hpp"
@@ -95,8 +96,7 @@ void ZenohThread(ULONG thread_input) {
 	// }
 
 	while(1) {
-		ledGreen.Toggle();
-		tx_thread_sleep(100);
+		tx_thread_sleep(1000);
 	}
 }
 
@@ -207,18 +207,19 @@ void tx_application_define(void *first_unused_memory) {
 	MonitorThread::Init();
 	StorageThread::Init();
 	VisionThread::Init();
+	CVThread::Init();
 	LoggerThread::Init();
-	// InertialThread::Init();
-	// AuxiliaryThread::Init();
-	// OpticalFlowThread::Init();
-	// RadioThread::Init();
+	InertialThread::Init();
+	AuxiliaryThread::Init();
+	OpticalFlowThread::Init();
+	RadioThread::Init();
 	// MavlinkThread::Init(&gps1);
-	// SensorHubThread::Init();
-	// EstimatorThread::Init();
-	// ControllerThread::Init();
-	// CommanderThread::Init();
-	// ActuatorThread::Init();
-	// InstinctLink::Init(&telem2);
+	SensorHubThread::Init();
+	EstimatorThread::Init();
+	CommanderThread::Init();
+	ControllerThread::Init();
+	ActuatorThread::Init();
+	InstinctLink::Init(&telem2);
 
 	// Configure blackbox (data logging to SD card) logging profile
 	// BlackboxConfig::ApplyTuningProfile();

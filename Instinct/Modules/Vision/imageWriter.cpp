@@ -34,7 +34,7 @@ Status ImageWriter::SaveBMP(const VisionFrame& frame, FX_MEDIA& media, const cha
 			compressionMode = 3; 
 			headerSize = 512; // 54 byte standard + 12 byte masks + padding
 			break;
-		case PixelFormat::Grayscale:
+		case PixelFormat::Mono:
 		case PixelFormat::BayerRaw8:
 			bytesPerPixel = 1;
 			bitsPerPixel = 8;
@@ -130,7 +130,7 @@ Status ImageWriter::SaveBMP(const VisionFrame& frame, FX_MEDIA& media, const cha
 		bmpHeader[64] = 0x00;
 		bmpHeader[65] = 0x00;
 	}
-	else if(frame.format == PixelFormat::Grayscale || frame.format == PixelFormat::BayerRaw8) {
+	else if(frame.format == PixelFormat::Mono || frame.format == PixelFormat::BayerRaw8) {
 		// Generate a standard 256-color grayscale palette
 		for (int i = 0; i < 256; i++) {
 			bmpHeader[54 + (i * 4)] = i; // Blue

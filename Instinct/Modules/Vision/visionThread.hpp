@@ -35,6 +35,7 @@ class VisionThread {
 		struct Statistics {
 			// Rates and Throughput
 			float fps = 0.0f;
+			float minFPS = 1000.0f;				///< Minimum FPS (worst case)
 			uint32_t bitrateBps = 0;
 			float compression = 0.0f;			///< Compression ratio: Raw size / Compressed size
 			float compressionMin = 1000.0f;		///< Minimum compression ratio (worst case): Raw size / Compressed size

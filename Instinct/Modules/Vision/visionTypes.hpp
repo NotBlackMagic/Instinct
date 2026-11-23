@@ -44,7 +44,7 @@ enum class PixelFormat : uint8_t {
 	BayerRaw8,
 	BayerRaw10,
 	// Fallback for compressed buffers
-	Grayscale,
+	Mono,
 	Unknown
 };
 

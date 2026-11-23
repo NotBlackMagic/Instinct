@@ -247,8 +247,8 @@ class OV5645 {
 		Config config;
 
 		SensorInfo sensorInfo;
-		uint32_t mipiBitrate;
-		uint32_t sysClk = 84000000;
+		uint32_t mipiBitrate;			// MIPI interface bitrate
+		uint32_t sysClk = 84000000;		// System clock i.e. pixel readout rate
 		bool afInitialized = false;
 
 		static constexpr uint16_t transferSize = 32;

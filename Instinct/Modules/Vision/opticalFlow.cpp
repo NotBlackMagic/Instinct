@@ -52,7 +52,7 @@ void OpticalFlow::Reset() {
 }
 
 __attribute__((section(".itcm_text"))) Status OpticalFlow::Process(const VisionFrame& frame, const float gyro[3]) {
-	if(this->isInitialized == false || frame.startAddress == nullptr || frame.width != rawWidth || frame.height != rawHeight || frame.format != PixelFormat::Grayscale) {
+	if(this->isInitialized == false || frame.startAddress == nullptr || frame.width != rawWidth || frame.height != rawHeight || frame.format != PixelFormat::Mono) {
 		return Status::Error;
 	}
 

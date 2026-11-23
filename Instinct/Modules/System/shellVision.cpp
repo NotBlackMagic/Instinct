@@ -38,7 +38,7 @@ static bool CommandVision(const char* args) {
 		VisionThread::Statistics stats = VisionThread::GetStatistics();
 
 		Logger::Instance().Write("\r\n--- VISION PIPELINE STATS ---\r\n");
-		Logger::Instance().Printf("  FPS:         %.1f\r\n", stats.fps);
+		Logger::Instance().Printf("  FPS:         %.1f (Min %0.1f)\r\n", stats.fps, stats.minFPS);
 		Logger::Instance().Printf("  Frames:      %lu (UVC Drop: %lu, Restarts: %lu)\r\n", stats.totalFrames, stats.uvcDroppedCount, stats.pipelineRestarts);
 		Logger::Instance().Printf("  Bitrate:     %lu kbps (%lu B/frame)\r\n", stats.bitrateBps / 1000, stats.lastFrameBytes);
 		Logger::Instance().Printf("  Compression: %.1fx (Min %.1fx)\r\n", stats.compression, stats.compressionMin);

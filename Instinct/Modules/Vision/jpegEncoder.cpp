@@ -87,7 +87,7 @@ Status JPEGEncoder::EncodeAsync(const VisionFrame& inputFrame, VisionFrame& outp
 		params.colorSpace = Jpeg::ColorSpace::YCbCr;
 		params.subsampling = Jpeg::Subsampling::YUV422;
 	}
-	else if(inputFrame.format == PixelFormat::Grayscale) {
+	else if(inputFrame.format == PixelFormat::Mono) {
 		params.colorSpace = Jpeg::ColorSpace::Grayscale;
 		params.subsampling = Jpeg::Subsampling::None;
 	}

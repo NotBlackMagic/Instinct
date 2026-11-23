@@ -9,8 +9,8 @@
 
 static uint8_t payloadBuffer[MAX_PAYLOAD_SIZE];
 
-uint16_t CalculateCRC16(const uint8_t *data, uint16_t len) {
-	uint16_t crc = 0xFFFF;
+uint16_t CalculateCRC16(const uint8_t *data, uint16_t len, uint16_t seed) {
+	uint16_t crc = seed;
 	for(uint16_t i = 0; i < len; i++) {
 		crc ^= (uint16_t)data[i] << 8;
 		for(uint8_t bit = 0; bit < 8; bit++) {
@@ -25,8 +25,8 @@ uint16_t CalculateCRC16(const uint8_t *data, uint16_t len) {
 	return crc;
 }
 
-uint32_t CalculateCRC32(const uint8_t *data, uint32_t len) {
-	uint32_t crc = 0xFFFFFFFF;
+uint32_t CalculateCRC32(const uint8_t *data, uint32_t len, uint32_t seed) {
+	uint32_t crc = seed;
 	for(uint32_t i = 0; i < len; i++) {
 		crc ^= data[i];
 		for(uint8_t bit = 0; bit < 8; bit++) {
@@ -73,33 +73,57 @@ Status LoaderRead(UART *uart, uint8_t *dest, uint32_t count, uint32_t timeout) {
 	return Status::Ok;
 }
 
-Status LoaderFWToPSRAM(UART *uart, uint32_t ramAddr, uint32_t &fwSize) {
+Status LoaderFWToPSRAM(UART *uart, uint32_t ramAddr, uint32_t &fwSize, uint32_t timeout) {
 	DownloadStatus context = {
 		.size = 0,
 		.count = 0,
 		.crc32 = 0,
+		.lastSequence = 0,
 		.nextSequence = 0,
 		.active = false
 	};
 
-	uint8_t *stagingRAM = (uint8_t *)ramAddr;
+	const uint32_t defaultBaud = 115200;
+	uint32_t currentBaud = defaultBaud;
 
-	// Flush any pending RX bytes (like stray terminal input)
+	uint8_t *stagingRAM = (uint8_t *)ramAddr;
 	uint8_t buf[64];
-	while(uart->Available() > 0) {
-		uart->Receive(buf, sizeof(buf));
-	}
+	uint32_t timestamp = Time::GetMs();
+	bool synced = false;
 
 	while(1) {
-		// Wait for Sync word pattern of: 0x55 0xAA
-		uint8_t byte = 0;
-		if(LoaderRead(uart, &byte, 1, 100) != Status::Ok || byte != SYNC_0) {
-			continue;
-		}
-		if(LoaderRead(uart, &byte, 1, 50) != Status::Ok || byte != SYNC_1) {
-			continue;
+		// Safety timeout if no new packet during timeout period
+		if((Time::GetMs() - timestamp) > timeout) {
+			if(currentBaud != defaultBaud) {
+				// Restore default baudrate
+				uart->SetBaudrate(defaultBaud);
+			}
+			return Status::Timeout;
 		}
 
+		// Wait for Sync word pattern of: 0x55 0xAA
+		uint8_t byte = 0;
+		if(synced == false) {
+			if(LoaderRead(uart, &byte, 1, 50) != Status::Ok || byte != SYNC_0) {
+				// Not sync word pattern, loop again
+				continue;
+			}
+			// Reached only when sync word pattern is found
+			synced = true;
+		}
+
+		if(LoaderRead(uart, &byte, 1, 50) != Status::Ok) {
+			synced = false;
+			continue;
+		}
+		if(byte == SYNC_0) {
+			continue; // Stay synced on repeated 0x55
+		}
+		synced = false;
+		if(byte != SYNC_1) {
+			continue;
+		}
+		
 		// Read Frame Header (Command: 1B, Sequence: 1B, Length: 2B)
 		uint8_t header[4];
 		if(LoaderRead(uart, header, 4, 100) != Status::Ok) {
@@ -125,52 +149,63 @@ Status LoaderFWToPSRAM(UART *uart, uint32_t ramAddr, uint32_t &fwSize) {
 			continue;
 		}
 
-		uint16_t rxCRC = (uint16_t)(buf[0] | (buf[1] << 8));
-
 		// Calculate and validate Packet CRC16
-		uint16_t calcCRC = 0xFFFF;
+		uint16_t rxCRC = (uint16_t)(buf[0] | (buf[1] << 8));
 		// Feed header
-		for(uint8_t i = 0; i < 4; i++) {
-			calcCRC ^= (uint16_t)header[i] << 8;
-			for(uint8_t bit = 0; bit < 8; bit++) {
-				calcCRC = (calcCRC & 0x8000) ? ((calcCRC << 1) ^ 0x1021) : (calcCRC << 1);
-			}
-		}
+		uint16_t calcCRC = CalculateCRC16(header, 4);
 		// Feed payload
-		for(uint16_t i = 0; i < length; i++) {
-			calcCRC ^= (uint16_t)payloadBuffer[i] << 8;
-			for(uint8_t bit = 0; bit < 8; bit++) {
-				calcCRC = (calcCRC & 0x8000) ? ((calcCRC << 1) ^ 0x1021) : (calcCRC << 1);
-			}
+		if(length > 0) {
+			calcCRC = CalculateCRC16(payloadBuffer, length, calcCRC);
 		}
-
 		if(calcCRC != rxCRC) {
 			LoaderWrite(uart, BootResponse::NACK, sequence, BootError::BadCRC);
 			continue;
 		}
 
+		timestamp = Time::GetMs();
+
 		// Handle Commands
 		switch(command) {
 			case BootCommand::Ping: {
+				if(length != 0) {
+					LoaderWrite(uart, BootResponse::NACK, sequence, BootError::UnexpectedState);
+					break;
+				}
 				LoaderWrite(uart, BootResponse::ACK, sequence, BootError::None);
 				break;
 			}
+			case BootCommand::SetBaud: {
+				if(length != 4) {
+					LoaderWrite(uart, BootResponse::NACK, sequence, BootError::UnexpectedState);
+					break;
+				}
+				uint32_t newBaud = ((uint32_t)payloadBuffer[3] << 24) |
+									((uint32_t)payloadBuffer[2] << 16) |
+									((uint32_t)payloadBuffer[1] << 8)  |
+									((uint32_t)payloadBuffer[0]);
 
+				LoaderWrite(uart, BootResponse::ACK, sequence, BootError::None);
+				uart->Flush();			// Wait for hardware TC flag before changing BRR
+				if(uart->SetBaudrate(newBaud) == Status::Ok) {
+					currentBaud = newBaud;
+				}
+				break;
+			}
 			case BootCommand::Start: {
 				if(length != 8) {
 					LoaderWrite(uart, BootResponse::NACK, sequence, BootError::UnexpectedState);
 					break;
 				}
 
-				context.size =	((uint32_t)payloadBuffer[0]) | 
-								((uint32_t)payloadBuffer[1] << 8) | 
-								((uint32_t)payloadBuffer[2] << 16) | 
-								((uint32_t)payloadBuffer[3] << 24);
+				context.size =	((uint32_t)payloadBuffer[3] << 24) |
+								((uint32_t)payloadBuffer[2] << 16) |
+								((uint32_t)payloadBuffer[1] << 8)  |
+								((uint32_t)payloadBuffer[0]);
 
-				context.crc32 = ((uint32_t)payloadBuffer[4]) | 
-								((uint32_t)payloadBuffer[5] << 8) | 
-								((uint32_t)payloadBuffer[6] << 16) | 
-								((uint32_t)payloadBuffer[7] << 24);
+				context.crc32 = ((uint32_t)payloadBuffer[7] << 24) |
+								((uint32_t)payloadBuffer[6] << 16) |
+								((uint32_t)payloadBuffer[5] << 8)  |
+								((uint32_t)payloadBuffer[4]);
 
 				if(context.size == 0 || context.size > APP_MAX_SIZE) {
 					LoaderWrite(uart, BootResponse::NACK, sequence, BootError::SizeExceeded);
@@ -178,17 +213,23 @@ Status LoaderFWToPSRAM(UART *uart, uint32_t ramAddr, uint32_t &fwSize) {
 				}
 
 				context.count = 0;
+				context.lastSequence = sequence;
 				context.nextSequence = (uint8_t)(sequence + 1);
 				context.active = true;
 
-				LOG_INFO("UART FW flashing: Download started. Size: %lu bytes", context.size);
+				// LOG_INFO("UART FW flashing: Download started. Size: %lu bytes", context.size);
 				LoaderWrite(uart, BootResponse::ACK, sequence, BootError::None);
 				break;
 			}
-
 			case BootCommand::Data: {
 				if(context.active == false) {
 					LoaderWrite(uart, BootResponse::NACK, sequence, BootError::UnexpectedState);
+					break;
+				}
+
+				// Handle retry if host missed previous ACK
+				if(context.count > 0 && sequence == context.lastSequence) {
+					LoaderWrite(uart, BootResponse::ACK, sequence, BootError::None);
 					break;
 				}
 
@@ -202,17 +243,17 @@ Status LoaderFWToPSRAM(UART *uart, uint32_t ramAddr, uint32_t &fwSize) {
 					break;
 				}
 
-				// Copy chunk to HyperRAM (PSRAM)
+				// Copy chunk to staging RAM
 				memcpy(&stagingRAM[context.count], payloadBuffer, length);
 				context.count = context.count + length;
-				context.nextSequence = context.nextSequence + 1;
+				context.lastSequence = sequence;
+				context.nextSequence = (uint8_t)(context.nextSequence + 1);
 
 				LoaderWrite(uart, BootResponse::ACK, sequence, BootError::None);
 				break;
 			}
-
 			case BootCommand::Finish: {
-				if(context.active == false || (context.count != context.size)) {
+				if(context.active == false || (context.count != context.size) || length != 0) {
 					LoaderWrite(uart, BootResponse::NACK, sequence, BootError::UnexpectedState);
 					break;
 				}
@@ -225,19 +266,27 @@ Status LoaderFWToPSRAM(UART *uart, uint32_t ramAddr, uint32_t &fwSize) {
 				uint32_t calcCRC = CalculateCRC32(stagingRAM, context.count);
 				if(calcCRC != context.crc32) {
 					LoaderWrite(uart, BootResponse::NACK, sequence, BootError::ImageCRCMismatch);
-					LOG_ERR("UART FW flashing: CRC32 mismatch! Exp: 0x%08lX Calc: 0x%08lX", (unsigned long)context.crc32, (unsigned long)calcCRC);
+					uart->Flush();
+					if(currentBaud != defaultBaud) {
+						// Restore default baudrate
+						uart->SetBaudrate(defaultBaud);
+					}
+					// LOG_ERR("UART FW flashing: CRC32 mismatch! Exp: 0x%08lX Calc: 0x%08lX", (unsigned long)context.crc32, (unsigned long)calcCRC);
 					context.active = false;
 					return Status::Error;
 				}
 
 				LoaderWrite(uart, BootResponse::ACK, sequence, BootError::None);
-				LOG_INFO("UART FW flashing: FW ready in PSRAM (%lu bytes, CRC32: 0x%08lX)", context.count, (unsigned long)calcCRC);
+				// LOG_INFO("UART FW flashing: FW ready in PSRAM (%lu bytes, CRC32: 0x%08lX)", context.count, (unsigned long)calcCRC);
 				// Flush UART
 				uart->Flush();
+				if(currentBaud != defaultBaud) {
+					// Restore default baudrate
+					uart->SetBaudrate(defaultBaud);
+				}
 				fwSize = context.count;
 				return Status::Ok;
 			}
-
 			default: {
 				LoaderWrite(uart, BootResponse::NACK, sequence, BootError::UnexpectedState);
 				break;

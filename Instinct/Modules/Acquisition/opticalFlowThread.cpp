@@ -78,7 +78,7 @@ void OpticalFlowThread::Run(ULONG input) {
 	uint32_t camWidth = 256;
 	uint32_t camHeight = 256;
 	uint8_t camFPS = 30;
-	PixelFormat camFormat = PixelFormat::Grayscale;
+	PixelFormat camFormat = PixelFormat::Mono;
 
 	// Initialize OpticalFlow solver
 	OpticalFlow::Config flowCfg;

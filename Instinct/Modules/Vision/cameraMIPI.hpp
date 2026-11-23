@@ -35,12 +35,24 @@ class CameraMIPI {
 			float fps = 0.0f;
 		};
 
-		/// @brief Configuration structure for the HD/MIPI-CSI Camera Pipeline.
+		/// @brief Configuration structure for the HD/MIPI-CSI Camera Sensor.
 		struct Config {
-			uint16_t width;			///< Image width in pixels.
-			uint16_t height;		///< Image height in pixels.
-			PixelFormat format;		///< Pixel format.
-			uint32_t fps;			///< Frame rate.
+			uint16_t width;			///< Sensor output width in pixels.
+			uint16_t height;		///< Sensor output height in pixels.
+			PixelFormat format;		///< Default Main pipe pixel format.
+			uint32_t fps;			///< Sensor frame rate.
+		};
+
+		/// @brief Per-pipe output stream configuration.
+		struct StreamConfig {
+			uint16_t width = 0;			///< Output width in pixels (0 = full active input width).
+			uint16_t height = 0;		///< Output height in pixels (0 = full active input height).
+			PixelFormat format = PixelFormat::YUV422_YUYV;
+			Dcmipp::FrameRateDecimation frameRate = Dcmipp::FrameRateDecimation::All;
+			uint16_t cropX = 0;			///< Optional crop X offset in pixels.
+			uint16_t cropY = 0;			///< Optional crop Y offset in pixels.
+			uint16_t cropWidth = 0;		///< Optional crop width in pixels (0 = no crop).
+			uint16_t cropHeight = 0;	///< Optional crop height in pixels (0 = no crop).
 		};
 
 		// Delete copy constructors
@@ -57,27 +69,41 @@ class CameraMIPI {
 		/// @return Status::Ok if initialization succeeded, or Status::Error if the config was invalid or failed.
 		Status Init(const Config &config);
 
-		/// @brief Starts a non-blocking single frame grab.
-		/// @param buffer Frame buffer structure.
-		/// @return Status::Ok if the transfer started, or Status::Busy if device is locked by another thread, or Status::Error if failed.
-		Status CaptureAsync(VisionFrame &buffer);
+		/// @brief Configures resolution, format, cropping, and frame rate decimation for a specific DCMIPP pipe.
+		/// @param pipe		Aaa
+		/// @param config	aA
+		/// @return Status::Ok
+		Status ConfigurePipe(Dcmipp::PipeID pipe, const StreamConfig &config);
 
-		/// @brief Starts continuous double-buffered capture.
+		/// @brief Starts a non-blocking single frame grab (Snapshot) on the specified pipe.
+		/// @param pipe		DCMIPP Pipe to capture from.
+		/// @param buffer	Frame buffer structure.
+		/// @return Status::Ok if the transfer started, or Status::Busy if device is locked by another thread, or Status::Error if failed.
+		Status CaptureAsync(Dcmipp::PipeID pipe, VisionFrame &buffer);
+
+		/// @brief Starts continuous double-buffered capture on the specified pipe.
+		/// @param pipe		DCMIPP Pipe to capture from.
 		/// @param buffer0 Frame buffer A structure (double buffer).
 		/// @param buffer1 Frame buffer B structure (double buffer).
 		/// @return Status::Ok if the transfer started, or Status::Busy if device is locked by another thread, or Status::Error if failed.
-		Status CaptureAsync(VisionFrame &buffer0, VisionFrame &buffer1);
+		Status CaptureAsync(Dcmipp::PipeID pipe, VisionFrame &buffer0, VisionFrame &buffer1);
 
-		Status CaptureAsync(VisionFrame &buffer, Dcmipp::LineCount lineMult, Dcmipp::LineCount wrapAddress);
+		/// @brief Starts continuous line-wrapping capture on the specified pipe (ONLY for Pipe 1 or Pipe 2).
+		/// @param pipe			DCMIPP Pipe to capture from.
+		/// @param buffer		Line buffer structure.
+		/// @param lineMult		Aaa
+		/// @param wrapAddress	Aaa
+		/// @return Status::Ok if the transfer started, or Status::Busy if device is locked by another thread, or Status::Error if failed.
+		Status CaptureAsync(Dcmipp::PipeID pipe, VisionFrame &buffer, Dcmipp::LineCount lineMult, Dcmipp::LineCount wrapAddress);
 
-		/// @brief Blocks until the next frame (or buffer) is complete, handling cache invalidation automatically.
-		/// @param timeoutTicks Max wait time in OS ticks.
+		/// @brief Blocks until the next frame completes on the specified pipe, handling cache invalidation automatically.
+		/// @param timeout Max wait time in OS ticks.
 		/// @return Status::Ok if the transfer completed successfully, Status::Timeout if it expired, or Status::Error on hardware faults.
-		Status CaptureWait(uint32_t timeoutTicks);
+		Status CaptureWait(Dcmipp::PipeID pipe, uint32_t timeout);
 
-		/// @brief Aborts a ongoing capture.
+		/// @brief Aborts an ongoing capture on the specified pipe.
 		/// @return Status::Ok
-		Status CaptureAbort();
+		Status CaptureAbort(Dcmipp::PipeID pipe);
 
 		/// @brief Expose a reference to the sensor
 		/// @return Camera instance.
@@ -90,12 +116,13 @@ class CameraMIPI {
 		Csi::Statistics GetCSIStatistics() const { return csiInterface.GetStatistics(); }
 
 		/// @brief Returns pipeline performance statistics.
-		Statistics GetStatistics() const { return this->stats; }
+		Statistics GetStatistics(Dcmipp::PipeID pipe = Dcmipp::PipeID::Main) const { return this->pipeCtx[static_cast<uint8_t>(pipe)].stats; }
 
 		/// @brief Resets pipeline statistics counters.
-		void ResetStatistics() {
-			this->stats = {};
-			this->timestamp = 0;
+		void ResetStatistics(Dcmipp::PipeID pipe = Dcmipp::PipeID::Main) {
+			uint8_t idx = static_cast<uint8_t>(pipe);
+			this->pipeCtx[idx].stats = {};
+			this->pipeCtx[idx].timestamp = 0;
 		}
 
 	private:
@@ -104,12 +131,22 @@ class CameraMIPI {
 		OV5645& sensor;
 		DMAChannel& dmaChannel;
 
-		Statistics stats = {};
-		uint32_t timestamp = 0;
+		Config sensorConfig = {};
+		Csi::MIPIDataType mipiDataType = Csi::MIPIDataType::YUV422_8bit;
+		uint8_t activePipeMask = 0;
 
 		// Capture context
 		enum class Mode { Idle, Snapshot, Continuous, Partial };
-		Mode currentMode = Mode::Idle;
-		uint8_t currentFrameIdx = 0;
-		VisionFrame* activeFrames[2] = {nullptr, nullptr};
+
+		struct PipeContext {
+			Mode mode = Mode::Idle;
+			uint8_t currentFrameIdx = 0;
+			VisionFrame* activeFrames[2] = {nullptr, nullptr};
+			Statistics stats = {};
+			uint32_t timestamp = 0;
+		};
+		PipeContext pipeCtx[3];
+
+		Status StartSensor(Dcmipp::PipeID pipe);
+		void StopSensor(Dcmipp::PipeID pipe);
 };

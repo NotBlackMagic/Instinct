@@ -269,7 +269,7 @@ void ControllerThread::Run(ULONG input) {
 
 			// Publish
 			actuatorMsg.timestamp = stateMsg.timestamp;
-			topicActuators.Publish(actuatorMsg);
+			// topicActuators.Publish(actuatorMsg);
 		}
 		else {
 			// Safeguard: If the middleware queue fails, force a yield.

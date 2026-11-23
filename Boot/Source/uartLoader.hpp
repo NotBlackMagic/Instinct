@@ -25,9 +25,10 @@
 /// @brief UART loader command defines.
 enum BootCommand : uint8_t {
 	Ping = 0x01,
-	Start = 0x02,
-	Data = 0x03,
-	Finish = 0x04
+	SetBaud = 0x02,
+	Start = 0x03,
+	Data = 0x04,
+	Finish = 0x05
 };
 
 /// @brief UART loader command responses defines.
@@ -52,6 +53,7 @@ struct DownloadStatus {
 	uint32_t size;			///< Expected Firmware size, parsed from header/first packet
 	uint32_t count;			///< Keeps track of received bytes so far
 	uint32_t crc32;			///< Expected Firmware CRC32, parsed from header/first packet
+	uint8_t lastSequence;	///< Keeps track of current sequence
 	uint8_t nextSequence;	///< Keeps track of next sequence
 	bool active;			///< Current Firmware download session status
 };
@@ -60,13 +62,13 @@ struct DownloadStatus {
 /// @param data Pointer to data array
 /// @param len	Length of data array
 /// @return Calculated CR16 value
-uint16_t CalculateCRC16(const uint8_t *data, uint16_t len);
+uint16_t CalculateCRC16(const uint8_t *data, uint16_t len, uint16_t seed = 0xFFFF);
 
 /// @brief Calculates CRC32, using 0xEDB88320U polynomial, for passed data array.
 /// @param data Pointer to data array
 /// @param len	Length of data array
 /// @return Calculated CRC32 value
-uint32_t CalculateCRC32(const uint8_t *data, uint32_t len);
+uint32_t CalculateCRC32(const uint8_t *data, uint32_t len, uint32_t seed = 0xFFFFFFFF);
 
 /// @brief Helper function to write UART loader packets.
 /// @param uart			Pointer to used UART instance
@@ -88,5 +90,6 @@ Status LoaderRead(UART *uart, uint8_t *dest, uint32_t count, uint32_t timeout);
 /// @param uart		Pointer to used UART instance
 /// @param ramAddr	RAM address to staging area (where the received firmware will be written)
 /// @param fwSize	Returns size of the received firmware
+/// @param timeout	Timeout between UART messages
 /// @return Status::Ok if full firmware received and CRC check passes, Status::Error otherwise.
-Status LoaderFWToPSRAM(UART *uart, uint32_t ramAddr, uint32_t &fwSize);
+Status LoaderFWToPSRAM(UART *uart, uint32_t ramAddr, uint32_t &fwSize, uint32_t timeout);

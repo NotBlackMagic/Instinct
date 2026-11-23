@@ -13,8 +13,7 @@ __attribute__((aligned(32))) uint8_t VisionThread::threadStack[VisionThread::thr
 VisionThread::Statistics VisionThread::stats = {};
 uint32_t VisionThread::pipelineRestartCounter = 0;
 
-const uint32_t rawBufSize = 1920 * 64 * 2;
-__attribute__((section(".axisram1"), aligned(32))) uint8_t rawFrameBuf[rawBufSize];
+__attribute__((section(".axisram1"), aligned(32))) uint8_t rawFrameBuf[1920 * 64 * 2];
 
 static VisionFrame rawFrameBuffer[2];
 static VisionFrame processedFrameBuffer;
@@ -125,7 +124,7 @@ void VisionThread::Run(ULONG input) {
 #if USE_LINE_MODE
 	constexpr Dcmipp::LineCount lineWrap = Dcmipp::LineCount::Lines64;
 	constexpr Dcmipp::LineCount lineTrigger = Dcmipp::LineCount::Lines32;
-	// vv For statistics/metering only vv
+	// For statistics/metering only
 	constexpr uint32_t wrapLines = 1U << static_cast<uint32_t>(lineWrap);
 	constexpr uint32_t triggerLines = 1U << static_cast<uint32_t>(lineTrigger);
 	const float numSlices = static_cast<float>(camHeight) / static_cast<float>(triggerLines);
@@ -152,6 +151,51 @@ void VisionThread::Run(ULONG input) {
 	tx_thread_sleep(1000);
 	// cameraHD.GetSensor().SetTestPattern(true);
 
+	// Configure Pipes (DCMIPP has 3 output pipes that can be used)
+	// Pipe 0 (Dump): Full-res snapshots
+	CameraMIPI::StreamConfig dumpCfg;
+	dumpCfg.format = PixelFormat::YUV422_YUYV;
+	status = cameraHD.ConfigurePipe(Dcmipp::PipeID::Dump, dumpCfg);
+	if(status != Status::Ok) {
+		LOG_ERR("HD-CAM Pipe 0 (Dump) Init Failed.");
+		while(1) {
+			tx_thread_sleep(1000);
+		}
+	}
+	LOG_INFO("HD-CAM Pipe 0 (Dump) Initialized.");
+	// Pipe 1 (Main): Crop 16:9 and downscale to 1920x1080 for VENC
+	CameraMIPI::StreamConfig mainCfg;
+	mainCfg.width = 1920;
+	mainCfg.height = 1088;
+	mainCfg.format = PixelFormat::YUV422_YUYV;
+	status = cameraHD.ConfigurePipe(Dcmipp::PipeID::Main, mainCfg);
+	if(status != Status::Ok) {
+		LOG_ERR("HD-CAM Pipe 1 (Main) Init Failed.");
+		while(1) {
+			tx_thread_sleep(1000);
+		}
+	}
+	LOG_INFO("HD-CAM Pipe 1 (Main) Initialized.");
+	// Pipe 2 (Auxiliary):Center-cropped 1:1 downscaled to 320x320 at 1/2 FPS
+	CameraMIPI::StreamConfig auxCfg;
+	auxCfg.width = 320;
+	auxCfg.height = 320;
+	auxCfg.format = PixelFormat::YUV422_YUYV;
+	auxCfg.frameRate = Dcmipp::FrameRateDecimation::Half;
+	auxCfg.cropX = 416;
+	auxCfg.cropY = 0;
+	auxCfg.cropWidth = 1088;
+	auxCfg.cropHeight = 1088;
+	status = cameraHD.ConfigurePipe(Dcmipp::PipeID::Auxiliary, auxCfg);
+	if(status != Status::Ok) {
+		LOG_ERR("HD-CAM Pipe 2 (Aux) Init Failed.");
+		while(1) {
+			tx_thread_sleep(1000);
+		}
+	}
+	LOG_INFO("HD-CAM Pipe 2 (Aux) Initialized.");
+
+
 	// Dedicated (legacy) JPEG Encoder Initialization
 	status = jpegEncoder.Init();
 	if(status != Status::Ok) {
@@ -168,11 +212,9 @@ void VisionThread::Run(ULONG input) {
 	vencConfig.enableStreamingMode = true;
 	vencConfig.lineWrap = static_cast<Venc::LineCount>(lineWrap);
 	vencConfig.lineTrigger = static_cast<Venc::LineCount>(lineTrigger);
-	// 64 lines = 4 MB rows per slice. Or 0 = encode whole frame as one slice
-	vencConfig.codingControl.sliceSize = 0;
+	vencConfig.codingControl.sliceSize = 0;		// 0 = encode whole frame as one slice
 #else
 	vencConfig.enableStreamingMode = false;
-	vencConfig.codingControl.sliceSize = 0;	// 0 = encode whole frame as one slice
 #endif
 	vencConfig.codec = Venc::Codec::H264;
 	vencConfig.imageParams.width = camWidth;
@@ -199,7 +241,7 @@ void VisionThread::Run(ULONG input) {
 	// Note: VENC always stores internal reference frames in 4:2:0 (1.5 B/px), regardless of input format.
 	//	Reference frames: W * H * 3.0 B (Double-buffered: 2 Luma + 2 Chroma = 6.27 MB @ 1920x1088)
 	//	Shared + SW bufs: W * H * 0.16 B + 54 KB (MV, NAL, CABAC tables = 0.38 MB @ 1920x1088)
-	// Minimum pool size = (W * H * 3.16) + 64 KB  (~6.7 MB for 1080p)
+	// Minimum pool size = (W * H * 3.16) + 64 KB (~6.7 MB for 1080p)
 	vencConfig.poolSize = 8 * 1024 * 1024;
 	vencConfig.poolAddress = externalPSRAM.Allocate(vencConfig.poolSize, 32);
 	status = vencEncoder.Init(vencConfig);
@@ -213,7 +255,7 @@ void VisionThread::Run(ULONG input) {
 
 	// Buffer sizing
 #if USE_LINE_MODE
-	// uint32_t rawBufSize = camWidth * wrapLines * 2;
+	uint32_t rawBufSize = camWidth * wrapLines * 2;
 #else
 	uint32_t rawBufSize = camWidth * camHeight * 2;
 #endif
@@ -225,7 +267,10 @@ void VisionThread::Run(ULONG input) {
 	rawFrameBuffer[0].format = camFormat;
 	rawFrameBuffer[0].payloadSize = rawBufSize;
 	rawFrameBuffer[0].allocatedSize = rawBufSize;
-	rawFrameBuffer[0].startAddress = rawFrameBuf;	// externalPSRAM.Allocate(rawFrameBuffer[0].allocatedSize, 32);
+#if USE_LINE_MODE
+	rawFrameBuffer[0].startAddress = rawFrameBuf;
+#else
+	rawFrameBuffer[0].startAddress = externalPSRAM.Allocate(rawFrameBuffer[0].allocatedSize, 32);
 
 	rawFrameBuffer[1].width = camWidth;
 	rawFrameBuffer[1].height = camHeight;
@@ -233,6 +278,7 @@ void VisionThread::Run(ULONG input) {
 	rawFrameBuffer[1].payloadSize = rawBufSize;
 	rawFrameBuffer[1].allocatedSize = rawBufSize;
 	rawFrameBuffer[1].startAddress = externalPSRAM.Allocate(rawFrameBuffer[1].allocatedSize, 32);
+#endif
 
 	// processedFrameBuffer.format = PixelFormat::Unknown;	// Handled by processor
 	// processedFrameBuffer.width = camWidth;
@@ -307,10 +353,10 @@ void VisionThread::Run(ULONG input) {
 	if(captureEnabled == true) {
 #if USE_LINE_MODE
 		// Start continuous hardware line-wrapping capture
-		status = cameraHD.CaptureAsync(rawFrameBuffer[0], lineTrigger, lineWrap);
+		status = cameraHD.CaptureAsync(Dcmipp::PipeID::Main, rawFrameBuffer[0], lineTrigger, lineWrap);
 #else
 		// Start hardware continuous capture
-		status = cameraHD.CaptureAsync(rawFrameBuffer[0], rawFrameBuffer[1]);
+		status = cameraHD.CaptureAsync(Dcmipp::PipeID::Main, rawFrameBuffer[0], rawFrameBuffer[1]);
 #endif
 		if(status != Status::Ok) {
 			LOG_ERR("Failed to start HD-CAM capture.");
@@ -376,7 +422,7 @@ void VisionThread::Run(ULONG input) {
 		// Hardware Capture Start/Stop Gate
 		if(captureEnabled == false) {
 			if(hwCapturing == true) {
-				cameraHD.CaptureAbort();
+				cameraHD.CaptureAbort(Dcmipp::PipeID::Main);
 #if USE_LINE_MODE
 				vencEncoder.EncodeAbort();
 #endif
@@ -393,9 +439,9 @@ void VisionThread::Run(ULONG input) {
 		else {
 			if(hwCapturing == false) {
 #if USE_LINE_MODE
-				status = cameraHD.CaptureAsync(rawFrameBuffer[0], lineTrigger, lineWrap);
+				status = cameraHD.CaptureAsync(Dcmipp::PipeID::Main, rawFrameBuffer[0], lineTrigger, lineWrap);
 #else
-				status = cameraHD.CaptureAsync(rawFrameBuffer[0], rawFrameBuffer[1]);
+				status = cameraHD.CaptureAsync(Dcmipp::PipeID::Main, rawFrameBuffer[0], rawFrameBuffer[1]);
 #endif
 				if(status == Status::Ok) {
 					hwCapturing = true;
@@ -420,7 +466,7 @@ void VisionThread::Run(ULONG input) {
 				// status = cameraHD.CaptureAsync(rawFrameBuffer);
 				status = Status::Ok;
 				if(status == Status::Ok) {
-					status = cameraHD.CaptureWait(1000);
+					status = cameraHD.CaptureWait(Dcmipp::PipeID::Main, 1000);
 					// status = PatternGenerator::Checkerboard(rawFrameBuffer);
 					if(status == Status::Ok) {
 #if USE_LINE_MODE
@@ -548,46 +594,7 @@ void VisionThread::Run(ULONG input) {
 											}
 											saveSnapshot = false;
 										}
-										// // Open the file when recording starts
-										// fx_file_delete(StorageThread::GetMedia(), const_cast<char*>("vid.264"));
-										// if(fx_file_create(StorageThread::GetMedia(), const_cast<char*>("vid.264")) == FX_SUCCESS) {
-										// 	if(fx_file_open(StorageThread::GetMedia(), &videoFile, const_cast<char*>("vid.264"), FX_OPEN_FOR_WRITE) == FX_SUCCESS) {
-										// 		// Pre-allocate a contiguous space upfront, preventing FileX from searching the FAT table during write burst.
-										// 		UINT allocStatus = fx_file_allocate(&videoFile, 10 * 1024 * 1024);
-										// 		if(allocStatus == FX_SUCCESS) {
-										// 			// Write the SPS/PPS header
-										// 			UINT writeStatus = fx_file_write(&videoFile, spsPpsFrame.startAddress, spsPpsFrame.payloadSize);
-										// 			if(writeStatus == FX_SUCCESS) {
-										// 				isRecording = true;
-										// 				recordedFrames = 0;
-										// 				recordedSize = spsPpsFrame.payloadSize;
-										// 				LOG_INFO("Recording started");
-										// 			}
-										// 			else {
-										// 				LOG_ERR("Failed to write headers: %u", writeStatus);
-										// 				fx_file_close(&videoFile);
-										// 			}
-										// 		}
-										// 		else {
-										// 			LOG_ERR("Failed to pre-allocate file space: %u", allocStatus);
-										// 			fx_file_close(&videoFile);
-										// 		}
-										// 	}
-										// }
-										// saveSnapshot = false;
 									}
-									// if(StorageThread::IsReady() == true) {
-									// 	// Dynamic file name
-									// 	static uint32_t snapCounter = 0;
-									// 	char fileName[16];
-									// 	// snprintf(fileName, sizeof(fileName), "snap%04lu.bin", snapCounter++);
-									// 	// ImageWriter::SaveBMP(rawFrameBuffer, *StorageThread::GetMedia(), fileName);
-									// 	// ImageWriter::SaveBinary(rawFrameBuffer, *StorageThread::GetMedia(), fileName);
-									// 	snprintf(fileName, sizeof(fileName), "snap%04lu.jpeg", snapCounter++);
-									// 	ImageWriter::SaveBinary(jpegBuf, *StorageThread::GetMedia(), fileName);
-									// 	LOG_INFO("Saved to SD card. Size: %d kB", (jpegBuf.payloadSize >> 10));
-									// }
-									// saveSnapshot = false;
 								}
 								// Integrated Recording Stop Trigger (Requested stop from Shell/API)
 								else if(recordingRequested == false && isRecording == true) {
@@ -606,35 +613,6 @@ void VisionThread::Run(ULONG input) {
 										isRecording = false;
 										recordingRequested = false;
 									}
-
-									// if(recordedFrames >= 60) {
-									// 	ImageWriter::CloseStream(videoFile, *StorageThread::GetMedia());
-									// 	isRecording = false;
-									// 	recordingRequested = false;
-									// 	LOG_INFO("Recording finished! Saved %d frames, %d kB", recordedFrames, (recordedSize >> 10));
-									// }
-									
-									// if(StorageThread::IsReady() == true) {
-									// 	// Write frames sequentially without closing the file
-									// 	UINT writeStatus = fx_file_write(&videoFile, jpegBuf.startAddress, jpegBuf.payloadSize);
-									// 	if(writeStatus == FX_SUCCESS) {
-									// 		recordedFrames = recordedFrames + 1;
-									// 		recordedSize = recordedSize + jpegBuf.payloadSize;
-									// 	}
-									// 	else {
-									// 		LOG_ERR("Recording write failed, stopping recording. Error: %u", writeStatus);
-									// 		fx_file_close(&videoFile);
-									// 		isRecording = false;
-									// 	}
-
-									// 	// Stop and close after 60 frames
-									// 	if(recordedFrames >= 60) {
-									// 		fx_file_close(&videoFile);
-									// 		fx_media_flush(StorageThread::GetMedia());
-									// 		isRecording = false;
-									// 		LOG_INFO("Recording finished! Saved %d frames, %d kB", recordedFrames, (recordedSize >> 10));
-									// 	}
-									// }
 								}
 
 								stats.totalFrames = stats.totalFrames + 1;
@@ -683,6 +661,9 @@ void VisionThread::Run(ULONG input) {
 									// HD-CAM & All Buf in HyperRAM:			Cap 82342 us, Full Enc 17688 (Max: 18396) us
 
 									stats.fps = (epochFrameCount * 1000.0f) / static_cast<float>(elapsedMs);
+									if(stats.fps < stats.minFPS) {
+										stats.minFPS = stats.fps;
+									}
 									stats.bitrateBps = static_cast<uint32_t>((epochEncBytesSum * 8000ULL) / elapsedMs);
 									stats.pipelineRestarts = pipelineRestartCounter;
 
@@ -709,12 +690,12 @@ void VisionThread::Run(ULONG input) {
 						LOG_WARN("HD-CAM Frame Drop / Error. Restarting Pipeline...");
 
 #if USE_LINE_MODE
-						cameraHD.CaptureAbort();
+						cameraHD.CaptureAbort(Dcmipp::PipeID::Main);
 						vencEncoder.EncodeAbort();
-						status = cameraHD.CaptureAsync(rawFrameBuffer[0], lineTrigger, lineWrap);
+						status = cameraHD.CaptureAsync(Dcmipp::PipeID::Main, rawFrameBuffer[0], lineTrigger, lineWrap);
 #else
 						// The driver caught a glitch and automatically aborted into Idle mode. Restart the continuous hardware pipeline.
-						status = cameraHD.CaptureAsync(rawFrameBuffer[0], rawFrameBuffer[1]);
+						status = cameraHD.CaptureAsync(Dcmipp::PipeID::Main, rawFrameBuffer[0], rawFrameBuffer[1]);
 #endif
 
 						// Reset application ping-pong indices.

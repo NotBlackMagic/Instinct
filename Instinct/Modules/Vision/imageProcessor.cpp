@@ -34,7 +34,7 @@ Status ImageProcessor::ConvertToMCU(const VisionFrame& input, VisionFrame& outpu
 		case PixelFormat::RGB888:
 			return RGB888ToMCU(input, output);
 		// Single Channel (Outputs 8x8 Luma-only MCUs)
-		case PixelFormat::Grayscale:
+		case PixelFormat::Mono:
 			GrayscaleToMCU(input, output);
 		// Hardware-Delegated or Invalid Formats
 		case PixelFormat::BayerRaw8:
@@ -550,7 +550,7 @@ Status ImageProcessor::GrayscaleToMCU(const VisionFrame& input, VisionFrame& out
 
 	output.width = width;
 	output.height = height;
-	output.format = PixelFormat::Grayscale;
+	output.format = PixelFormat::Mono;
 	output.payloadSize = mcuIndex * 64;
 
 	return Status::Ok;

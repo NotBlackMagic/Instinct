@@ -7,6 +7,8 @@
 
 #include "shellModules.hpp"
 
+#include "actuatorThread.hpp"
+
 static void PrintHelp() {
 	Logger::Instance().Write("--- PWM Commands ---\r\n");
 	Logger::Instance().Write("  pwm pulse <ch> <us>      - Set pulse width in us (1-8, 0 for all)\r\n");
@@ -64,6 +66,11 @@ static bool CommandPWM(const char* args) {
 			return true;
 		}
 
+		if(ActuatorThread::SetManualBypass(true) == false) {
+			Logger::Instance().Write("Denied: Vehicle is armed.\r\n");
+			return true;
+		}
+
 		if(ch == 0) {
 			for(uint8_t i = 1; i <= 8; i++) {
 				GetPWM(i)->SetPulseWidth(pulse);
@@ -84,6 +91,11 @@ static bool CommandPWM(const char* args) {
 		int32_t parsed = sscanf(args, "%*s %d %f", &ch, &dcPer);
 		if(parsed < 2 || ch < 0 || ch > 8 || dcPer < 0.0f || dcPer > 100.0f) {
 			Logger::Instance().Write("Usage: pwm duty <ch (1-8, 0 for all)> <percent (0.0-100.0)>\r\n");
+			return true;
+		}
+
+		if(ActuatorThread::SetManualBypass(true) == false) {
+			Logger::Instance().Write("Denied: Vehicle is armed.\r\n");
 			return true;
 		}
 
@@ -108,6 +120,11 @@ static bool CommandPWM(const char* args) {
 		int32_t parsed = sscanf(args, "%*s %d %f", &ch, &dcPer);
 		if(parsed < 2 || ch < 0 || ch > 8 || dcPer < 0.0f || dcPer > 100.0f) {
 			Logger::Instance().Write("Usage: pwm servo <ch (1-8, 0 for all)> <percent (0.0-100.0)>\r\n");
+			return true;
+		}
+
+		if(ActuatorThread::SetManualBypass(true) == false) {
+			Logger::Instance().Write("Denied: Vehicle is armed.\r\n");
 			return true;
 		}
 

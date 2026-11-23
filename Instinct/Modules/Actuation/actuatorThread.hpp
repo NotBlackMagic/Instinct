@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (c) 2026 NotBlackMagic (PlumaLabs)
+ * Copyright (c) 2026 NotBlackMagic (Pluma Robotics)
  *
  * File:	Instinct/Modules/Actuation/actuatorThread.hpp
  * Author:	NotBlackMagic
@@ -21,10 +21,17 @@ class ActuatorThread {
 		/// @brief Initializes the Actuator ThreadX loop.
 		static void Init();
 
+		/// @brief Enables/disables the manual PWM channel control bypass mode.
+		static bool SetManualBypass(bool enable);
+
 	private:
 		static TX_THREAD threadPtr;
 		static const uint16_t threadStackSize = 4096;
 		__attribute__((aligned(32))) static uint8_t threadStack[threadStackSize];
+
+		// State tracking
+		static volatile bool manualBypass;
+		static volatile bool armedState;
 
 		// Subscribers
 		static Subscriber<ActuatorMsg> subActuators;

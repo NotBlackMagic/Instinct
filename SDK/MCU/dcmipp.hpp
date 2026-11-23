@@ -73,9 +73,29 @@ class Dcmipp {
 			Lines128 = 7
 		};
 
+		/// @brief Frame rate decimation factor (PxFCTCR.FRATE).
+		enum class FrameRateDecimation : uint8_t {
+			All = 0x00,		// Capture every frames
+			Half = 0x01,	// Capture 1 frame out of 2
+			Quarter = 0x02,	// Capture 1 frame out of 4
+			Eighth = 0x03	// Capture 1 frame out of 8
+		};
+
+		/// @brief Input crop and output scaling configuration for a pipe.
+		struct WindowConfig {
+			uint16_t srcWidth = 0;		///< Incoming frame width from CSI in pixels
+			uint16_t srcHeight = 0;		///< Incoming frame height from CSI in pixels
+			uint16_t cropX = 0;			///< Horizontal crop start offset in pixels (0 = no offset)
+			uint16_t cropY = 0;			///< Vertical crop start offset in pixels (0 = no offset)
+			uint16_t cropWidth = 0;		///< Crop window width in pixels (0 = use full srcWidth)
+			uint16_t cropHeight = 0;	///< Crop window height in pixels (0 = use full srcHeight)
+			uint16_t outWidth = 0;		///< Target output width after scaling (0 = match active input width)
+			uint16_t outHeight = 0;		///< Target output height after scaling (0 = match active input height)
+		};
+
 		/// @brief Configuration for a specific pipeline.
 		struct PipeConfig {
-			uint32_t frameRate;		// Frame rate control/decimation
+			FrameRateDecimation frameRate = FrameRateDecimation::All;		// Frame rate control/decimation
 			OutputFormat format;	// Output format
 			bool swapRBUV;			// If should swap R-vs-B or U-vs-V
 			uint32_t pixelPitch;	// Memory stride/pitch for DMA
@@ -117,7 +137,13 @@ class Dcmipp {
 		/// @param config	Aaa
 		/// @return Status::Ok if the pipe configuration was successful, or Status::Error if failed.
 		Status ConfigurePipe(PipeID pipe, const PipeConfig &config);
-		
+
+		/// @brief Configures input source dimensions, optional crop window, and output resolution.
+		/// @param pipe		Pipe to configure.
+		/// @param config	Window crop and scaling parameters.
+		/// @return Status::Ok if the pipe window configuration was successful, or Status::Error if failed.
+		Status ConfigureWindow(PipeID pipe, const WindowConfig &config);
+
 		/// @brief Aaa
 		/// @param pipe			Pipe to enable line wrapping mode for.
 		/// @param addressWrap	Aaa
@@ -174,10 +200,14 @@ class Dcmipp {
 		TX_MUTEX mutex;
 		TX_EVENT_FLAGS_GROUP event;
 
-		// Event Flags Definitions
+		// Event Flags Definitions (4 bits per pipe: Pipe 0 = [3:0], Pipe 1 = [7:4], Pipe 2 = [11:8])
 		static constexpr uint32_t EVT_TRANS_CPLT = 0x01;
 		static constexpr uint32_t EVT_VSYNC = 0x02;
 		static constexpr uint32_t EVT_ERR = 0x04;
+
+		static constexpr uint32_t GetPipeEventMask(PipeID pipe, uint32_t flags) {
+			return (flags << (static_cast<uint8_t>(pipe) * 4U));
+		}
 
 		/// @brief Helper to configure Resource Isolation Framework (RIF)
 		void ConfigureRIF(void);
