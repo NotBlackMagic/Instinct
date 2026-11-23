@@ -30,9 +30,6 @@ class SensorHubThread {
 		static constexpr uint8_t maxMags = 2;	// 1 Onboard, 1 Offboard
 		static constexpr uint8_t maxBaros = 2;	// 1 Onboard, 1 Offboard
 
-		// Virtual instance ID, to be used by estimator etc...
-		static constexpr uint8_t virtualInstanceID = 255;
-
 		// Sensor Subscribers
 		static Subscriber<IMUMsg> subIMU[maxIMUs];
 		static Subscriber<MagMsg> subMag[maxMags];

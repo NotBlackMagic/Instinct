@@ -387,7 +387,7 @@ void System::ConfigureFLEXMEM(ITCMSize itcmSize, DTCMSize dtcmSize) {
 		System::Reset();
 	}
 
-	// NRST workaround (ERRATA soltuion for Incorrect NRST behaviour: ES0620 - Rev 5 Chap. 2.2.18)
+	// NRST workaround (ERRATA solution for Incorrect NRST behaviour: ES0620 - Rev 5 Chap. 2.2.18)
 	SET_BIT(SYSCFG->CM55RSTCR, SYSCFG_CM55RSTCR_CORE_RESET_TYPE);
 	(void)SYSCFG->CM55RSTCR;
 }
@@ -551,7 +551,7 @@ void System::Reset() {
 		}
 	}
 
-	// Reset some clock soruces to there default values (ERRATA soltuion for Boot ROM execution failure: ES0620 - Rev 5 Chap. 22.2.23)
+	// Reset some clock sources to there default values (ERRATA solution for Boot ROM execution failure: ES0620 - Rev 5 Chap. 2.2.22)
 	LL_RCC_SetXSPIClockSource(LL_RCC_XSPI1_CLKSOURCE_HCLK);
 	LL_RCC_SetXSPIClockSource(LL_RCC_XSPI2_CLKSOURCE_HCLK);
 

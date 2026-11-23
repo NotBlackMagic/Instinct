@@ -14,7 +14,7 @@
 template <typename T>
 class Subscriber {
 	public:
-		Subscriber() : next(nullptr), lastVersion(0), missedUpdates(false), isValid(false), useEvent(false) {};
+		Subscriber() : next(nullptr), lastVersion(0), missedUpdates(false), isValid(false), useEvent(false), isSubscribed(false) {};
 
 		// The link to the next subscriber in the chain
 		Subscriber<T>* next;
@@ -31,6 +31,7 @@ class Subscriber {
 		// Flag to check if event group is created
 		bool isValid;
 		bool useEvent;
+		bool isSubscribed;
 
 		bool Init(bool enableEvent = true) {
 			useEvent = enableEvent;
@@ -39,6 +40,7 @@ class Subscriber {
 					isValid = false;
 					return false;
 				}
+				isValid = true;
 				isValid = true;
 				return true;
 			}

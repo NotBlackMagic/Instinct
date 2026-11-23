@@ -11,6 +11,21 @@
 
 #include <stdint.h>
 
+struct TopicInstance {
+	// 0x00 .. 0xEF : Physical/indexed instances
+	static constexpr uint8_t Default = 0x00;
+	static constexpr uint8_t MaxPhysical = 0xEF;
+
+	// 0xF0 .. 0xFD : Virtual/synthetic topic instances
+	static constexpr uint8_t Virtual = 0xF0;	// Voted/calibrated/fused sensor output
+	static constexpr uint8_t Simulated = 0xF1;	// HITL/SITL injected data
+	static constexpr uint8_t MaxValid = 0xFD;
+
+	// 0xFE .. 0xFF : Non-topic reserved planes
+	static constexpr uint8_t All = 0xFE;		// Wildcard for Broker/Logger/Link operations
+	static constexpr uint8_t Protocol = 0xFF;	// InstinctLink RPCs & SD Logger meta packets
+};
+
 enum class TopicID : uint8_t {
 	// Inertial Sensors
 	Accel = 1,
@@ -51,4 +66,35 @@ enum class TopicID : uint8_t {
 
 	// System / Configuration
 	ParamUpdate = 200
+};
+
+class TopicAddress {
+	public:
+		static constexpr uint16_t Pack(uint8_t topicID, uint8_t instance = TopicInstance::Default) {
+			return (static_cast<uint16_t>(instance) << 8) | topicID;
+		}
+
+		static constexpr uint16_t Pack(TopicID topicID, uint8_t instance = TopicInstance::Default) {
+			return Pack(static_cast<uint8_t>(topicID), instance);
+		}
+
+		static constexpr uint16_t MakeProtocolID(uint8_t commandID) {
+			return Pack(commandID, TopicInstance::Protocol);
+		}
+
+		static constexpr uint8_t GetTopicID(uint16_t fullID) {
+			return static_cast<uint8_t>(fullID & 0xFF);
+		}
+
+		static constexpr uint8_t GetInstance(uint16_t fullID) {
+			return static_cast<uint8_t>((fullID >> 8) & 0xFF);
+		}
+
+		static constexpr bool IsProtocol(uint16_t fullID) {
+			return GetInstance(fullID) == TopicInstance::Protocol;
+		}
+
+		static constexpr bool IsValidTopicInstance(uint8_t instance) {
+			return instance <= TopicInstance::MaxValid;
+		}
 };

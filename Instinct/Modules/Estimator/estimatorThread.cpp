@@ -55,14 +55,14 @@ void EstimatorThread::Run(ULONG input) {
 
 	// Boot Synchronization: Wait for SensorHub to be online
 	while (topicVirtualIMU == nullptr) {
-		topicVirtualIMU = Broker::GetTopic<IMUMsg>(static_cast<uint8_t>(TopicID::Imu), virtualInstanceID);
+		topicVirtualIMU = Broker::GetTopic<IMUMsg>(static_cast<uint8_t>(TopicID::Imu), TopicInstance::Virtual);
 		if(topicVirtualIMU == nullptr) {
 			tx_thread_sleep(10); // Sleep for 10 ticks and check again
 		}
 	}
 	topicVirtualIMU->Subscribe(&subVirtualIMU);
 
-	topicVirtualMag = Broker::GetTopic<MagMsg>(static_cast<uint8_t>(TopicID::Mag), virtualInstanceID);
+	topicVirtualMag = Broker::GetTopic<MagMsg>(static_cast<uint8_t>(TopicID::Mag), TopicInstance::Virtual);
 	if(topicVirtualMag != nullptr) {
 		topicVirtualMag->Subscribe(&subVirtualMag);
 	}
@@ -70,7 +70,7 @@ void EstimatorThread::Run(ULONG input) {
 		LOG_WARN("Estimator: No Virtual Mag Topic found!");
 	}
 
-	topicVirtualBaro = Broker::GetTopic<BaroMsg>(static_cast<uint8_t>(TopicID::Baro), virtualInstanceID);
+	topicVirtualBaro = Broker::GetTopic<BaroMsg>(static_cast<uint8_t>(TopicID::Baro), TopicInstance::Virtual);
 	if(topicVirtualBaro != nullptr) {
 		topicVirtualBaro->Subscribe(&subVirtualBaro);
 	}

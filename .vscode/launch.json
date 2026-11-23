@@ -15,8 +15,7 @@
 			"preBuild": "${command:st-stm32-ide-debug-launch.build}",
 			"runEntry": "Reset_Handler",
 			// Replace with your .svd path
-			//"svdPath": "C:/ST/STM32CubeCLT_1.19.0/STMicroelectronics_CMSIS_SVD/STM32N657.svd",
-			//"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
+			// "svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
 			"svdPath": "C:/ST/STM32CubeProgrammer/SVD/STM32N657.svd",
 
 			"serverArgs": [
@@ -51,8 +50,7 @@
 			"serverReset": "None",
 			"runEntry": "main",
 			// Replace with your .svd path
-			//"svdPath": "C:/ST/STM32CubeCLT_1.19.0/STMicroelectronics_CMSIS_SVD/STM32N657.svd",
-			//"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
+			// "svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
 			"svdPath": "C:/ST/STM32CubeProgrammer/SVD/STM32N657.svd",
 
 			"serverArgs": [
@@ -89,8 +87,7 @@
 			// "preBuild": "${command:st-stm32-ide-debug-launch.build}",
 			// "runEntry": "JumpToApplication",
 			// Replace with your .svd path
-			//"svdPath": "C:/ST/STM32CubeCLT_1.19.0/STMicroelectronics_CMSIS_SVD/STM32N657.svd",
-			//"svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
+			// "svdPath": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/SVD/STM32N657.svd",
 			"svdPath": "C:/ST/STM32CubeProgrammer/SVD/STM32N657.svd",
 
 			"serverArgs": [
@@ -118,7 +115,7 @@
 
 			"serverExtLoader": [
 				{
-					//"loader": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/ExternalLoader/PlumaN6_Base_ExtLoader.stldr",
+					// "loader": "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/ExternalLoader/PlumaN6_Base_ExtLoader.stldr",
 					"loader": "C:/ST/STM32CubeProgrammer/bin/ExternalLoader/PlumaN6_Base_ExtLoader.stldr",
 					"initialize": false
 				}

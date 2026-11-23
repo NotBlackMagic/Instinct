@@ -43,12 +43,12 @@ class InstinctLink {
 		};
 
 		enum class CommandID : uint16_t {
-			StreamConfig = 0xFF00,		// Configure topic stream rate
-			ParamRequestList = 0xFF01,	// Request full parameter table dump
-			ParamRequestRead = 0xFF02,	// Request single parameter by index
-			ParamSet = 0xFF03,			// Set parameter value by index
-			ParamReset = 0xFF04,		// Reset all parameters to factory defaults
-			TopicRequestList = 0xFF05	// Request list of all registered Broker topics
+			StreamConfig = TopicAddress::MakeProtocolID(0x00),		// Configure topic stream rate
+			ParamRequestList = TopicAddress::MakeProtocolID(0x01),	// Request full parameter table dump
+			ParamRequestRead = TopicAddress::MakeProtocolID(0x02),	// Request single parameter by index
+			ParamSet = TopicAddress::MakeProtocolID(0x03),			// Set parameter value by index
+			ParamReset = TopicAddress::MakeProtocolID(0x04),		// Reset all parameters to factory defaults
+			TopicRequestList = TopicAddress::MakeProtocolID(0x05)	// Request list of all registered Broker topics
 		};
 
 		struct __attribute__((packed)) StreamConfigPayload {
@@ -98,10 +98,15 @@ class InstinctLink {
 		static constexpr uint8_t maxStreams = 16;
 
 		/// @brief Initializes the InstinctLink thread and binds to the target UART.
+		/// @param uart Target UART instance.
 		static void Init(UART* uart);
 
 		/// @brief Configures a topic stream rate (can be called from firmware or via PC command).
-		static bool ConfigureStream(uint8_t topicId, uint8_t instance, float rateHz);
+		/// @param topicID	Topic ID to stream.
+		/// @param instance	Which instance of this topic to stream.
+		/// @param rate		Rate to stream selected topic.
+		/// @return True if configured correctly, false it failed.
+		static bool ConfigureStream(uint8_t topicID, uint8_t instance, float rate);
 
 		/// @brief Returns global link performance statistics.
 		static Statistics GetStatistics() { return stats; }

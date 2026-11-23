@@ -808,4 +808,9 @@ static const Shell::CommandEntry systemCommands[] {
 	{ nullptr,	nullptr,		nullptr } // Terminator
 };
 
-// Static memory for the node
+// Static memory for the node
+static Shell::CommandList systemShellNode;
+
+void RegisterSystemCommands() {
+	Shell::RegisterCommands(&systemShellNode, systemCommands); //Register the table defined below
+}

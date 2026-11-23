@@ -20,6 +20,7 @@
 
 #include "subscriber.hpp"
 #include "topicBase.hpp"
+#include "topicIDs.hpp"
 
 // Hardware Data Memory Barrier + Compiler Memory Clobber
 #define BARRIER() __asm volatile( "dmb" ::: "memory" )
@@ -42,6 +43,12 @@ class Topic : public TopicBase {
 				return false;
 			}
 
+			// Duplicate subscription check
+			if(sub->isSubscribed == true) {
+				return true;
+			}
+
+			// Create event flags group before entering critical section
 			if(sub->Init(enableEvent) == false) {
 				return false;
 			}
@@ -49,21 +56,15 @@ class Topic : public TopicBase {
 			// Enter Critical Section
 			UINT state = tx_interrupt_control(TX_INT_DISABLE);
 
-			// Prevent duplicate subscriptions
-			Subscriber<T>* curr = head;
-			while(curr) {
-				if(curr == sub) {
-					tx_interrupt_control(state);
-					return true; 
-				}
-				curr = curr->next;
+			// Only link blocking subscribers into the notification list
+			if(enableEvent == true) {
+				sub->next = head.load(std::memory_order_relaxed);
+				head.store(sub, std::memory_order_release);
 			}
 
-			sub->next = head;
-			head = sub;
-
 			// Update Stats
-			subCount += 1;
+			sub->isSubscribed = true;
+			subCount = subCount + 1;
 
 			// Exit Critical Section
 			tx_interrupt_control(state);
@@ -79,49 +80,46 @@ class Topic : public TopicBase {
 			// Enter Critical Section
 			UINT state = tx_interrupt_control(TX_INT_DISABLE);
 
-			if(head == nullptr) {
-				// No subscribers, list is empty
+			if(sub->isSubscribed == false) {
 				tx_interrupt_control(state);
 				return;
 			}
 
-			bool found = false;
-
-			if(head == sub) {
-				// Subscriber is head (last added)
-				head = sub->next;	// Move head to the next one
-				found = true;
-			}
-			else {
-				Subscriber<T>* prev = head;
-				while(prev->next != nullptr && prev->next != sub) {
-					prev = prev->next;
+			// Unlink from blocking notification list if present
+			if(sub->useEvent == true) {
+				Subscriber<T>* currHead = head.load(std::memory_order_relaxed);
+				if(currHead == sub) {
+					// Subscriber is head (last added)
+					head.store(sub->next, std::memory_order_release);	// Move head to the next one
 				}
+				else if(currHead != nullptr) {
+					Subscriber<T>* prev = currHead;
+					while(prev->next != nullptr && prev->next != sub) {
+						prev = prev->next;
+					}
 
-				if(prev->next == sub) {
-					// Bypass the node
-					prev->next = sub->next;
-					found = true;
+					if(prev->next == sub) {
+						// Bypass the node
+						prev->next = sub->next;
+					}
 				}
-			}
-
-			if(found == true) {
-				// Clear the subscriber's next pointer for safety
 				sub->next = nullptr;
-
-				// Update Stats
-				subCount = subCount - 1; 
-				
-				// Clean up the event group
-				if(sub->isValid == true) {
-					// This will wake up any thread waiting on this event with TX_DELETED
-					tx_event_flags_delete(&sub->eventGroup);
-					sub->isValid = false;
-				}
 			}
 
-			// Exit Critical Section
+			// Update Stats
+			sub->isSubscribed = false;
+			subCount = subCount - 1;
+				
+			bool deleteEvent = sub->isValid;
+			sub->isValid = false;
+
+			// Exit Critical Section before calling ThreadX delete service
 			tx_interrupt_control(state);
+
+			// Clean up the event group (wakes any waiting thread with TX_DELETED)
+			if(deleteEvent == true) {
+				tx_event_flags_delete(&sub->eventGroup);
+			}
 		}
 
 		__attribute__((always_inline)) inline void Publish(const T& msg) {
@@ -166,18 +164,26 @@ class Topic : public TopicBase {
 			if(logEnabled == true) {
 				if(logPeriodUs == 0 || (now - lastLogTimestamp) >= logPeriodUs) {
 					lastLogTimestamp = now;
-					uint16_t fullTopicId = (static_cast<uint16_t>(instance) << 8) | topicID;
-					Logger::Instance().LogData(fullTopicId, reinterpret_cast<const uint8_t*>(&data), sizeof(T));
+					uint16_t fullTopicID = TopicAddress::Pack(topicID, instance);
+					Logger::Instance().LogData(fullTopicID, reinterpret_cast<const uint8_t*>(&msg), sizeof(T));
 				}
 			}
 
-			// Notify blocking subscribers only
-			Subscriber<T>* curr = head;
-			while (curr != nullptr) {
-				if(curr->useEvent == true && curr->isValid == true) {
-					tx_event_flags_set(&curr->eventGroup, 0x01, TX_OR);
+			// Notify blocking subscribers (skipped entirely if none)
+			if(head.load(std::memory_order_acquire) != nullptr) {
+				// Enter Critical Section
+				state = tx_interrupt_control(TX_INT_DISABLE);
+
+				Subscriber<T>* curr = head.load(std::memory_order_relaxed);
+				while (curr != nullptr) {
+					if(curr->isValid == true) {
+						tx_event_flags_set(&curr->eventGroup, 0x01, TX_OR);
+					}
+					curr = curr->next;
 				}
-				curr = curr->next;
+
+				// Exit Critical Section
+				tx_interrupt_control(state);
 			}
 		}
 
@@ -285,20 +291,29 @@ class Topic : public TopicBase {
 				return false;
 			}
 
-			// Read directly into destination buffer under the seqlock
-			return Peek(*reinterpret_cast<T*>(outBuf), outVersion);
+			// Copy through an aligned stack instance to avoid unaligned LDRD/VLDR faults
+			T temp;
+			if(Peek(temp, outVersion) == true) {
+				memcpy(outBuf, &temp, sizeof(T));
+				return true;
+			}
+			return false;
 		}
 
 		bool PublishRaw(const uint8_t* inBuf, uint8_t len) override {
 			if(inBuf == nullptr || len != sizeof(T)) {
 				return false;
 			}
-			Publish(*reinterpret_cast<const T*>(inBuf));
+
+			// Copy through an aligned stack instance (&rxFrame[5] is an odd byte offset)
+			T temp;
+			memcpy(&temp, inBuf, sizeof(T));
+			Publish(temp);
 			return true;
 		}
 
 	private:
 		std::atomic<uint32_t> version;
 		T data;
-		Subscriber<T>* head;
+		std::atomic<Subscriber<T>*> head;
 };

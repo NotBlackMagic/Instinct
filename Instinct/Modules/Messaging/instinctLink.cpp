@@ -116,6 +116,7 @@ void InstinctLink::Run(ULONG input) {
 							}
 
 							if(rxFrame[5 + payloadLen] == crc) {
+								stats.rxPackets = stats.rxPackets + 1;
 								uint16_t packetID = static_cast<uint16_t>(rxFrame[2]) | (static_cast<uint16_t>(rxFrame[3]) << 8);
 								ProcessPacket(packetID, &rxFrame[5], payloadLen);
 							}
@@ -170,8 +171,8 @@ void InstinctLink::Run(ULONG input) {
 					if(streams[i].topic->CopyPayload(payloadBuf, sizeof(payloadBuf), &currentVer) == true) {
 						// Only transmit if the topic was updated since last transmit
 						if(currentVer != streams[i].version) {
-							uint16_t fulltopicID = (static_cast<uint16_t>(streams[i].topic->GetInstance()) << 8) | streams[i].topic->GetTopicID();
-							if(SendPacket(fulltopicID, payloadBuf, payloadSize) == true) {
+							uint16_t fullTopicID = TopicAddress::Pack(streams[i].topic->GetTopicID(), streams[i].topic->GetInstance());
+							if(SendPacket(fullTopicID, payloadBuf, payloadSize) == true) {
 								// Update moving-average period (using fast bitwise shifts)
 								if(streams[i].timestamp != 0) {
 									uint32_t delta = static_cast<uint32_t>(now - streams[i].timestamp);
@@ -297,9 +298,9 @@ void InstinctLink::ResetStatistics() {
 
 void InstinctLink::ProcessPacket(uint16_t packetID, const uint8_t* payload, uint8_t len) {
 	// Packet IDs < 0xFF00 are direct Topic Injections (HITL / SITL / Setpoint step inputs)
-	if(packetID < 0xFF00) {
-		uint8_t topicID = static_cast<uint8_t>(packetID & 0xFF);
-		uint8_t instance = static_cast<uint8_t>((packetID >> 8) & 0xFF);
+	if(TopicAddress::IsProtocol(packetID) == false) {
+		uint8_t topicID = TopicAddress::GetTopicID(packetID);
+		uint8_t instance = TopicAddress::GetInstance(packetID);
 
 		TopicBase* topic = Broker::GetTopicBase(topicID, instance);
 		if(topic != nullptr) {

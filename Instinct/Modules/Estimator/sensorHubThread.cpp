@@ -13,9 +13,9 @@ TX_THREAD SensorHubThread::threadPtr;
 __attribute__((aligned(32))) uint8_t SensorHubThread::threadStack[SensorHubThread::threadStackSize];
 
 // Virtual Publishers
-Topic<IMUMsg> SensorHubThread::topicVirtualIMU("imu", static_cast<uint8_t>(TopicID::Imu), SensorHubThread::virtualInstanceID);
-Topic<MagMsg> SensorHubThread::topicVirtualMag("mag", static_cast<uint8_t>(TopicID::Mag), SensorHubThread::virtualInstanceID);
-Topic<BaroMsg> SensorHubThread::topicVirtualBaro("baro", static_cast<uint8_t>(TopicID::Baro), SensorHubThread::virtualInstanceID);
+Topic<IMUMsg> SensorHubThread::topicVirtualIMU("imu", static_cast<uint8_t>(TopicID::Imu), TopicInstance::Virtual);
+Topic<MagMsg> SensorHubThread::topicVirtualMag("mag", static_cast<uint8_t>(TopicID::Mag), TopicInstance::Virtual);
+Topic<BaroMsg> SensorHubThread::topicVirtualBaro("baro", static_cast<uint8_t>(TopicID::Baro), TopicInstance::Virtual);
 
 // Subscribers
 Subscriber<IMUMsg> SensorHubThread::subIMU[SensorHubThread::maxIMUs];

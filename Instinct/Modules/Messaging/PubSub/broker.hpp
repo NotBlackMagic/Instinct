@@ -15,30 +15,48 @@
 
 class Broker {
 	public:
-		// Static const value used to address all instances of a topic, used in the logger enable/disable
-		static constexpr uint16_t allInstancesID = 0xFFFF;
-
 		// Called once when a topic is instantiated
-		static void RegisterTopic(TopicBase* topic) {
+		static bool RegisterTopic(TopicBase* topic) {
 			if(topic == nullptr) {
-				return;
+				return false;
 			}
+			if(!TopicAddress::IsValidTopicInstance(topic->GetInstance())) {
+				// Reject All (0xFE) and Protocol (0xFF)
+				return false;
+			}
+			if(GetTopicBase(topic->GetTopicID(), topic->GetInstance()) != nullptr) {
+				// Prevent duplicate (topicID, instance) registration
+				return false;
+			}
+
 			// Insert at the head of the list (simple, fast, O(1))
 			topic->nextTopic = head;
 			head = topic;
+			return true;
 		}
 
-		// Fast integer lookup (Recommended for flight code)
+		// Fast type-safe lookup for flight code
 		template <typename T>
-		static Topic<T>* GetTopic(uint8_t topicId, uint8_t instance = 0) {
+		static Topic<T>* GetTopic(TopicID topicID, uint8_t instance = TopicInstance::Default) {
+			return GetTopic<T>(static_cast<uint8_t>(topicID), instance);
+		}
+
+		template <typename T>
+		static Topic<T>* GetTopic(uint8_t topicID, uint8_t instance = TopicInstance::Default) {
+			TopicBase* base = GetTopicBase(topicID, instance);
+			return static_cast<Topic<T>*>(base);
+		}
+
+		/// @brief Type-erased lookup used by InstinctLink for dynamic streaming and injection
+		static TopicBase* GetTopicBase(uint8_t topicID, uint8_t instance = 0) {
 			TopicBase* curr = head;
-			while (curr != nullptr) {
-				if (curr->GetTopicID() == topicId && curr->GetInstance() == instance) {
-					return static_cast<Topic<T>*>(curr);
+			while(curr != nullptr) {
+				if(curr->GetTopicID() == topicID && curr->GetInstance() == instance) {
+					return curr;
 				}
 				curr = curr->nextTopic;
 			}
-			return nullptr; 
+			return nullptr;
 		}
 
 		// Used by 3rd parties to find a topic by name
@@ -54,25 +72,17 @@ class Broker {
 			return nullptr; // Topic not found
 		}
 
-		/// @brief Type-erased lookup used by InstinctLink for dynamic streaming and injection
-		static TopicBase* GetTopicBase(uint8_t topicId, uint8_t instance = 0) {
-			TopicBase* curr = head;
-			while(curr != nullptr) {
-				if(curr->GetTopicID() == topicId && curr->GetInstance() == instance) {
-					return curr;
-				}
-				curr = curr->nextTopic;
-			}
-			return nullptr;
+		static void EnableLogging(TopicID topicID, uint8_t instance = TopicInstance::All, uint32_t rateHz = 0) {
+			EnableLogging(static_cast<uint8_t>(topicID), instance, rateHz);
 		}
 
-		static void EnableLogging(uint8_t topicId, uint16_t instance = allInstancesID, uint32_t rateHz = 0) {
+		static void EnableLogging(uint8_t topicID, uint8_t instance = TopicInstance::All, uint32_t rateHz = 0) {
 			TopicBase* curr = head;
 			while(curr != nullptr) {
 				// If instance matches OR wildcard (all instances of a topic type) is used
-				if(curr->GetTopicID() == topicId && (instance == allInstancesID || curr->GetInstance() == instance)) {
+				if(curr->GetTopicID() == topicID && (instance == TopicInstance::All || curr->GetInstance() == instance)) {
 					curr->EnableLogging(rateHz);
-					if(instance != allInstancesID) {
+					if(instance != TopicInstance::All) {
 						return;
 					}
 				}
@@ -80,13 +90,17 @@ class Broker {
 			}
 		}
 
-		static void DisableLogging(uint8_t topicId, uint16_t instance = allInstancesID) {
+		static void DisableLogging(TopicID topicID, uint8_t instance = TopicInstance::All) {
+			DisableLogging(static_cast<uint8_t>(topicID), instance);
+		}
+
+		static void DisableLogging(uint8_t topicID, uint16_t instance = TopicInstance::All) {
 			TopicBase* curr = head;
 			while(curr != nullptr) {
 				// If instance matches OR wildcard (all instances of a topic type) is used
-				if(curr->GetTopicID() == topicId && (instance == allInstancesID || curr->GetInstance() == instance)) {
+				if(curr->GetTopicID() == topicID && (instance == TopicInstance::All || curr->GetInstance() == instance)) {
 					curr->DisableLogging();
-					if(instance != allInstancesID) {
+					if(instance != TopicInstance::All) {
 						return;
 					}
 				}
