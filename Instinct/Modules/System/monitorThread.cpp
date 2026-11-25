@@ -69,7 +69,7 @@ void MonitorThread::Run(ULONG input) {
 		LOG_WARN("PW Monitor (INA700) not found on I2C2!");
 	}
 
-	FDCAN::Frame frame = {};
+	// FDCAN::Frame frame = {};
 	while(1) {
 		// USB Power Delivery Handling
 		bool isAttached = usbPD.IsAttached();

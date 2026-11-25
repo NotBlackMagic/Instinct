@@ -4,7 +4,7 @@
  *
  * File:	Instinct/Modules/Messaging/mavlinkThread.hpp
  * Author:	NotBlackMagic
- * Brief:	Aaa
+ * Brief:	TBD
  */
 
 #pragma once
@@ -13,7 +13,6 @@
 
 #include "hardware.hpp"
 
-#include "hardware.hpp"
 #include "logger.hpp"
 #include "rotations.hpp"
 #include "pubSub.hpp"

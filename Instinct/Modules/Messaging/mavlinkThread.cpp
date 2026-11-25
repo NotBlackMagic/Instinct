@@ -53,19 +53,19 @@ void MavlinkThread::Run(ULONG input) {
 			topicState = Broker::GetTopic<StateMsg>(static_cast<uint8_t>(TopicID::State), 0);
 		}
 		if(topicVirtualIMU == nullptr) {
-			topicVirtualIMU = Broker::GetTopic<IMUMsg>(static_cast<uint8_t>(TopicID::Imu), 255);
+			topicVirtualIMU = Broker::GetTopic<IMUMsg>(static_cast<uint8_t>(TopicID::Imu), TopicInstance::Virtual);
 		}
 		tx_thread_sleep(10); // Sleep for 10 ticks and check again
 	}
 	topicState->Subscribe(&subState);
 	topicVirtualIMU->Subscribe(&subVirtualIMU);
 
-	topicVirtualMag = Broker::GetTopic<MagMsg>(static_cast<uint8_t>(TopicID::Mag), 255);
+	topicVirtualMag = Broker::GetTopic<MagMsg>(static_cast<uint8_t>(TopicID::Mag), TopicInstance::Virtual);
 	if(topicVirtualMag != nullptr) {
 		topicVirtualMag->Subscribe(&subVirtualMag);
 	}
 
-	topicVirtualBaro = Broker::GetTopic<BaroMsg>(static_cast<uint8_t>(TopicID::Baro), 255);
+	topicVirtualBaro = Broker::GetTopic<BaroMsg>(static_cast<uint8_t>(TopicID::Baro), TopicInstance::Virtual);
 	if(topicVirtualBaro != nullptr) {
 		topicVirtualBaro->Subscribe(&subVirtualBaro);
 	}

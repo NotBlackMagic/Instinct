@@ -35,8 +35,8 @@ class Topic : public TopicBase {
 		Topic& operator=(const Topic&) = delete;
 
 		/// @brief Subscribe to this topic.
-		/// @param sub Pointer to subscriber instance.
-		/// @param enableEvent Set true if thread blocks with TX_WAIT_FOREVER/timeout; false if only polling with TX_NO_WAIT.
+		/// @param sub			Pointer to subscriber instance.
+		/// @param enableEvent	Set true if subscriber thread will block with TX_WAIT_FOREVER/timeout when topic "Take", false if only polling with TX_NO_WAIT.
 		/// @return True if subscribed successfully, false if not.
 		bool Subscribe(Subscriber<T>* sub, bool enableEvent = true) {
 			if(sub == nullptr) {
@@ -72,6 +72,9 @@ class Topic : public TopicBase {
 			return true;
 		}
 
+		/// @brief Unsubscribe from this topic.
+		/// @param sub	Pointer to subscriber instance.
+		/// @return None.
 		void Unsubscribe(Subscriber<T>* sub) {
 			if(sub == nullptr) {
 				return;
@@ -122,6 +125,9 @@ class Topic : public TopicBase {
 			}
 		}
 
+		/// @brief Publish new message to this topic.
+		/// @param msg	Topic message to publish.
+		/// @return None.
 		__attribute__((always_inline)) inline void Publish(const T& msg) {
 			// Capture time
 			uint64_t now = Time::GetUs();
@@ -130,8 +136,8 @@ class Topic : public TopicBase {
 			UINT state = tx_interrupt_control(TX_INT_DISABLE);
 
 			// Calculate Rate (Period)
-			if(publishTimestamp != 0) {
-				uint32_t delta = (uint32_t)(now - publishTimestamp);
+			if(timestamp != 0) {
+				uint32_t delta = (uint32_t)(now - timestamp);
 				if(averagePeriodUs == 0) {
 					averagePeriodUs = delta; // Seed the average on first real delta
 				}
@@ -150,7 +156,7 @@ class Topic : public TopicBase {
 			data = msg;
 			// Update Stats
 			msgCount = msgCount + 1;
-			publishTimestamp = now;
+			timestamp = now;
 
 			BARRIER();
 
@@ -187,6 +193,10 @@ class Topic : public TopicBase {
 			}
 		}
 
+		/// @brief Get last/latest message, none blocking, of this topic.
+		/// @param msg			Last message of this topic.
+		/// @param outVersion	Message version number.
+		/// @return True if successfully got message, false if not.
 		__attribute__((always_inline)) inline bool Peek(T& msg, uint32_t* outVersion = nullptr) {
 			uint32_t v1, v2;
 			uint8_t retries = 0;
@@ -222,7 +232,9 @@ class Topic : public TopicBase {
 			return false;
 		}
 
-		/// @brief Lock-free check if new data was published since last check (consumes update).
+		/// @brief Lock-free check if new data was published since last for the subscriber (consumes update).
+		/// @param sub	Pointer to topic subscriber to check.
+		/// @return True if has new message for the subscriber, false if not.
 		__attribute__((always_inline)) inline bool HasUpdate(Subscriber<T>* sub) {
 			if(sub == nullptr) {
 				return false;
@@ -239,6 +251,12 @@ class Topic : public TopicBase {
 			return true;
 		}
 
+		
+		/// @brief Block and wait for new message in this topic.
+		/// @param sub		Pointer to topic subscriber waiting for message.
+		/// @param msg		New topic message.
+		/// @param ticks	Number of ticks to wait for message, timeout value.
+		/// @return True if successfully got message, false if not.
 		__attribute__((always_inline)) inline bool Take(Subscriber<T>* sub, T& msg, ULONG ticks) {
 			if(sub == nullptr) {
 				return false;
@@ -282,10 +300,19 @@ class Topic : public TopicBase {
 			return false;
 		}
 
+		/// @brief Get topic message payload size.
+		/// @note Intended for internal use e.g. in InstinctLink.
+		/// @return Payload size in bytes.
 		uint8_t GetPayloadSize() const override {
 			return static_cast<uint8_t>(sizeof(T));
 		}
 
+		/// @brief Copy full topic message to byte array.
+		/// @note Intended for internal use e.g. in InstinctLink.
+		/// @param outBuf		Byte array pointer to be where copy the topic message to.
+		/// @param maxLen		Maximum number of bytes that can be copied to outBuf, safety overflow check.
+		/// @param outVersion	Copied message version number.
+		/// @return True if successfully copied message, false if not.
 		bool CopyPayload(uint8_t* outBuf, uint8_t maxLen, uint32_t* outVersion = nullptr) override {
 			if(outBuf == nullptr || maxLen < sizeof(T)) {
 				return false;
@@ -300,6 +327,11 @@ class Topic : public TopicBase {
 			return false;
 		}
 
+		/// @brief Publish new topic message from byte array.
+		/// @note Intended for internal use e.g. in InstinctLink.
+		/// @param inBuf	Byte array pointer with topic message to push.
+		/// @param len		Byte array length i.e. length of topic message.
+		/// @return True if successfully published message, false if not.
 		bool PublishRaw(const uint8_t* inBuf, uint8_t len) override {
 			if(inBuf == nullptr || len != sizeof(T)) {
 				return false;

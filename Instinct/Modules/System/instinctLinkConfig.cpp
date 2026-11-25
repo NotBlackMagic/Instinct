@@ -17,8 +17,8 @@ void InstinctLinkConfig::ApplyTuningProfile() {
 	InstinctLink::ConfigureStream(static_cast<uint8_t>(TopicID::Actuator), 0, 200.0f);
 
 	// Filter verification (Sensors)
-	InstinctLink::ConfigureStream(static_cast<uint8_t>(TopicID::Imu), 255, 100.0f);
-	InstinctLink::ConfigureStream(static_cast<uint8_t>(TopicID::Mag), 255, 10.0f);
+	InstinctLink::ConfigureStream(static_cast<uint8_t>(TopicID::Imu), TopicInstance::Virtual, 100.0f);
+	InstinctLink::ConfigureStream(static_cast<uint8_t>(TopicID::Mag), TopicInstance::Virtual, 10.0f);
 
 	// Low-rate vehicle status context (Arming, flight modes, failsafes)
 	InstinctLink::ConfigureStream(static_cast<uint8_t>(TopicID::VehicleStatus), 0, 10.0f);

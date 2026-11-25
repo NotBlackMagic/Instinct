@@ -171,20 +171,20 @@ void EstimatorThread::Run(ULONG input) {
 				}
 			}
 
-			// // Downward ToF Range Right-Invariant Update
-			// if(topicRange != nullptr && topicRange->Take(&subRange, rangeMsg, TX_NO_WAIT) == true) {
-			// 	if(rangeMsg.timestamp != 0) {
-			// 		latestRangeM = rangeMsg.distance;
-			// 		filter.UpdateRange(rangeMsg.distance);
-			// 	}
-			// }
+			// Downward ToF Range Right-Invariant Update
+			if(topicRange != nullptr && topicRange->Take(&subRange, rangeMsg, TX_NO_WAIT) == true) {
+				if(rangeMsg.timestamp != 0) {
+					latestRangeM = rangeMsg.distance;
+					// filter.UpdateRange(rangeMsg.distance);
+				}
+			}
 
-			// // Optical Flow Right-Invariant Update
-			// if(topicFlow != nullptr && topicFlow->Take(&subFlow, flowMsg, TX_NO_WAIT) == true) {
-			// 	if(flowMsg.timestamp != 0) {
-			// 		filter.UpdateOpticalFlow(flowMsg.flowRate, imuMsg.gyro, latestRangeM, flowMsg.quality);
-			// 	}
-			// }
+			// Optical Flow Right-Invariant Update
+			if(topicFlow != nullptr && topicFlow->Take(&subFlow, flowMsg, TX_NO_WAIT) == true) {
+				if(flowMsg.timestamp != 0) {
+					// filter.UpdateOpticalFlow(flowMsg.flowRate, imuMsg.gyro, latestRangeM, flowMsg.quality);
+				}
+			}
 
 			timeUpd = Time::GetUs() - timestamp;
 			timestamp = Time::GetUs();

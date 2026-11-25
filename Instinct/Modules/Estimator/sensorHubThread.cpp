@@ -147,7 +147,7 @@ void SensorHubThread::Run(ULONG input) {
 
 			if(magUpdated == true) {
 				MagMsg virtualMag = SensorHubThread::SelectMag(magMsgs, activeMagCount);
-				topicVirtualMag.Publish(magMsgs[0]);
+				topicVirtualMag.Publish(virtualMag);
 			}
 
 			// Barometer update check
@@ -400,6 +400,8 @@ MagMsg SensorHubThread::SelectMag(MagMsg* rawMsgs, uint8_t count) {
 		deadMsg.timestamp = 0;
 		return deadMsg;
 	}
+
+	return rawMsgs[0];
 
 	float bestError = 999999.0f;
 	int8_t bestIndex = -1;

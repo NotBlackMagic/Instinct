@@ -11,31 +11,37 @@
 
 #include <string.h>
 
-#include "Topic.hpp"
+#include "topic.hpp"
 
 class Broker {
 	public:
-		// Called once when a topic is instantiated
+		/// @brief Registers a new topic, adds it to the end of the linked list.
+		/// @note Called once when a topic is instantiated.
+		/// @param topic	Pointer of the topic to register.
+		/// @return Returns true on successful registration, false otherwise.
 		static bool RegisterTopic(TopicBase* topic) {
 			if(topic == nullptr) {
 				return false;
 			}
-			if(!TopicAddress::IsValidTopicInstance(topic->GetInstance())) {
+			if(TopicAddress::IsValidTopicInstance(topic->GetInstance()) == false) {
 				// Reject All (0xFE) and Protocol (0xFF)
 				return false;
 			}
 			if(GetTopicBase(topic->GetTopicID(), topic->GetInstance()) != nullptr) {
-				// Prevent duplicate (topicID, instance) registration
+				// Prevent duplicate, based on topicID and instanceID, registration
 				return false;
 			}
 
-			// Insert at the head of the list (simple, fast, O(1))
+			// Insert at the head of the list
 			topic->nextTopic = head;
 			head = topic;
 			return true;
 		}
 
-		// Fast type-safe lookup for flight code
+		/// @brief Fast type-safe lookup for flight code.
+		/// @param topicID	Topic ID of the topic to get.
+		/// @param instance	Optional topic instance of the topic to get, TopicInstance::Default (0x00) otherwise.
+		/// @return Returns the pointer to the topic based on the parameter, nullptr otherwise. 
 		template <typename T>
 		static Topic<T>* GetTopic(TopicID topicID, uint8_t instance = TopicInstance::Default) {
 			return GetTopic<T>(static_cast<uint8_t>(topicID), instance);
@@ -47,7 +53,10 @@ class Broker {
 			return static_cast<Topic<T>*>(base);
 		}
 
-		/// @brief Type-erased lookup used by InstinctLink for dynamic streaming and injection
+		/// @brief Type-erased lookup used by InstinctLink for dynamic streaming and injection.
+		/// @param topicID	Topic ID of the topic to get.
+		/// @param instance	Topic instance of the topic to get.
+		/// @return Returns the pointer to the topic based on the parameter, nullptr otherwise. 
 		static TopicBase* GetTopicBase(uint8_t topicID, uint8_t instance = 0) {
 			TopicBase* curr = head;
 			while(curr != nullptr) {
@@ -59,7 +68,9 @@ class Broker {
 			return nullptr;
 		}
 
-		// Used by 3rd parties to find a topic by name
+		/// @brief Find and return topic by name.
+		/// @param name		Topic name of the topic to get.
+		/// @return Returns the pointer to the topic based on the parameter, nullptr otherwise. 
 		template <typename T>
 		static Topic<T>* GetTopicByName(const char* name) {
 			TopicBase* curr = head;
@@ -69,9 +80,14 @@ class Broker {
 				}
 				curr = curr->nextTopic;
 			}
-			return nullptr; // Topic not found
+			return nullptr;	// Topic not found
 		}
 
+		/// @brief Enables binary logging, typically to SD card, of selected topic at defined rate.
+		/// @param topicID	Topic ID
+		/// @param instance Optional topic instance ID, TopicInstance::All (0xFE) otherwise.
+		/// @param rateHz	Optional target log rate in Hz. By default is 0 to log at native publish rate.
+		/// @return None.
 		static void EnableLogging(TopicID topicID, uint8_t instance = TopicInstance::All, uint32_t rateHz = 0) {
 			EnableLogging(static_cast<uint8_t>(topicID), instance, rateHz);
 		}
@@ -90,11 +106,15 @@ class Broker {
 			}
 		}
 
+		/// @brief Disables binary logging of selected topic.
+		/// @param topicID	Topic ID
+		/// @param instance Optional topic instance ID, TopicInstance::All (0xFE) otherwise.
+		/// @return None.
 		static void DisableLogging(TopicID topicID, uint8_t instance = TopicInstance::All) {
 			DisableLogging(static_cast<uint8_t>(topicID), instance);
 		}
 
-		static void DisableLogging(uint8_t topicID, uint16_t instance = TopicInstance::All) {
+		static void DisableLogging(uint8_t topicID, uint8_t instance = TopicInstance::All) {
 			TopicBase* curr = head;
 			while(curr != nullptr) {
 				// If instance matches OR wildcard (all instances of a topic type) is used
@@ -108,6 +128,8 @@ class Broker {
 			}
 		}
 
+		/// @brief Returns the base/head pointer to the topic list.
+		/// @return Topic list head pointer.
 		static TopicBase* GetTopicList() { return head; }
 
 	private:

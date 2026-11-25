@@ -41,7 +41,6 @@ class Subscriber {
 					return false;
 				}
 				isValid = true;
-				isValid = true;
 				return true;
 			}
 			return true;

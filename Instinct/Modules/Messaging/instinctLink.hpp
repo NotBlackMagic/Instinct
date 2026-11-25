@@ -42,31 +42,36 @@ class InstinctLink {
 			float byteRate = 0.0f;
 		};
 
+		/// @brief Command ID used to control the link, over the link. They use "instance" of TopicInstance::Protocol (0xFF) to differentiate from topic messages on the wire.
 		enum class CommandID : uint16_t {
 			StreamConfig = TopicAddress::MakeProtocolID(0x00),		// Configure topic stream rate
 			ParamRequestList = TopicAddress::MakeProtocolID(0x01),	// Request full parameter table dump
 			ParamRequestRead = TopicAddress::MakeProtocolID(0x02),	// Request single parameter by index
 			ParamSet = TopicAddress::MakeProtocolID(0x03),			// Set parameter value by index
-			ParamReset = TopicAddress::MakeProtocolID(0x04),		// Reset all parameters to factory defaults
-			TopicRequestList = TopicAddress::MakeProtocolID(0x05)	// Request list of all registered Broker topics
+			ParamReset = TopicAddress::MakeProtocolID(0x04),			// Reset all parameters to factory defaults
+			TopicRequestList = TopicAddress::MakeProtocolID(0x05)		// Request list of all registered Broker topics
 		};
 
+		/// @brief Message definition for Topic stream configuration (CommandID::StreamConfig).
 		struct __attribute__((packed)) StreamConfigPayload {
 			uint8_t topicID;
 			uint8_t instance;
 			uint16_t rate;
 		};
 
+		/// @brief Message definition for parameter read request (CommandID::ParamRequestRead).
 		struct __attribute__((packed)) ParamReadPayload {
 			uint16_t index;
 		};
 
+		/// @brief Message definition for parameter setting (CommandID::ParamSet).
 		struct __attribute__((packed)) ParamSetPayload {
 			uint16_t index;
 			uint8_t type;
 			ParamValue value;
 		};
 
+		/// @brief Message definition for parameter information return (return to CommandID::ParamRequestRead).
 		struct __attribute__((packed)) ParamInfoPayload {
 			uint16_t index;
 			uint32_t hash;
@@ -79,6 +84,7 @@ class InstinctLink {
 			char name[16];
 		};
 
+		/// @brief Message definition for topic list request return (return to CommandID::TopicRequestList).
 		struct __attribute__((packed)) TopicInfoPayload {
 			uint8_t topicID;
 			uint8_t instance;
@@ -86,6 +92,7 @@ class InstinctLink {
 			char name[16];
 		};
 
+		/// @brief Instinct link stream slot configuration.
 		struct StreamSlot {
 			TopicBase* topic;
 			uint32_t interval;
